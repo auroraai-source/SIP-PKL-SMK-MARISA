@@ -119,6 +119,7 @@
             text-align: center;
             flex-shrink: 0;
             box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+            overflow: hidden;
         }
 
         .auth-tab-bar {
@@ -606,16 +607,28 @@
             <div class="hud-header">
                 <div>
                     <h2>Selamat Datang<br>Bersama<br><span>SMK Negeri 1 Marisa</span></h2>
+                    <div style="font-size: 8px; color: #fde047; font-weight: 900; margin-top: 2px;">★ SMK PUSAT KEUNGGULAN ★</div>
                 </div>
-                <div class="badge-logo">
-                    <span>SMK 1</span>
-                    <span style="font-size: 7px; color: #fde047;">MARISA</span>
+                <div class="badge-logo" title="Logo SMKN 1 Marisa">
+                    <img src="download.jfif" alt="Logo" style="width:100%; height:100%; object-fit:contain; display:none;" onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';" onerror="this.style.display='none';">
+                    <svg viewBox="0 0 100 125" style="width:100%; height:100%; display:block;" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M 12,16 Q 50,4 88,16 Q 84,65 50,112 Q 16,65 12,16 Z" fill="#dc2626" />
+                        <circle cx="50" cy="44" r="16" fill="none" stroke="#0284c7" stroke-width="2.5" />
+                        <circle cx="50" cy="44" r="10" fill="#1e3a8a" />
+                        <circle cx="50" cy="44" r="5" fill="#38bdf8" />
+                        <path d="M 50,18 L 47,38 L 53,38 Z" fill="#0f172a" />
+                        <circle cx="50" cy="18" r="2.5" fill="#0f172a" />
+                        <path d="M 22,64 C 34,57 44,60 50,65 C 56,60 66,57 78,64 Z" fill="#15803d"/>
+                        <path d="M 28,68 Q 50,63 50,73 Q 50,63 72,68 Q 70,79 50,76 Q 30,79 28,68 Z" fill="#ea580c" />
+                        <path d="M 22,86 L 78,86 L 75,93 L 50,94 L 25,93 Z" fill="#fde047" stroke="#b45309" stroke-width="0.8" />
+                        <text x="50" y="90" font-family="Arial, sans-serif" font-size="5" font-weight="900" fill="#78350f" text-anchor="middle">SMKN 1 MARISA</text>
+                    </svg>
                 </div>
             </div>
 
             <div class="auth-tab-bar">
-                <button type="button" id="tabBtnLogin" class="auth-tab-btn active" onclick="switchAuthMode('login')">⚡ MASUK ROOM</button>
-                <button type="button" id="tabBtnRegister" class="auth-tab-btn" onclick="switchAuthMode('register')">📝 DAFTAR AKUN</button>
+                <button type="button" id="tabBtnLogin" class="auth-tab-btn active" onclick="window.switchAuthMode('login')">⚡ MASUK ROOM</button>
+                <button type="button" id="tabBtnRegister" class="auth-tab-btn" onclick="window.switchAuthMode('register')">📝 DAFTAR AKUN</button>
             </div>
 
             <!-- Login Form Section -->
@@ -625,16 +638,16 @@
 
                 <div class="metallic-input">
                     <span style="color: #38bdf8;">📧</span>
-                    <input type="email" id="inputEmailLogin" placeholder="Email Resmi Terdaftar">
+                    <input type="email" id="inputEmailLogin" value="rizky@smkn1marisa.sch.id" placeholder="Email Resmi Terdaftar">
                 </div>
 
                 <div class="metallic-input">
                     <span style="color: #f59e0b;">🔒</span>
-                    <input type="password" id="inputPasswordLogin" placeholder="Kata Sandi">
-                    <span style="color: #94a3b8; cursor: pointer;" onclick="togglePasswordEye('inputPasswordLogin', this)">👁️</span>
+                    <input type="password" id="inputPasswordLogin" value="siswa123" placeholder="Kata Sandi">
+                    <span style="color: #94a3b8; cursor: pointer;" onclick="window.togglePasswordEye('inputPasswordLogin', this)">👁️</span>
                 </div>
 
-                <button type="button" class="btn-neon-action" id="btnSubmitLogin" onclick="handleOnlineLogin()">
+                <button type="button" class="btn-neon-action" id="btnSubmitLogin" onclick="window.handleOnlineLogin()">
                     <span>MASUK KE SISTEM (FIREBASE)</span>
                     <span>⚡</span>
                 </button>
@@ -663,10 +676,10 @@
                 <div class="metallic-input">
                     <span style="color: #f59e0b;">🔒</span>
                     <input type="password" id="regPassword" placeholder="Buat Kata Sandi (Min. 6 Karakter)">
-                    <span style="color: #94a3b8; cursor: pointer;" onclick="togglePasswordEye('regPassword', this)">👁️</span>
+                    <span style="color: #94a3b8; cursor: pointer;" onclick="window.togglePasswordEye('regPassword', this)">👁️</span>
                 </div>
 
-                <button type="button" class="btn-neon-action" id="btnSubmitRegister" onclick="handleOnlineRegister()">
+                <button type="button" class="btn-neon-action" id="btnSubmitRegister" onclick="window.handleOnlineRegister()">
                     <span>DAFTARKAN AKUN KE CLOUD</span>
                     <span>🚀</span>
                 </button>
@@ -678,17 +691,17 @@
             </div>
 
             <div class="role-grid-top">
-                <div class="role-box role-siswa active" id="btnRole-siswa" onclick="selectAuthRole('siswa')">
+                <div class="role-box role-siswa active" id="btnRole-siswa" onclick="window.selectAuthRole('siswa')">
                     <div style="font-size: 18px;">👨‍🎓</div>
                     <div class="role-title">Siswa PKL</div>
                     <div class="role-sub">Peserta</div>
                 </div>
-                <div class="role-box role-guru" id="btnRole-guru" onclick="selectAuthRole('guru')">
+                <div class="role-box role-guru" id="btnRole-guru" onclick="window.selectAuthRole('guru')">
                     <div style="font-size: 18px;">👩‍🏫</div>
                     <div class="role-title">Guru</div>
                     <div class="role-sub">Pembimbing</div>
                 </div>
-                <div class="role-box role-orangtua" id="btnRole-orangtua" onclick="selectAuthRole('orangtua')">
+                <div class="role-box role-orangtua" id="btnRole-orangtua" onclick="window.selectAuthRole('orangtua')">
                     <div style="font-size: 18px;">👨‍👩‍👧</div>
                     <div class="role-title">Orang Tua</div>
                     <div class="role-sub">Wali Murid</div>
@@ -696,12 +709,12 @@
             </div>
 
             <div class="role-grid-bottom">
-                <div class="role-box role-admin" id="btnRole-admin" onclick="selectAuthRole('admin')">
+                <div class="role-box role-admin" id="btnRole-admin" onclick="window.selectAuthRole('admin')">
                     <div style="font-size: 18px;">👨‍💼</div>
                     <div class="role-title">Admin PKL</div>
                     <div class="role-sub">Panitia Sekolah</div>
                 </div>
-                <div class="role-box role-industri" id="btnRole-industri" onclick="selectAuthRole('industri')">
+                <div class="role-box role-industri" id="btnRole-industri" onclick="window.selectAuthRole('industri')">
                     <div style="font-size: 18px;">🏭</div>
                     <div class="role-title">Industri</div>
                     <div class="role-sub">Mitra DUDI</div>
@@ -709,7 +722,7 @@
             </div>
 
             <div style="text-align: center; margin-top: 10px;">
-                <a href="javascript:void(0)" onclick="bukaModalLupaPassword()" style="color: #38bdf8; font-size: 11px; text-decoration: underline;">Lupa Kata Sandi? (Reset via Email) 📋</a>
+                <a href="javascript:void(0)" onclick="window.bukaModalLupaPassword()" style="color: #38bdf8; font-size: 11px; text-decoration: underline;">Lupa Kata Sandi? (Reset via Email) 📋</a>
                 <div style="font-size: 10px; color: #64748b; margin-top: 6px;">SMK Negeri 1 Marisa &copy; 2026 &bull; Terenkripsi Firebase & GAS Online</div>
             </div>
 
@@ -721,26 +734,23 @@
             
             <aside class="sidebar">
                 <div class="sidebar-header">
-                    <div class="badge-logo" style="width: 44px; height: 46px;" title="Logo SMKN 1 Marisa">
-                        <img src="download.jfif" alt="Logo" style="width:100%; height:100%; object-fit:contain; display:none;" onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';" onerror="this.style.display='none';">
-                        <svg viewBox="0 0 100 125" style="width:100%; height:100%; display:block;" xmlns="http://www.w3.org/2000/svg">
-                            <defs>
-                                <linearGradient id="sbGold" x1="0%" y1="0%" x2="0%" y2="100%">
-                                    <stop offset="0%" stop-color="#fef08a"/>
-                                    <stop offset="100%" stop-color="#eab308"/>
-                                </linearGradient>
-                            </defs>
-                            <path d="M 12,16 Q 50,4 88,16 Q 84,65 50,112 Q 16,65 12,16 Z" fill="#dc2626" />
-                            <path d="M 16,19 Q 50,8 84,19 Q 80,62 50,106 Q 20,62 16,19 Z" fill="url(#sbGold)" />
-                            <circle cx="50" cy="44" r="16" fill="none" stroke="#0284c7" stroke-width="2.5" />
-                            <circle cx="50" cy="44" r="10" fill="#1e3a8a" />
-                            <circle cx="50" cy="44" r="5" fill="#38bdf8" />
-                            <path d="M 50,18 L 47,38 L 53,38 Z" fill="#0f172a" />
-                            <circle cx="50" cy="18" r="2.5" fill="#0f172a" />
-                            <path d="M 22,64 C 34,57 44,60 50,65 C 56,60 66,57 78,64 Z" fill="#15803d"/>
-                            <path d="M 28,68 Q 50,63 50,73 Q 50,63 72,68 Q 70,79 50,76 Q 30,79 28,68 Z" fill="#ea580c" />
-                            <path d="M 22,86 L 78,86 L 75,93 L 50,94 L 25,93 Z" fill="#fde047" stroke="#b45309" stroke-width="0.8" />
-                            <text x="50" y="90" font-family="Arial, sans-serif" font-size="5" font-weight="900" fill="#78350f" text-anchor="middle">SMKN 1 MARISA</text>
+                    <div class="badge-logo" style="width: 48px; height: 48px;" title="Logo SMKN 1 Marisa">
+                        <img src="Logo SMK.png" alt="Logo SMK Negeri 1 Marisa" style="width:100%; height:100%; object-fit:contain; display:none;" onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';" onerror="if(this.src.indexOf('download.jfif')===-1){this.src='download.jfif';}else{this.style.display='none';}">
+                        <svg viewBox="0 0 120 140" style="width:100%; height:100%; display:block;" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M 20,15 Q 60,4 100,15 Q 96,68 60,105 Q 24,68 20,15 Z" fill="#dc2626" />
+                            <path d="M 24,18 Q 60,8 96,18 Q 92,65 60,98 Q 28,65 24,18 Z" fill="#fef08a" />
+                            <circle cx="60" cy="45" r="16" fill="none" stroke="#0284c7" stroke-width="3" stroke-dasharray="4,2" />
+                            <circle cx="60" cy="45" r="11" fill="#1e3a8a" />
+                            <circle cx="60" cy="45" r="6" fill="#38bdf8" />
+                            <path d="M 60,20 L 57,36 L 63,36 Z" fill="#0f172a" />
+                            <circle cx="60" cy="19" r="3" fill="#dc2626" />
+                            <path d="M 52,22 Q 60,16 68,22" fill="none" stroke="#0f172a" stroke-width="1.5" />
+                            <path d="M 32,62 C 45,55 54,58 60,63 C 66,58 75,55 88,62 Z" fill="#16a34a"/>
+                            <path d="M 38,66 Q 60,60 60,71 Q 60,60 82,66 Q 80,78 60,75 Q 40,78 38,66 Z" fill="#ea580c" />
+                            <path d="M 32,82 L 88,82 L 84,89 L 60,90 L 36,89 Z" fill="#fde047" stroke="#b45309" stroke-width="0.8" />
+                            <text x="60" y="87" font-family="Arial, sans-serif" font-size="5" font-weight="900" fill="#78350f" text-anchor="middle">SMKN 1 MARISA</text>
+                            <rect x="14" y="112" width="92" height="18" rx="4" fill="#dc2626" />
+                            <text x="60" y="124" font-family="Arial, sans-serif" font-size="6.5" font-weight="900" fill="#ffffff" text-anchor="middle">SMK PUSAT KEUNGGULAN</text>
                         </svg>
                     </div>
                     <div>
@@ -758,7 +768,7 @@
                 <div style="padding: 0 14px; margin-bottom: 6px;">
                     <div class="cloud-sync-indicator" id="cloudStatusBadge">
                         <span>●</span>
-                        <span id="cloudStatusText">Firebase Terhubung</span>
+                        <span id="cloudStatusText">Cloud Online</span>
                     </div>
                 </div>
 
@@ -771,7 +781,7 @@
                         <div id="footerUserName" style="font-weight: 700; color: var(--text-main);">Pengguna</div>
                         <div id="footerUserRole" style="color: #38bdf8; font-size: 10px;">Siswa PKL</div>
                     </div>
-                    <button onclick="handleOnlineLogout()" class="btn-action btn-red" title="Logout Sesi Cloud">Keluar</button>
+                    <button onclick="window.handleOnlineLogout()" class="btn-action btn-red" title="Logout Sesi Cloud">Keluar</button>
                 </div>
             </aside>
 
@@ -781,9 +791,9 @@
                         <span id="pageTitleText" style="font-weight: 800; font-size: 14px;">Dashboard Siswa</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <button onclick="bukaModalGasSync()" class="btn-action" style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #34d399; font-size: 11px;">📊 GAS Sheets</button>
-                        <button onclick="toggleGlobalTheme()" class="btn-action" style="background: var(--border-color); color: var(--text-main); font-size: 11px;">🌓 Tema</button>
-                        <button onclick="handleOnlineLogout()" class="btn-action btn-red" style="font-size: 11px;">Keluar ⎋</button>
+                        <button onclick="window.bukaModalGasSync()" class="btn-action" style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #34d399; font-size: 11px;">📊 GAS Sheets</button>
+                        <button onclick="window.toggleGlobalTheme()" class="btn-action" style="background: var(--border-color); color: var(--text-main); font-size: 11px;">🌓 Tema</button>
+                        <button onclick="window.handleOnlineLogout()" class="btn-action btn-red" style="font-size: 11px;">Keluar ⎋</button>
                     </div>
                 </header>
 
@@ -799,9 +809,9 @@
     <div id="modalInfo" class="modal-overlay">
         <div class="modal-body">
             <h3 id="modalInfoTitle" style="font-size: 15px; font-weight: bold; margin-bottom: 10px; color: #38bdf8;">Info</h3>
-            <p id="modalInfoDesc" style="font-size: 13px; color: var(--text-muted); margin-bottom: 18px;">Keterangan informasi...</p>
+            <div id="modalInfoDesc" style="font-size: 13px; color: var(--text-muted); margin-bottom: 18px; line-height: 1.5;">Keterangan informasi...</div>
             <div style="text-align: right;">
-                <button onclick="closeModalInfo()" class="btn-action btn-blue">Tutup</button>
+                <button onclick="window.closeModalInfo()" class="btn-action btn-blue">Tutup</button>
             </div>
         </div>
     </div>
@@ -821,9 +831,7 @@
             signInWithEmailAndPassword, 
             signOut, 
             sendPasswordResetEmail,
-            onAuthStateChanged,
-            signInWithCustomToken,
-            signInAnonymously
+            onAuthStateChanged
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
@@ -832,9 +840,7 @@
             getDoc, 
             collection, 
             onSnapshot, 
-            addDoc,
-            updateDoc,
-            deleteDoc
+            addDoc
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Firebase Configuration Setup
@@ -883,7 +889,6 @@
             absensi: [],
             jurnal: [],
             dokumen: [],
-            pengaturanGps: {},
             banner: [],
             agendaKunjungan: [],
             tugas: [],
@@ -949,6 +954,161 @@
         window.cloudState.tugas = [...initialSeeds.tugas];
         window.cloudState.laporanAkhir = [...initialSeeds.laporanAkhir];
 
+        // GLOBAL UI HELPERS
+        window.showModalInfo = function(title, desc) {
+            const titleEl = document.getElementById("modalInfoTitle");
+            const descEl = document.getElementById("modalInfoDesc");
+            const modalEl = document.getElementById("modalInfo");
+            if (titleEl) titleEl.innerText = title;
+            if (descEl) descEl.innerHTML = desc;
+            if (modalEl) modalEl.style.display = "flex";
+        };
+
+        window.closeModalInfo = function() {
+            const modalEl = document.getElementById("modalInfo");
+            if (modalEl) modalEl.style.display = "none";
+        };
+
+        window.openDynamicModal = function(htmlContent) {
+            const content = document.getElementById("dynamicModalContent");
+            const overlay = document.getElementById("dynamicModalOverlay");
+            if (content) content.innerHTML = htmlContent;
+            if (overlay) overlay.style.display = "flex";
+        };
+
+        window.closeDynamicModal = function() {
+            const overlay = document.getElementById("dynamicModalOverlay");
+            if (overlay) overlay.style.display = "none";
+        };
+
+        window.toggleGlobalTheme = function() {
+            document.body.classList.toggle("light-mode");
+        };
+
+        window.togglePasswordEye = function(inputId, iconEl) {
+            const el = document.getElementById(inputId);
+            if (!el) return;
+            if (el.type === "password") {
+                el.type = "text";
+                if (iconEl) iconEl.innerText = "🙈";
+            } else {
+                el.type = "password";
+                if (iconEl) iconEl.innerText = "👁️";
+            }
+        };
+
+        window.switchAuthMode = function(mode) {
+            window.cloudState.authMode = mode;
+            const tabLogin = document.getElementById("tabBtnLogin");
+            const tabReg = document.getElementById("tabBtnRegister");
+            const formLogin = document.getElementById("loginFormSection");
+            const formReg = document.getElementById("registerFormSection");
+            if (mode === "login") {
+                if (tabLogin) tabLogin.classList.add("active");
+                if (tabReg) tabReg.classList.remove("active");
+                if (formLogin) formLogin.style.display = "block";
+                if (formReg) formReg.style.display = "none";
+            } else {
+                if (tabLogin) tabLogin.classList.remove("active");
+                if (tabReg) tabReg.classList.add("active");
+                if (formLogin) formLogin.style.display = "none";
+                if (formReg) formReg.style.display = "block";
+            }
+        };
+
+        window.selectAuthRole = function(role) {
+            window.cloudState.activeRole = role;
+            const roles = ["siswa", "guru", "orangtua", "admin", "industri"];
+            roles.forEach(r => {
+                const el = document.getElementById(`btnRole-${r}`);
+                if (el) {
+                    if (r === role) el.classList.add("active");
+                    else el.classList.remove("active");
+                }
+            });
+            const labelMap = {
+                siswa: "👨‍‍🎓 SISWA PKL",
+                guru: "👩‍🏫 GURU PEMBIMBING",
+                orangtua: "👨‍👩‍👧 ORANG TUA / WALI",
+                admin: "👨‍💼 ADMIN / PANITIA PKL",
+                industri: "🏭 MITRA INDUSTRI DUDI"
+            };
+            const lbl = document.getElementById("labelSelectedRole");
+            if (lbl) lbl.innerText = labelMap[role] || role.toUpperCase();
+            
+            // Auto fill demo login credentials
+            const foundUser = window.cloudState.registeredUsers.find(u => u.role === role);
+            if (foundUser) {
+                const inpEmail = document.getElementById("inputEmailLogin");
+                const inpPass = document.getElementById("inputPasswordLogin");
+                if (inpEmail) inpEmail.value = foundUser.email;
+                if (inpPass) inpPass.value = foundUser.pass;
+            }
+        };
+
+        window.bukaModalLupaPassword = function() {
+            const html = `
+                <h3 style="font-size: 16px; font-weight: 800; color: #38bdf8; margin-bottom: 8px;">🔐 Lupa Kata Sandi (Reset via Email)</h3>
+                <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">Masukkan alamat email akun Anda. Sistem akan mengirimkan tautan pemulihan kata sandi.</p>
+                <div class="form-group">
+                    <label class="form-label">Email Terdaftar:</label>
+                    <input type="email" id="inputResetEmail" class="form-control" placeholder="nama@smkn1marisa.sch.id">
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background: #475569;">Batal</button>
+                    <button onclick="window.prosesResetPasswordFirebase()" class="btn-action btn-blue">Kirim Tautan Reset 📬</button>
+                </div>
+            `;
+            window.openDynamicModal(html);
+        };
+
+        window.bukaModalGasSync = function() {
+            const curUrl = window.cloudState.gasWebhookUrl || "";
+            const html = `
+                <h3 style="font-size: 16px; font-weight: 800; color: #10b981; margin-bottom: 8px;">📊 Integrasi Google Apps Script (GAS) & Sheets</h3>
+                <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">Hubungkan spreadsheet Google Sheets secara realtime melalui Web App URL Google Apps Script Anda.</p>
+                <div class="form-group">
+                    <label class="form-label">URL Web App Google Apps Script (/exec):</label>
+                    <input type="text" id="inputGasWebhookUrlModal" class="form-control" value="${curUrl}" placeholder="https://script.google.com/macros/s/AKfy.../exec">
+                </div>
+                <div style="font-size: 11px; color: #38bdf8; margin-bottom: 14px; line-height: 1.5;">
+                    ✅ Status: <b>Aktif Terhubung</b><br>
+                    Data Presensi GPS, Jurnal Harian, Penempatan, dan Nilai otomatis tercatat ke lembar Google Sheets Anda.
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background: #475569;">Tutup</button>
+                    <button onclick="window.simpanGasUrlModal()" class="btn-action btn-emerald">💾 Simpan URL</button>
+                </div>
+            `;
+            window.openDynamicModal(html);
+        };
+
+        window.simpanGasUrlModal = function() {
+            const val = document.getElementById("inputGasWebhookUrlModal")?.value.trim();
+            if (val) {
+                window.cloudState.gasWebhookUrl = val;
+                window.closeDynamicModal();
+                window.showModalInfo("GAS Sheets Terhubung ✅", "URL Google Apps Script berhasil disimpan dan terintegrasi!");
+            }
+        };
+
+        window.syncToGoogleAppsScript = async function(action, data) {
+            const url = window.cloudState.gasWebhookUrl;
+            if (!url) return;
+            try {
+                const payload = JSON.stringify({ action: action, data: data });
+                await fetch(url, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: payload
+                });
+                console.log("GAS Sync sent:", action);
+            } catch (err) {
+                console.warn("GAS Sync background notice:", err);
+            }
+        };
+
         const roleMenus = {
             siswa: [
                 { id: "dashboard", label: "🏠 Dashboard Siswa", icon: "🏠", bg: "#0284c7" },
@@ -967,7 +1127,7 @@
             ],
             admin: [
                 { id: "dashboard", label: "🏠 Dashboard Utama", icon: "🏠", bg: "#06b6d4" },
-                { id: "master-siswa", label: "👨‍🎓 Data Master Siswa", icon: "👨‍🎓", bg: "#0284c7" },
+                { id: "master-siswa", label: "👨‍🎓 Data Master Siswa", icon: "👨‍‍🎓", bg: "#0284c7" },
                 { id: "master-guru", label: "👩‍🏫 Data Master Guru", icon: "👩‍🏫", bg: "#10b981" },
                 { id: "master-industri", label: "🏭 Data Perusahaan / Industri", icon: "🏭", bg: "#f59e0b" },
                 { id: "penempatan", label: "🔄 Penempatan PKL", icon: "🔄", bg: "#8b5cf6" },
@@ -993,7 +1153,6 @@
         function setupFirestoreSync(userId) {
             if (!userId) return;
 
-            // Strict Path Collection: /artifacts/{appId}/public/data/...
             const colPresensi = collection(db, 'artifacts', appId, 'public', 'data', 'presensi');
             onSnapshot(colPresensi, (snap) => {
                 const list = [];
@@ -1048,7 +1207,6 @@
             let registeredUid = "usr_" + Date.now();
 
             try {
-                // Coba daftarkan ke Firebase jika API key valid
                 const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
                 if (userCredential && userCredential.user) {
                     registeredUid = userCredential.user.uid;
@@ -1056,7 +1214,6 @@
                 }
             } catch (error) {
                 console.warn("Firebase Auth bypassed/fallback triggered:", error.message);
-                // Jika error karena apiKey placeholder, teruskan pendaftaran via GAS & Session
                 if (error.code === 'auth/email-already-in-use') {
                     window.showModalInfo("Email Terdaftar", "Email ini sudah terdaftar! Silakan beralih ke tab MASUK ROOM.");
                     btn.innerHTML = "<span>DAFTARKAN AKUN KE CLOUD</span> 🚀";
@@ -1076,22 +1233,17 @@
                     createdAt: new Date().toISOString()
                 };
 
-                // Simpan ke basis data akun aktif
                 window.cloudState.registeredUsers.unshift(profileData);
 
-                // Jika Firebase Auth aktif, simpan ke Firestore
                 if (firebaseSuccess) {
                     try {
                         const profileRef = doc(db, 'artifacts', appId, 'users', registeredUid, 'profile', 'info');
                         await setDoc(profileRef, profileData);
-                        const publicUserRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_directory', registeredUid);
-                        await setDoc(publicUserRef, profileData);
                     } catch (fsErr) {
-                        console.log("Firestore profile offline fallback", fsErr);
+                        console.log("Firestore profile fallback", fsErr);
                     }
                 }
 
-                // Masukkan siswa ke daftar siswa jika mendaftar sebagai Siswa
                 if (role === "siswa") {
                     window.cloudState.siswa.unshift({
                         nama: nama,
@@ -1105,14 +1257,12 @@
                     });
                 }
 
-                // Kirim data akun ke Google Sheets via Google Apps Script (GAS) Webhook
                 window.syncToGoogleAppsScript("register_user", profileData);
 
                 window.cloudState.currentUser = { uid: registeredUid, email: email };
                 window.cloudState.userProfile = profileData;
 
-                window.showModalInfo("Pendaftaran Berhasil 🎉", `Selamat! Akun ${role.toUpperCase()} atas nama ${nama} berhasil didaftarkan dan data disinkronkan ke Google Sheets. Anda langsung diarahkan ke Room resmi Anda.`);
-                
+                window.showModalInfo("Pendaftaran Berhasil 🎉", `Selamat! Akun ${role.toUpperCase()} atas nama <b>${nama}</b> berhasil didaftarkan dan tersinkronkan ke Google Sheets.`);
                 window.enterUserRoom(role, nama, email);
 
             } catch (err) {
@@ -1144,7 +1294,6 @@
             let displayName = email.split('@')[0];
 
             try {
-                // Coba Login ke Firebase jika aktif
                 const userCredential = await signInWithEmailAndPassword(auth, email, pass);
                 if (userCredential && userCredential.user) {
                     activeUser = userCredential.user;
@@ -1165,7 +1314,6 @@
                 console.warn("Firebase Auth bypassed, checking registered cloud user database...", error.message);
             }
 
-            // Jika Firebase offline/apiKey dummy, periksa di daftar database akun lokal & GAS
             if (!loginSuccess) {
                 const foundUser = window.cloudState.registeredUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
                 if (foundUser) {
@@ -1181,7 +1329,6 @@
                         return;
                     }
                 } else {
-                    // Jika akun tidak ditemukan, otomatis izinkan login demo jika role cocok atau minta daftar
                     window.showModalInfo("Akun Belum Ditemukan", "Email belum terdaftar di sistem. Silakan klik tab 'DAFTAR AKUN' untuk membuat akun baru Anda terlebih dahulu.");
                     btn.innerHTML = "<span>MASUK KE SISTEM (FIREBASE)</span> ⚡";
                     btn.disabled = false;
@@ -1191,7 +1338,7 @@
 
             if (loginSuccess) {
                 if (chosenRole !== registeredRole) {
-                    window.showModalInfo("Pengalihan Otomatis 🛡️", `Email ini terdaftar sebagai ${registeredRole.toUpperCase()}. Sistem otomatis mengarahkan Anda ke ROOM ${registeredRole.toUpperCase()} agar tidak salah akses!`);
+                    window.showModalInfo("Pengalihan Otomatis 🛡️", `Email ini terdaftar sebagai ${registeredRole.toUpperCase()}. Sistem otomatis mengarahkan Anda ke ROOM ${registeredRole.toUpperCase()}!`);
                 }
 
                 window.cloudState.currentUser = activeUser;
@@ -1215,7 +1362,7 @@
             try {
                 await sendPasswordResetEmail(auth, email);
                 window.closeDynamicModal();
-                window.showModalInfo("Tautan Terkirim 📬", `Tautan reset kata sandi telah dikirimkan ke email ${email}. Silakan periksa folder Inbox atau Spam email Anda.`);
+                window.showModalInfo("Tautan Terkirim 📬", `Tautan reset kata sandi telah dikirimkan ke email ${email}.`);
             } catch (error) {
                 window.showModalInfo("Gagal Mengirim", `Tidak dapat mengirim tautan reset: ${error.message}`);
             }
@@ -1327,7 +1474,7 @@
             const menus = roleMenus[role] || [];
 
             let bannerHtml = "";
-            window.cloudState.banner.forEach(b => {
+            (window.cloudState.banner || []).forEach(b => {
                 const targetList = b.target || [];
                 if (targetList.includes(role) || targetList.includes("semua") || role === "admin") {
                     bannerHtml += `<div style="background: rgba(2, 132, 199, 0.15); border: 1.5px solid #0284c7; padding: 14px 16px; border-radius: 14px; margin-bottom: 14px; display: flex; align-items: center; gap: 12px; box-shadow: 0 0 15px rgba(2, 132, 199, 0.2);">
@@ -1361,7 +1508,7 @@
 
         function renderPresensiGPS() {
             let rows = "";
-            window.cloudState.absensi.forEach((a, idx) => {
+            (window.cloudState.absensi || []).forEach((a, idx) => {
                 rows += `<tr><td>${idx+1}</td><td><b>${a.nama}</b></td><td>${a.tanggal}</td><td>${a.jam} WITA</td><td><span class="badge-status badge-green">${a.status}</span></td></tr>`;
             });
 
@@ -1390,7 +1537,7 @@
             </div>
             <div class="card">
                 <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 6px;">Riwayat Kehadiran Realtime Cloud</h4>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Siswa</th><th>Tanggal</th><th>Jam Masuk</th><th>Validasi Geofence</th></tr></thead><tbody>${rows}</tbody></table></div>
+                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Siswa</th><th>Tanggal</th><th>Jam Masuk</th><th>Validasi Geofence</th></tr></thead><tbody>${rows || '<tr><td colspan="5" style="text-align:center;">Belum ada data presensi</td></tr>'}</tbody></table></div>
             </div>`;
         }
 
@@ -1398,7 +1545,7 @@
             const now = new Date();
             const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
             const dateStr = now.toISOString().split('T')[0];
-            const ket = document.getElementById("inputStatusPresensi").value;
+            const ket = document.getElementById("inputStatusPresensi")?.value || "Hadir Tepat Waktu";
             const profile = window.cloudState.userProfile || { nama: "Ahmad Rizky" };
 
             const record = {
@@ -1418,7 +1565,6 @@
 
             window.cloudState.absensi.unshift(record);
 
-            // Sync to Firestore
             try {
                 const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'presensi');
                 await addDoc(colRef, record);
@@ -1426,17 +1572,15 @@
                 console.log("Firestore write fallback to local");
             }
 
-            // Sync to Google Apps Script (Sheets)
             window.syncToGoogleAppsScript("catat_presensi", record);
-
-            window.showModalInfo("Kehadiran Tercatat ⚡", `Presensi ${profile.nama} pada ${dateStr} jam ${timeStr} WITA berhasil tercatat di Firestore dan disinkronkan ke Google Sheets!`);
+            window.showModalInfo("Kehadiran Tercatat ⚡", `Presensi ${profile.nama} berhasil dicatat di Firestore dan Google Sheets!`);
             window.openFeature("presensi", "Presensi GPS");
         };
 
         function renderJurnalKegiatan() {
             const role = window.cloudState.activeRole;
             let rows = "";
-            window.cloudState.jurnal.forEach((j, idx) => {
+            (window.cloudState.jurnal || []).forEach((j, idx) => {
                 const badgeClass = (j.status || "").includes("Disetujui") ? "badge-green" : "badge-amber";
                 rows += `<tr>
                     <td>${idx+1}</td>
@@ -1471,14 +1615,14 @@
 
             return formInput + `<div class="card">
                 <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 6px;">Daftar Logbook Jurnal Harian</h4>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Tanggal</th><th>Aktivitas</th><th>Kendala</th><th>Solusi</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>
+                <div class="table-wrap"><table><thead><tr><th>No</th><th>Tanggal</th><th>Aktivitas</th><th>Kendala</th><th>Solusi</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="6" style="text-align:center;">Belum ada log jurnal</td></tr>'}</tbody></table></div>
             </div>`;
         }
 
         window.simpanJurnalCloud = async function() {
-            const akt = document.getElementById("jurnalAktivitas").value.trim();
-            const ken = document.getElementById("jurnalKendala").value.trim();
-            const sol = document.getElementById("jurnalSolusi").value.trim();
+            const akt = document.getElementById("jurnalAktivitas")?.value.trim();
+            const ken = document.getElementById("jurnalKendala")?.value.trim();
+            const sol = document.getElementById("jurnalSolusi")?.value.trim();
             const profile = window.cloudState.userProfile || { nama: "Ahmad Rizky" };
 
             if (!akt) {
@@ -1502,7 +1646,6 @@
 
             window.cloudState.jurnal.unshift(newJurnal);
 
-            // Sync to Firestore
             try {
                 const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'jurnal');
                 await addDoc(colRef, newJurnal);
@@ -1510,16 +1653,14 @@
                 console.log("Jurnal saved in memory");
             }
 
-            // Sync to Google Apps Script
             window.syncToGoogleAppsScript("simpan_jurnal", newJurnal);
-
-            window.showModalInfo("Jurnal Terkirim 🚀", "Jurnal harian Anda telah tersimpan di Cloud dan siap diverifikasi oleh Pembimbing Industri serta Guru!");
+            window.showModalInfo("Jurnal Terkirim 🚀", "Jurnal harian Anda telah tersimpan dan siap diverifikasi oleh Pembimbing!");
             window.openFeature("jurnal", "Jurnal Kegiatan");
         };
 
         function renderPenempatanGuru() {
             let cardsHtml = "";
-            window.cloudState.penempatan.forEach(p => {
+            (window.cloudState.penempatan || []).forEach(p => {
                 let badges = "";
                 (p.siswa || []).forEach(s => {
                     badges += `<span style="background: rgba(2, 132, 199, 0.15); border: 1px solid #0284c7; color: #38bdf8; padding: 4px 8px; border-radius: 6px; font-size: 11px; margin: 3px; display: inline-block;">${s}</span>`;
@@ -1553,7 +1694,7 @@
             const container = document.getElementById("penempatanCardsContainer");
             let cardsHtml = "";
 
-            window.cloudState.penempatan.forEach(p => {
+            (window.cloudState.penempatan || []).forEach(p => {
                 const full = (p.guru + " " + p.industri + " " + (p.siswa || []).join(" ")).toLowerCase();
                 if (!full.includes(q)) return;
 
@@ -1577,13 +1718,13 @@
 
         window.bukaModalFormPenempatan = function() {
             let guruOpts = "";
-            window.cloudState.guru.forEach(g => guruOpts += `<option value="${g.nama}">${g.nama} (${g.mapel})</option>`);
+            (window.cloudState.guru || []).forEach(g => guruOpts += `<option value="${g.nama}">${g.nama} (${g.mapel})</option>`);
 
             let indOpts = "";
-            window.cloudState.industri.forEach(ind => indOpts += `<option value="${ind.nama}">${ind.nama}</option>`);
+            (window.cloudState.industri || []).forEach(ind => indOpts += `<option value="${ind.nama}">${ind.nama}</option>`);
 
             let siswaChecklist = "";
-            window.cloudState.siswa.forEach(sw => {
+            (window.cloudState.siswa || []).forEach(sw => {
                 siswaChecklist += `<label class="siswa-item-check" data-name="${(sw.nama + ' ' + sw.kelas).toLowerCase()}" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid var(--border-color); font-size:12px; cursor:pointer;">
                     <input type="checkbox" name="selectedSiswaPKL" value="${sw.nama} (${sw.kelas})">
                     <span><b>${sw.nama}</b> <span style="color:#94a3b8;">- ${sw.kelas}</span></span>
@@ -1615,8 +1756,8 @@
         };
 
         window.simpanAlokasiBaru = async function() {
-            const g = document.getElementById("formAlokasiGuru").value;
-            const ind = document.getElementById("formAlokasiIndustri").value;
+            const g = document.getElementById("formAlokasiGuru")?.value;
+            const ind = document.getElementById("formAlokasiIndustri")?.value;
             const checkboxes = document.querySelectorAll('input[name="selectedSiswaPKL"]:checked');
 
             const selected = [];
@@ -1645,7 +1786,7 @@
 
         function renderMasterSiswaTable() {
             let rows = "";
-            window.cloudState.siswa.forEach((s, idx) => {
+            (window.cloudState.siswa || []).forEach((s, idx) => {
                 rows += `<tr><td>${idx+1}</td><td><b>${s.nama}</b></td><td>${s.jk}</td><td>${s.nisn}</td><td>${s.kelas}</td><td>${s.noWa}</td><td style="color:#38bdf8;">${s.industri}</td><td><button onclick="window.hapusMasterSiswa(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td></tr>`;
             });
 
@@ -1667,7 +1808,7 @@
 
         window.bukaModalInputSiswa = function() {
             let indOpts = "";
-            window.cloudState.industri.forEach(ind => indOpts += `<option value="${ind.nama}">${ind.nama}</option>`);
+            (window.cloudState.industri || []).forEach(ind => indOpts += `<option value="${ind.nama}">${ind.nama}</option>`);
 
             const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;">👨‍🎓 Formulir Tambah Data Siswa</h3>
                 <div class="form-group"><label class="form-label">Nama Lengkap Siswa:</label><input type="text" id="addSiswaNama" class="form-control" placeholder="Contoh: Muhammad Farhan"></div>
@@ -1689,12 +1830,12 @@
         };
 
         window.simpanSiswaManual = function() {
-            const nama = document.getElementById("addSiswaNama").value.trim();
-            const nisn = document.getElementById("addSiswaNisn").value.trim();
-            const jk = document.getElementById("addSiswaJk").value;
-            const kelas = document.getElementById("addSiswaKelas").value.trim();
-            const wa = document.getElementById("addSiswaWa").value.trim();
-            const ind = document.getElementById("addSiswaIndustri").value;
+            const nama = document.getElementById("addSiswaNama")?.value.trim();
+            const nisn = document.getElementById("addSiswaNisn")?.value.trim();
+            const jk = document.getElementById("addSiswaJk")?.value;
+            const kelas = document.getElementById("addSiswaKelas")?.value.trim();
+            const wa = document.getElementById("addSiswaWa")?.value.trim();
+            const ind = document.getElementById("addSiswaIndustri")?.value;
 
             if (!nama || !nisn || !kelas) {
                 window.showModalInfo("Peringatan", "Mohon lengkapi Nama, NISN, dan Kelas Siswa!");
@@ -1703,7 +1844,7 @@
 
             const item = { nama, nisn, jk, kelas, noWa: wa || "0812xxxxxxxx", industri: ind, pembimbing: "Budi, S.Pd.", hadir: 100 };
             window.cloudState.siswa.unshift(item);
-            window.syncToGoogleAppsScript("TAMBAH_SISWA", item);
+            window.syncToGoogleAppsScript("register_user", item);
 
             window.closeDynamicModal();
             window.showModalInfo("Siswa Tersimpan 💾", `Data siswa ${nama} berhasil ditambahkan dan disinkronkan ke cloud.`);
@@ -1712,7 +1853,7 @@
 
         function renderMasterGuruTable() {
             let rows = "";
-            window.cloudState.guru.forEach((g, idx) => {
+            (window.cloudState.guru || []).forEach((g, idx) => {
                 rows += `<tr><td>${idx+1}</td><td><b>${g.nama}</b></td><td>${g.nip}</td><td>${g.mapel}</td><td>${g.wa}</td><td><button onclick="window.hapusMasterGuru(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td></tr>`;
             });
 
@@ -1754,7 +1895,7 @@
 
             const item = { nama, nip, mapel: mapel || "Guru Pembimbing", wa: wa || "0812xxxxxxxx" };
             window.cloudState.guru.unshift(item);
-            window.syncToGoogleAppsScript("TAMBAH_GURU", item);
+            window.syncToGoogleAppsScript("register_user", { ...item, role: "guru", identitas: nip, email: `${nip}@smkn1marisa.sch.id` });
             window.closeDynamicModal();
             window.showModalInfo("Berhasil Disimpan 💾", `Data guru ${nama} berhasil ditambahkan!`);
             window.openFeature("master-guru", "Data Master Guru");
@@ -1768,7 +1909,7 @@
 
         function renderMasterIndustriTable() {
             let rows = "";
-            window.cloudState.industri.forEach((d, idx) => {
+            (window.cloudState.industri || []).forEach((d, idx) => {
                 rows += `<tr><td>${idx+1}</td><td><b>${d.nama}</b></td><td>${d.pimpinan}</td><td>${d.wa}</td><td>${d.alamat}</td><td>${d.radius}m</td><td><button onclick="window.hapusMasterIndustri(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td></tr>`;
             });
 
@@ -1818,7 +1959,6 @@
 
             const item = { id: "ind" + Date.now(), nama, pimpinan, wa: wa || "0811xxxxxxxx", alamat: alamat || "Marisa, Pohuwato", radius, lat, lng, masuk: "08:00", pulang: "16:00" };
             window.cloudState.industri.unshift(item);
-            window.syncToGoogleAppsScript("TAMBAH_INDUSTRI", item);
             window.closeDynamicModal();
             window.showModalInfo("Berhasil Disimpan 💾", `Data industri ${nama} berhasil disimpan ke sistem!`);
             window.openFeature("master-industri", "Data Perusahaan / Industri");
@@ -1830,9 +1970,7 @@
             window.openFeature("master-industri", "Data Perusahaan / Industri");
         };
 
-        // ==========================================
-        // FITUR IMPOR EXCEL LENGKAP & TEMPLATE
-        // ==========================================
+        // EXCEL IMPORT AND TEMPLATE GENERATION
         window.currentParsedExcelData = [];
 
         window.bukaModalUploadExcel = function(kategori) {
@@ -1906,9 +2044,7 @@
             if (!file) return;
 
             const reader = new FileReader();
-            const btn = document.getElementById("btnEksekusiImpor");
 
-            // Jika file bertipe CSV atau SheetJS tersedia
             if (typeof XLSX !== 'undefined') {
                 reader.onload = function(e) {
                     try {
@@ -1924,8 +2060,7 @@
 
                         window.renderPratinjauExcel(jsonData, kategori);
                     } catch (err) {
-                        console.error("Gagal membaca xlsx via SheetJS:", err);
-                        // Fallback jika xlsx parsing gagal, coba sebagai teks CSV
+                        console.error("Gagal membaca xlsx:", err);
                         window.fallbackParseCSV(file, kategori);
                     }
                 };
@@ -2020,8 +2155,7 @@
             const targetKey = kategori.toLowerCase();
             window.cloudState[targetKey] = [...list, ...window.cloudState[targetKey]];
 
-            // Sinkronisasi ke GAS Google Sheets
-            window.syncToGoogleAppsScript("impor_masal", { kategori: kategori, items: list });
+            window.syncToGoogleAppsScript("register_user", { kategori: kategori, items: list });
 
             window.closeDynamicModal();
             window.showModalInfo("Impor Berhasil 🎉", `Sebanyak ${list.length} data master ${kategori} berhasil diimpor dan tersimpan di database Cloud!`);
@@ -2031,9 +2165,6 @@
             else window.openFeature("master-industri", "Data Perusahaan / Industri");
         };
 
-        // ==========================================
-        // AGENDA KUNJUNGAN GURU (LENGKAP)
-        // ==========================================
         function renderAgendaKunjungan() {
             let rows = "";
             (window.cloudState.agendaKunjungan || []).forEach((ak, idx) => {
@@ -2067,7 +2198,7 @@
 
         window.bukaModalJadwalKunjungan = function() {
             let indOpts = "";
-            window.cloudState.industri.forEach(ind => indOpts += `<option value="${ind.nama}">${ind.nama}</option>`);
+            (window.cloudState.industri || []).forEach(ind => indOpts += `<option value="${ind.nama}">${ind.nama}</option>`);
 
             const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:12px;">🚗 Jadwalkan Kunjungan Supervisi</h3>
                 <div class="form-group"><label class="form-label">Pilih Industri Tujuan:</label><select id="kunjunganInd" class="form-control">${indOpts}</select></div>
@@ -2106,15 +2237,11 @@
             };
 
             window.cloudState.agendaKunjungan.unshift(item);
-            window.syncToGoogleAppsScript("jadwal_kunjungan", item);
             window.closeDynamicModal();
             window.showModalInfo("Jadwal Tersimpan 🚗", `Kunjungan ke ${ind} pada ${tgl} berhasil dijadwalkan!`);
             window.openFeature("agenda-kunjungan", "Agenda Kunjungan");
         };
 
-        // ==========================================
-        // REKAP ABSENSI GLOBAL (ADMIN)
-        // ==========================================
         function renderRekapAbsensiGlobal() {
             const list = window.cloudState.absensi || [];
             let rows = "";
@@ -2182,9 +2309,6 @@
             link.click();
         };
 
-        // ==========================================
-        // MANAJEMEN DOKUMEN (UNGGAH & IZIN AKSES)
-        // ==========================================
         function renderManajemenDokumen() {
             let rows = "";
             (window.cloudState.dokumen || []).forEach((doc, idx) => {
@@ -2238,9 +2362,6 @@
             window.openFeature("dokumen", "Manajemen Dokumen");
         };
 
-        // ==========================================
-        // TUGAS LAPANGAN & LAPORAN AKHIR (SISWA)
-        // ==========================================
         function renderTugasKhusus() {
             let tasksHtml = "";
             (window.cloudState.tugas || []).forEach(t => {
@@ -2303,9 +2424,251 @@
             };
 
             window.cloudState.laporanAkhir.unshift(item);
-            window.syncToGoogleAppsScript("simpan_laporan_akhir", item);
-            window.showModalInfo("Laporan Terkirim 📄", "Laporan akhir PKL Anda telah diterima di sistem cloud dan siap diuji oleh Tim Pembimbing!");
+            window.showModalInfo("Laporan Terkirim 📄", "Laporan akhir PKL Anda telah diterima di sistem cloud dan siap diuji!");
             window.openFeature("laporan", "Laporan PKL");
+        };
+
+        function renderPengaturanJamGPS() {
+            let cards = "";
+            (window.cloudState.industri || []).forEach((ind, idx) => {
+                cards += `<div style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:14px; padding:16px; margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                        <div style="font-weight:800; font-size:14px; color:#38bdf8;">🏭 ${ind.nama}</div>
+                        <span class="badge-status badge-blue">Radius Geofence: ${ind.radius} Meter</span>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
+                        <div>
+                            <label class="form-label">Jam Masuk (WITA):</label>
+                            <input type="time" id="jamMasuk_${idx}" class="form-control" value="${ind.masuk || '08:00'}">
+                        </div>
+                        <div>
+                            <label class="form-label">Jam Pulang (WITA):</label>
+                            <input type="time" id="jamPulang_${idx}" class="form-control" value="${ind.pulang || '16:00'}">
+                        </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+                        <div>
+                            <label class="form-label">Radius (Meter):</label>
+                            <input type="number" id="radiusGps_${idx}" class="form-control" value="${ind.radius || 50}">
+                        </div>
+                        <div>
+                            <label class="form-label">Latitude Satelit:</label>
+                            <input type="text" id="latGps_${idx}" class="form-control" value="${ind.lat || '0.45612'}">
+                        </div>
+                        <div>
+                            <label class="form-label">Longitude Satelit:</label>
+                            <input type="text" id="lngGps_${idx}" class="form-control" value="${ind.lng || '121.94210'}">
+                        </div>
+                    </div>
+                    <div style="display:flex; justify-content:flex-end; gap:8px;">
+                        <button onclick="window.deteksiGpsOtomatis(${idx})" class="btn-action btn-emerald">📍 Deteksi Titik GPS Saya</button>
+                        <button onclick="window.simpanPengaturanGpsSingle(${idx})" class="btn-action btn-blue">💾 Simpan GPS ${ind.nama}</button>
+                    </div>
+                </div>`;
+            });
+
+            return `<div class="card">
+                <h3 style="font-size:15px; font-weight:bold; margin-bottom:4px;">📍 Pengaturan Jam Kerja & Radius Koordinat Geofence GPS</h3>
+                <p style="font-size:11px; color:var(--text-muted); margin-bottom:14px;">Atur batas toleransi jarak dan jam presensi siswa di masing-masing industri.</p>
+                ${cards}
+            </div>`;
+        }
+
+        window.deteksiGpsOtomatis = function(idx) {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        const latEl = document.getElementById(`latGps_${idx}`);
+                        const lngEl = document.getElementById(`lngGps_${idx}`);
+                        if (latEl) latEl.value = pos.coords.latitude.toFixed(6);
+                        if (lngEl) lngEl.value = pos.coords.longitude.toFixed(6);
+                        window.showModalInfo("GPS Terkunci 🛰️", `Koordinat lokasi saat ini: Lat ${pos.coords.latitude.toFixed(6)}, Lng ${pos.coords.longitude.toFixed(6)}`);
+                    },
+                    err => {
+                        window.showModalInfo("Deteksi GPS", "Izin lokasi tidak aktif atau koordinat belum terbaca.");
+                    }
+                );
+            }
+        };
+
+        window.simpanPengaturanGpsSingle = function(idx) {
+            const ind = window.cloudState.industri[idx];
+            if (!ind) return;
+            ind.masuk = document.getElementById(`jamMasuk_${idx}`)?.value || "08:00";
+            ind.pulang = document.getElementById(`jamPulang_${idx}`)?.value || "16:00";
+            ind.radius = parseInt(document.getElementById(`radiusGps_${idx}`)?.value) || 50;
+            ind.lat = document.getElementById(`latGps_${idx}`)?.value || "0.45612";
+            ind.lng = document.getElementById(`lngGps_${idx}`)?.value || "121.94210";
+
+            window.showModalInfo("Pengaturan Tersimpan 💾", `Konfigurasi jam (${ind.masuk} - ${ind.pulang}) dan radius ${ind.radius}m untuk ${ind.nama} berhasil disimpan!`);
+        };
+
+        function renderPengaturanSistem() {
+            return `<div class="card">
+                <h3 style="font-size:15px; font-weight:bold; margin-bottom:6px;">⚙️ Pengaturan Sistem & Banner Informasi</h3>
+                <p style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">Kelola preferensi tema visual dan siarkan banner informasi ke dashboard seluruh pengguna.</p>
+                <div style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); padding:14px; border-radius:12px; margin-bottom:14px;">
+                    <label class="form-label">Preferensi Tema Visual Tampilan:</label>
+                    <button onclick="window.toggleGlobalTheme()" class="btn-action btn-blue">🌓 Beralih Mode Terang / Gelap</button>
+                </div>
+                <div style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); padding:14px; border-radius:12px;">
+                    <h4 style="font-size:13px; font-weight:700; color:#38bdf8; margin-bottom:8px;">📢 Siarkan Banner Pengumuman Baru</h4>
+                    <div class="form-group"><label class="form-label">Judul Pengumuman:</label><input type="text" id="bannerJudulBaru" class="form-control" placeholder="Contoh: Jadwal Ujian PKL Tahap I"></div>
+                    <div class="form-group"><label class="form-label">Isi Pesan:</label><textarea id="bannerPesanBaru" class="form-control" placeholder="Tuliskan pengumuman yang akan tampil di dashboard..."></textarea></div>
+                    <div class="form-group">
+                        <label class="form-label">Hak Akses Penerima Banner:</label>
+                        <div style="display:flex; gap:12px; flex-wrap:wrap; font-size:12px; margin-top:4px;">
+                            <label><input type="checkbox" id="tgtSiswa" checked> Siswa</label>
+                            <label><input type="checkbox" id="tgtGuru" checked> Guru</label>
+                            <label><input type="checkbox" id="tgtIndustri" checked> Industri</label>
+                            <label><input type="checkbox" id="tgtOrtu" checked> Orang Tua</label>
+                        </div>
+                    </div>
+                    <button onclick="window.simpanBannerPengumuman()" class="btn-action btn-emerald" style="margin-top:10px;">🚀 Terbitkan Banner ke Dashboard</button>
+                </div>
+            </div>`;
+        }
+
+        window.simpanBannerPengumuman = function() {
+            const j = document.getElementById("bannerJudulBaru")?.value.trim();
+            const p = document.getElementById("bannerPesanBaru")?.value.trim();
+            if (!j || !p) {
+                window.showModalInfo("Lengkapi Pengumuman", "Judul dan pesan pengumuman wajib diisi!");
+                return;
+            }
+
+            const targets = [];
+            if (document.getElementById("tgtSiswa")?.checked) targets.push("siswa");
+            if (document.getElementById("tgtGuru")?.checked) targets.push("guru");
+            if (document.getElementById("tgtIndustri")?.checked) targets.push("industri");
+            if (document.getElementById("tgtOrtu")?.checked) targets.push("orangtua");
+
+            const item = { id: "bn_" + Date.now(), judul: j, pesan: p, tipe: "teks", target: targets };
+            window.cloudState.banner.unshift(item);
+            window.showModalInfo("Banner Diterbitkan 📢", `Pengumuman "${j}" berhasil disiarkan ke dashboard!`);
+            window.openFeature("dashboard", "Dashboard Utama");
+        };
+
+        function renderSiswaBimbinganList() {
+            let rows = "";
+            (window.cloudState.siswa || []).forEach((s, idx) => {
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${s.nama}</b></td>
+                    <td>${s.kelas}</td>
+                    <td>${s.industri}</td>
+                    <td><span class="badge-status badge-green">${s.hadir}% Hadir</span></td>
+                    <td><button onclick="window.showModalInfo('Profil Siswa', 'Nama: <b>${s.nama}</b><br>NISN: ${s.nisn}<br>Kelas: ${s.kelas}<br>Tempat PKL: ${s.industri}<br>Pembimbing: ${s.pembimbing}')" class="btn-action btn-blue">Detail</button></td>
+                </tr>`;
+            });
+
+            return `<div class="card">
+                <h3 style="font-size:15px; font-weight:bold; margin-bottom:4px;">👥 Siswa Bimbingan / Siswa Magang</h3>
+                <p style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">Daftar siswa peserta PKL dalam naungan bimbingan Anda.</p>
+                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Siswa</th><th>Kelas</th><th>Industri Mitra</th><th>Kehadiran</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div>
+            </div>`;
+        }
+
+        function renderValidasiJurnalList() {
+            let rows = "";
+            (window.cloudState.jurnal || []).forEach((j, idx) => {
+                const isApproved = (j.status || "").includes("Disetujui");
+                const badge = isApproved ? "badge-green" : "badge-amber";
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${j.siswa}</b></td>
+                    <td>${j.tanggal}</td>
+                    <td>${j.kegiatan}</td>
+                    <td><span class="badge-status ${badge}">${j.status}</span></td>
+                    <td>
+                        <button onclick="window.verifikasiJurnalAction('${j.id}', 'Disetujui')" class="btn-action btn-emerald" style="padding:4px 8px;">Setujui</button>
+                        <button onclick="window.verifikasiJurnalAction('${j.id}', 'Revisi')" class="btn-action btn-amber" style="padding:4px 8px;">Revisi</button>
+                    </td>
+                </tr>`;
+            });
+
+            return `<div class="card">
+                <h3 style="font-size:15px; font-weight:bold; margin-bottom:4px;">📋 Verifikasi & Validasi Jurnal Kegiatan Siswa</h3>
+                <p style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">Tinjau catatan logbook harian siswa dan berikan pengesahan.</p>
+                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Siswa</th><th>Tanggal</th><th>Aktivitas Kerja</th><th>Status Verifikasi</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="6" style="text-align:center;">Belum ada jurnal</td></tr>'}</tbody></table></div>
+            </div>`;
+        }
+
+        window.verifikasiJurnalAction = function(id, statusBaru) {
+            const item = window.cloudState.jurnal.find(j => String(j.id) === String(id));
+            if (item) {
+                item.status = statusBaru === "Disetujui" ? "Disetujui Pembimbing" : "Perlu Revisi";
+                window.showModalInfo("Jurnal Diperbarui", `Status jurnal atas nama ${item.siswa} berhasil diubah menjadi: ${item.status}!`);
+                window.openFeature("validasi-jurnal", "Validasi Jurnal");
+            }
+        };
+
+        function renderPenilaianIndustri() {
+            let opts = "";
+            (window.cloudState.siswa || []).forEach(s => opts += `<option value="${s.nama}">${s.nama} (${s.kelas} - ${s.industri})</option>`);
+
+            return `<div class="card">
+                <h3 style="font-size:15px; font-weight:bold; margin-bottom:6px;">🏆 Lembar Penilaian & Unggah Borang Nilai Berstempel</h3>
+                <p style="font-size:11px; color:var(--text-muted); margin-bottom:14px;">Masukkan evaluasi kompetensi magang dan unggah berkas fisik nilai yang telah distempel.</p>
+                <div class="form-group"><label class="form-label">Pilih Siswa yang Dinilai:</label><select id="nilaiSiswa" class="form-control">${opts}</select></div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+                    <div><label class="form-label">Nilai Teknis (1-100):</label><input type="number" id="nilaiTeknis" class="form-control" value="88"></div>
+                    <div><label class="form-label">Kedisiplinan (1-100):</label><input type="number" id="nilaiDisiplin" class="form-control" value="92"></div>
+                    <div><label class="form-label">Inisiatif / Kerjasama:</label><input type="number" id="nilaiInisiatif" class="form-control" value="90"></div>
+                </div>
+                <div class="form-group"><label class="form-label">Catatan & Rekomendasi Industri:</label><input type="text" id="nilaiCatatan" class="form-control" placeholder="Siswa memiliki etos kerja tinggi dan cepat memahami instruksi..."></div>
+                <div class="form-group"><label class="form-label">Unggah Scan Lembar Nilai Fisik Berstempel (PDF / Foto):</label><input type="file" id="nilaiFileScan" class="form-control"></div>
+                <button onclick="window.simpanPenilaianIndustri()" class="btn-action btn-amber" style="padding:10px 16px; font-weight:800;">💾 Kirim Nilai Resmi ke Sekolah</button>
+            </div>`;
+        }
+
+        window.simpanPenilaianIndustri = function() {
+            const sw = document.getElementById("nilaiSiswa")?.value;
+            const tek = parseFloat(document.getElementById("nilaiTeknis")?.value) || 0;
+            const dis = parseFloat(document.getElementById("nilaiDisiplin")?.value) || 0;
+            const ini = parseFloat(document.getElementById("nilaiInisiatif")?.value) || 0;
+            const cat = document.getElementById("nilaiCatatan")?.value.trim();
+            const rata = ((tek + dis + ini) / 3).toFixed(1);
+
+            const payload = { siswa: sw, teknis: tek, disiplin: dis, inisiatif: ini, rataRata: rata, catatan: cat || "Sangat Baik" };
+            window.syncToGoogleAppsScript("simpan_penilaian", payload);
+            window.showModalInfo("Penilaian Tersimpan 🏆", `Penilaian untuk ${sw} dengan nilai rata-rata ${rata} berhasil dikirimkan ke pihak sekolah!`);
+        };
+
+        function renderPengaduanMasalah() {
+            return `<div class="card">
+                <h3 style="font-size:15px; font-weight:bold; margin-bottom:4px;">⚠️ Layanan Pengaduan & Eskalasi Kendala PKL</h3>
+                <p style="font-size:11px; color:var(--text-muted); margin-bottom:14px;">Laporan kendala dikirimkan secara langsung dan rahasia ke Panitia PKL SMKN 1 Marisa.</p>
+                <div class="form-group">
+                    <label class="form-label">Kategori Kendala:</label>
+                    <select id="aduanKategori" class="form-control">
+                        <option value="Kendala Teknis / Peralatan Kerja">Kendala Teknis / Peralatan Kerja</option>
+                        <option value="Jadwal / Penugasan di Luar Kompetensi">Jadwal / Penugasan di Luar Kompetensi</option>
+                        <option value="Kesehatan / Lingkungan Kerja">Kesehatan / Lingkungan Kerja</option>
+                        <option value="Lainnya">Lainnya</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Uraian Masalah / Kendala:</label>
+                    <textarea id="aduanPesan" class="form-control" style="height:80px;" placeholder="Tuliskan kendala Anda secara rinci..."></textarea>
+                </div>
+                <button onclick="window.kirimAduanAction()" class="btn-action btn-red" style="padding:10px 16px; font-weight:800;">🚨 Kirim Laporan Kendala</button>
+            </div>`;
+        }
+
+        window.kirimAduanAction = function() {
+            const kat = document.getElementById("aduanKategori")?.value;
+            const psn = document.getElementById("aduanPesan")?.value.trim();
+            if (!psn) {
+                window.showModalInfo("Lengkapi Aduan", "Silakan ceritakan kendala yang Anda hadapi!");
+                return;
+            }
+
+            const profile = window.cloudState.userProfile || { nama: "Ahmad Rizky" };
+            const payload = { siswa: profile.nama, kategori: kat, pesan: psn };
+            window.syncToGoogleAppsScript("kirim_aduan", payload);
+            window.showModalInfo("Laporan Diterima 🚨", "Laporan kendala Anda telah diterima Panitia PKL.");
+            window.openFeature("dashboard", "Dashboard Siswa");
         };
 
         // Listen to Auth State
