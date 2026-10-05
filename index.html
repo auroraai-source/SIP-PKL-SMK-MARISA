@@ -843,7 +843,7 @@
             userProfile: null,
             activeRole: "siswa",
             authMode: "login",
-            gasWebhookUrl: "https://script.google.com/macros/s/AKfycbxDemoSMKN1MarisaGASBackendUrl/exec",
+            gasWebhookUrl: "https://script.google.com/macros/s/AKfycbxoKWB-X6cMeFgJE43hzG-zmDtifENZ0W8z0wuS-_WdcIpO2V8LHiKo1KUjmG-LrC7wZg/exec",
             siswa: [],
             guru: [],
             industri: [],
@@ -1031,8 +1031,8 @@
                     });
                 }
 
-                // Auto GAS Sync notification (optional)
-                window.syncToGoogleAppsScript("DAFTAR_USER_BARU", profileData);
+                // Auto GAS Sync notification
+                window.syncToGoogleAppsScript("register_user", profileData);
 
                 window.showModalInfo("Pendaftaran Berhasil 🎉", `Selamat! Akun ${role.toUpperCase()} atas nama ${nama} berhasil didaftarkan secara online di Firebase. Anda akan langsung diarahkan ke Room resmi Anda.`);
                 
@@ -1310,10 +1310,17 @@
             const profile = window.cloudState.userProfile || { nama: "Ahmad Rizky" };
 
             const record = {
+                userId: auth.currentUser?.uid || "guest",
                 nama: profile.nama,
+                role: window.cloudState.activeRole,
+                industri: "PT Maju Teknologi",
                 tanggal: dateStr,
                 jam: timeStr,
                 status: `${ket} (Radius 16m - Valid)`,
+                radius: 16,
+                latitude: "0.45612",
+                longitude: "121.94210",
+                fotoUrl: "Tersimpan di Cloud",
                 timestamp: new Date().toISOString()
             };
 
@@ -1328,7 +1335,7 @@
             }
 
             // Sync to Google Apps Script (Sheets)
-            window.syncToGoogleAppsScript("TAMBAH_ABSENSI", record);
+            window.syncToGoogleAppsScript("catat_presensi", record);
 
             window.showModalInfo("Kehadiran Tercatat ⚡", `Presensi ${profile.nama} pada ${dateStr} jam ${timeStr} WITA berhasil tercatat di Firestore dan disinkronkan ke Google Sheets!`);
             window.openFeature("presensi", "Presensi GPS");
@@ -1391,11 +1398,13 @@
             const newJurnal = {
                 id: Date.now().toString(),
                 siswa: profile.nama,
+                industri: "PT Maju Teknologi",
                 tanggal: now,
                 kegiatan: akt,
                 kendala: ken || "Tidak ada kendala",
                 solusi: sol || "Selesai sesuai SOP",
                 status: "Menunggu Verifikasi Industri & Guru",
+                fotoUrl: "-",
                 timestamp: new Date().toISOString()
             };
 
@@ -1410,7 +1419,7 @@
             }
 
             // Sync to Google Apps Script
-            window.syncToGoogleAppsScript("TAMBAH_JURNAL", newJurnal);
+            window.syncToGoogleAppsScript("simpan_jurnal", newJurnal);
 
             window.showModalInfo("Jurnal Terkirim 🚀", "Jurnal harian Anda telah tersimpan di Cloud dan siap diverifikasi oleh Pembimbing Industri serta Guru!");
             window.openFeature("jurnal", "Jurnal Kegiatan");
@@ -1536,7 +1545,7 @@
                 console.log("Penempatan saved in memory");
             }
 
-            window.syncToGoogleAppsScript("TAMBAH_PENEMPATAN", record);
+            window.syncToGoogleAppsScript("simpan_penempatan", record);
             window.closeDynamicModal();
             window.showModalInfo("Alokasi Tersimpan 💾", `Guru ${g} berhasil ditugaskan membimbing ${selected.length} siswa di ${ind}.`);
             window.openFeature("penempatan", "Penempatan PKL");
@@ -1727,8 +1736,17 @@
             const ini = document.getElementById("nilaiInisiatif").value;
             const avg = ((parseFloat(tek) + parseFloat(dis) + parseFloat(ini)) / 3).toFixed(1);
 
-            const payload = { siswa, teknis: tek, disiplin: dis, inisiatif: ini, rataRata: avg, timestamp: new Date().toISOString() };
-            window.syncToGoogleAppsScript("INPUT_NILAI_PKL", payload);
+            const payload = { 
+                siswa: siswa, 
+                industri: "PT Maju Teknologi",
+                teknis: tek, 
+                disiplin: dis, 
+                inisiatif: ini, 
+                rataRata: avg, 
+                fileScanUrl: "Dokumen Lembar Nilai Fisik",
+                timestamp: new Date().toISOString() 
+            };
+            window.syncToGoogleAppsScript("simpan_penilaian", payload);
 
             window.showModalInfo("Nilai Terkirim 🏆", `Nilai untuk ${siswa} dengan skor rata-rata ${avg} berhasil tersimpan di sistem cloud.`);
         };
@@ -1814,16 +1832,64 @@
         }
 
         function renderPengaduanMasalah() {
-            return `<div class="card"><h3>⚠️ Laporan Kendala / Eskalasi Masalah</h3><p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Laporan terkirim langsung ke Panitia dan Guru Pembimbing secara rahasia.</p><textarea class="form-control" placeholder="Tuliskan kendala di industri..."></textarea><button onclick="window.showModalInfo('Laporan Terkirim', 'Laporan kendala telah diteruskan ke panitia.')" class="btn-action btn-red">Kirim Aduan</button></div>`;
+            return `<div class="card">
+                <h3>⚠️ Laporan Kendala / Eskalasi Masalah</h3>
+                <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Laporan terkirim langsung ke Panitia dan Guru Pembimbing secara rahasia.</p>
+                <textarea id="aduanIsiPesan" class="form-control" placeholder="Tuliskan kendala di industri..."></textarea>
+                <button onclick="window.kirimAduanCloud()" class="btn-action btn-red">Kirim Aduan</button>
+            </div>`;
         }
 
-        function renderAgendaKunjungan() {
-            return `<div class="card"><h3>🚗 Agenda Kunjungan Monitoring Guru</h3><p style="font-size:12px; color:var(--text-muted); margin-top:6px;">Jadwal: Monitoring Tahap I ke PT Maju Teknologi (12 Oktober 2026).</p></div>`;
-        }
+        window.kirimAduanCloud = function() {
+            const pesan = document.getElementById("aduanIsiPesan")?.value.trim();
+            if (!pesan) {
+                window.showModalInfo("Laporan Kosong", "Silakan ketik kendala yang dialami!");
+                return;
+            }
+            const profile = window.cloudState.userProfile || { nama: "Siswa PKL" };
+            const payload = {
+                siswa: profile.nama,
+                industri: "PT Maju Teknologi",
+                kategori: "Kendala Lapangan",
+                urgensi: "Penting",
+                pesan: pesan,
+                timestamp: new Date().toISOString()
+            };
+            window.syncToGoogleAppsScript("kirim_aduan", payload);
+            window.showModalInfo("Laporan Terkirim ⚠️", "Laporan kendala telah diteruskan ke panitia sekolah dan Google Sheets!");
+            document.getElementById("aduanIsiPesan").value = "";
+        };
+
+        window.bukaModalGasSync = function() {
+            const codeSample = "function doPost(e) {\n  var ss = SpreadsheetApp.getActiveSpreadsheet();\n  var body = JSON.parse(e.postData.contents);\n  var sheet = ss.getSheetByName(body.action) || ss.insertSheet(body.action);\n  sheet.appendRow([new Date(), JSON.stringify(body.data)]);\n  return ContentService.createTextOutput('OK');\n}";
+            
+            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#10b981; margin-bottom:10px;">📊 Integrasi Google Apps Script & Google Sheets</h3>
+                <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Salin kode Google Apps Script ke <b>script.google.com</b> yang terhubung ke Google Sheets Anda, lalu Publish sebagai <i>Web App (Access: Anyone)</i>.</p>
+                <textarea class="form-control" style="height:120px; font-family:monospace; font-size:11px;" readonly>${codeSample}</textarea>
+                <div class="form-group">
+                    <label class="form-label">Webhook URL Web App GAS Aktif:</label>
+                    <input type="text" id="modalGasUrlInput" class="form-control" value="${window.cloudState.gasWebhookUrl}">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#475569;">Tutup</button>
+                    <button onclick="window.simpanGasUrlModal()" class="btn-action btn-blue">💾 Simpan URL GAS</button>
+                </div>`;
+
+            window.openDynamicModal(modalHtml);
+        };
+
+        window.simpanGasUrlModal = function() {
+            const val = document.getElementById("modalGasUrlInput")?.value.trim();
+            if (val) {
+                window.cloudState.gasWebhookUrl = val;
+                window.closeDynamicModal();
+                window.showModalInfo("GAS URL Tersimpan", "Webhook Google Apps Script berhasil diperbarui.");
+            }
+        };
 
         window.syncToGoogleAppsScript = function(action, payload) {
             const url = window.cloudState.gasWebhookUrl;
-            if (!url || url.includes("Placeholder")) return;
+            if (!url) return;
 
             try {
                 fetch(url, {
@@ -1834,33 +1900,6 @@
                 });
             } catch (err) {
                 console.log("GAS sync queued", err);
-            }
-        };
-
-        window.bukaModalGasSync = function() {
-            const codeSample = `function doPost(e) {\\n  var ss = SpreadsheetApp.getActiveSpreadsheet();\\n  var body = JSON.parse(e.postData.contents);\\n  var sheet = ss.getSheetByName(body.action) || ss.insertSheet(body.action);\\n  sheet.appendRow([new Date(), JSON.stringify(body.data)]);\\n  return ContentService.createTextOutput("OK");\\n}`;
-            
-            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#10b981; margin-bottom:10px;">📊 Integrasi Google Apps Script & Google Sheets</h3>
-                <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Salin kode Google Apps Script di bawah ini ke <b>script.google.com</b> yang terhubung ke Google Sheets Anda, lalu Publish sebagai <i>Web App (Access: Anyone)</i>.</p>
-                <textarea class="form-control" style="height:120px; font-family:monospace; font-size:11px;" readonly>${codeSample.replace(/\\n/g, '\n')}</textarea>
-                <div class="form-group">
-                    <label class="form-label">Masukkan Web App URL Hasil Deploy:</label>
-                    <input type="text" id="modalGasUrlInput" class="form-control" value="${window.cloudState.gasWebhookUrl}">
-                </div>
-                <div style="display:flex; justify-content:flex-end; gap:8px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#475569;">Tutup</button>
-                    <button onclick="window.simpanGasUrlModal()" class="btn-action btn-emerald">💾 Simpan Webhook</button>
-                </div>`;
-
-            window.openDynamicModal(modalHtml);
-        };
-
-        window.simpanGasUrlModal = function() {
-            const url = document.getElementById("modalGasUrlInput").value.trim();
-            if (url) {
-                window.cloudState.gasWebhookUrl = url;
-                window.closeDynamicModal();
-                window.showModalInfo("Tersambung", "Webhook Google Apps Script berhasil dihubungkan ke spreadsheet!");
             }
         };
 
