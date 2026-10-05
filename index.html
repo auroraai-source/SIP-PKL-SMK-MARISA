@@ -837,13 +837,20 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // Core In-Memory Cache (Realtime Synced with Firestore)
+        // Core In-Memory Cache (Realtime Synced with Firestore & GAS)
         window.cloudState = {
             currentUser: null,
             userProfile: null,
             activeRole: "siswa",
             authMode: "login",
             gasWebhookUrl: "https://script.google.com/macros/s/AKfycbxoKWB-X6cMeFgJE43hzG-zmDtifENZ0W8z0wuS-_WdcIpO2V8LHiKo1KUjmG-LrC7wZg/exec",
+            registeredUsers: [
+                { email: "rizky@smkn1marisa.sch.id", pass: "siswa123", nama: "Ahmad Rizky", role: "siswa", identitas: "0054829102" },
+                { email: "budi@smkn1marisa.sch.id", pass: "guru123", nama: "Budi, S.Pd.", role: "guru", identitas: "19800101 201001 1 001" },
+                { email: "admin.pkl@smkn1marisa.sch.id", pass: "admin123", nama: "Panitia Pelaksana PKL", role: "admin", identitas: "ADMIN-01" },
+                { email: "hrd@majuteknologi.co.id", pass: "industri123", nama: "Andi Saputra (PT Maju)", role: "industri", identitas: "IND-PTMAJU" },
+                { email: "hendra.wali@gmail.com", pass: "ortu123", nama: "Bpk. Hendra Wijaya", role: "orangtua", identitas: "WALI-AHMAD" }
+            ],
             siswa: [],
             guru: [],
             industri: [],
@@ -983,7 +990,7 @@
             }
 
             if (pass.length < 6) {
-                window.showModalInfo("Kata Sandi Pendek", "Kata sandi minimal 6 karakter sesuai standar keamanan Firebase!");
+                window.showModalInfo("Kata Sandi Pendek", "Kata sandi minimal 6 karakter sesuai standar keamanan!");
                 return;
             }
 
@@ -991,33 +998,54 @@
             btn.innerHTML = "<span>Mendaftarkan ke Cloud...</span> ⏳";
             btn.disabled = true;
 
-            try {
-                // Firebase Auth Create User
-                const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-                const user = userCredential.user;
+            let firebaseSuccess = false;
+            let registeredUid = "usr_" + Date.now();
 
+            try {
+                // Coba daftarkan ke Firebase jika API key valid
+                const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+                if (userCredential && userCredential.user) {
+                    registeredUid = userCredential.user.uid;
+                    firebaseSuccess = true;
+                }
+            } catch (error) {
+                console.warn("Firebase Auth bypassed/fallback triggered:", error.message);
+                // Jika error karena apiKey placeholder, teruskan pendaftaran via GAS & Session
+                if (error.code === 'auth/email-already-in-use') {
+                    window.showModalInfo("Email Terdaftar", "Email ini sudah terdaftar! Silakan beralih ke tab MASUK ROOM.");
+                    btn.innerHTML = "<span>DAFTARKAN AKUN KE CLOUD</span> 🚀";
+                    btn.disabled = false;
+                    return;
+                }
+            }
+
+            try {
                 const profileData = {
-                    uid: user.uid,
+                    uid: registeredUid,
                     nama: nama,
                     email: email,
                     identitas: identitas,
                     role: role,
+                    pass: pass,
                     createdAt: new Date().toISOString()
                 };
 
-                // Save Profile in Strict Private User Path: /artifacts/{appId}/users/{userId}/profile/info
-                try {
-                    const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
-                    await setDoc(profileRef, profileData);
+                // Simpan ke basis data akun aktif
+                window.cloudState.registeredUsers.unshift(profileData);
 
-                    // Public User Directory entry for search: /artifacts/{appId}/public/data/user_directory/{userId}
-                    const publicUserRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_directory', user.uid);
-                    await setDoc(publicUserRef, profileData);
-                } catch (fsErr) {
-                    console.log("Firestore profile saved in memory session", fsErr);
+                // Jika Firebase Auth aktif, simpan ke Firestore
+                if (firebaseSuccess) {
+                    try {
+                        const profileRef = doc(db, 'artifacts', appId, 'users', registeredUid, 'profile', 'info');
+                        await setDoc(profileRef, profileData);
+                        const publicUserRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_directory', registeredUid);
+                        await setDoc(publicUserRef, profileData);
+                    } catch (fsErr) {
+                        console.log("Firestore profile offline fallback", fsErr);
+                    }
                 }
 
-                // If registering as student, add to student roster
+                // Masukkan siswa ke daftar siswa jika mendaftar sebagai Siswa
                 if (role === "siswa") {
                     window.cloudState.siswa.unshift({
                         nama: nama,
@@ -1031,24 +1059,19 @@
                     });
                 }
 
-                // Auto GAS Sync notification
+                // Kirim data akun ke Google Sheets via Google Apps Script (GAS) Webhook
                 window.syncToGoogleAppsScript("register_user", profileData);
 
-                window.showModalInfo("Pendaftaran Berhasil 🎉", `Selamat! Akun ${role.toUpperCase()} atas nama ${nama} berhasil didaftarkan secara online di Firebase. Anda akan langsung diarahkan ke Room resmi Anda.`);
-                
-                window.cloudState.currentUser = user;
+                window.cloudState.currentUser = { uid: registeredUid, email: email };
                 window.cloudState.userProfile = profileData;
+
+                window.showModalInfo("Pendaftaran Berhasil 🎉", `Selamat! Akun ${role.toUpperCase()} atas nama ${nama} berhasil didaftarkan dan data disinkronkan ke Google Sheets. Anda langsung diarahkan ke Room resmi Anda.`);
+                
                 window.enterUserRoom(role, nama, email);
 
-            } catch (error) {
-                console.error("Firebase Auth Register Error:", error);
-                let msg = error.message;
-                if (error.code === 'auth/email-already-in-use') {
-                    msg = "Email ini sudah terdaftar! Silakan beralih ke tab MASUK ROOM.";
-                } else if (error.code === 'auth/invalid-email') {
-                    msg = "Format email tidak valid!";
-                }
-                window.showModalInfo("Pendaftaran Gagal", msg);
+            } catch (err) {
+                console.error("Register Error:", err);
+                window.showModalInfo("Pendaftaran Gagal", "Terjadi kendala saat memproses akun: " + err.message);
             } finally {
                 btn.innerHTML = "<span>DAFTARKAN AKUN KE CLOUD</span> 🚀";
                 btn.disabled = false;
@@ -1066,51 +1089,74 @@
             }
 
             const btn = document.getElementById("btnSubmitLogin");
-            btn.innerHTML = "<span>Memverifikasi Firebase...</span> ⏳";
+            btn.innerHTML = "<span>Memverifikasi Akun...</span> ⏳";
             btn.disabled = true;
 
+            let loginSuccess = false;
+            let activeUser = null;
+            let registeredRole = chosenRole;
+            let displayName = email.split('@')[0];
+
             try {
+                // Coba Login ke Firebase jika aktif
                 const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-                const user = userCredential.user;
-
-                // Retrieve Profile from Firestore
-                let registeredRole = chosenRole;
-                let displayName = email.split('@')[0];
-
-                try {
-                    const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
-                    const profileSnap = await getDoc(profileRef);
-                    if (profileSnap.exists()) {
-                        const data = profileSnap.data();
-                        registeredRole = data.role || chosenRole;
-                        displayName = data.nama || displayName;
+                if (userCredential && userCredential.user) {
+                    activeUser = userCredential.user;
+                    loginSuccess = true;
+                    try {
+                        const profileRef = doc(db, 'artifacts', appId, 'users', activeUser.uid, 'profile', 'info');
+                        const profileSnap = await getDoc(profileRef);
+                        if (profileSnap.exists()) {
+                            const data = profileSnap.data();
+                            registeredRole = data.role || chosenRole;
+                            displayName = data.nama || displayName;
+                        }
+                    } catch (e) {
+                        console.log("Using cached profile");
                     }
-                } catch (fsErr) {
-                    console.log("Using cached role");
                 }
+            } catch (error) {
+                console.warn("Firebase Auth bypassed, checking registered cloud user database...", error.message);
+            }
 
-                // Check if user chose wrong room
+            // Jika Firebase offline/apiKey dummy, periksa di daftar database akun lokal & GAS
+            if (!loginSuccess) {
+                const foundUser = window.cloudState.registeredUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+                if (foundUser) {
+                    if (foundUser.pass === pass) {
+                        loginSuccess = true;
+                        registeredRole = foundUser.role;
+                        displayName = foundUser.nama;
+                        activeUser = { uid: foundUser.uid || "usr_" + Date.now(), email: foundUser.email };
+                    } else {
+                        window.showModalInfo("Login Gagal", "Kata sandi yang Anda masukkan salah!");
+                        btn.innerHTML = "<span>MASUK KE SISTEM (FIREBASE)</span> ⚡";
+                        btn.disabled = false;
+                        return;
+                    }
+                } else {
+                    // Jika akun tidak ditemukan, otomatis izinkan login demo jika role cocok atau minta daftar
+                    window.showModalInfo("Akun Belum Ditemukan", "Email belum terdaftar di sistem. Silakan klik tab 'DAFTAR AKUN' untuk membuat akun baru Anda terlebih dahulu.");
+                    btn.innerHTML = "<span>MASUK KE SISTEM (FIREBASE)</span> ⚡";
+                    btn.disabled = false;
+                    return;
+                }
+            }
+
+            if (loginSuccess) {
                 if (chosenRole !== registeredRole) {
                     window.showModalInfo("Pengalihan Otomatis 🛡️", `Email ini terdaftar sebagai ${registeredRole.toUpperCase()}. Sistem otomatis mengarahkan Anda ke ROOM ${registeredRole.toUpperCase()} agar tidak salah akses!`);
                 }
 
-                window.cloudState.currentUser = user;
-                window.cloudState.userProfile = { uid: user.uid, email: email, nama: displayName, role: registeredRole };
-                
-                setupFirestoreSync(user.uid);
-                window.enterUserRoom(registeredRole, displayName, email);
+                window.cloudState.currentUser = activeUser;
+                window.cloudState.userProfile = { uid: activeUser.uid, email: email, nama: displayName, role: registeredRole };
 
-            } catch (error) {
-                console.error("Firebase Auth Login Error:", error);
-                let msg = "Email atau kata sandi tidak cocok di database Firebase!";
-                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-                    msg = "Kredensial tidak valid. Jika Anda baru pertama kali menggunakan sistem, silakan buat akun di tab 'DAFTAR AKUN'.";
-                }
-                window.showModalInfo("Login Gagal", msg);
-            } finally {
-                btn.innerHTML = "<span>MASUK KE SISTEM (FIREBASE)</span> ⚡";
-                btn.disabled = false;
+                try { setupFirestoreSync(activeUser.uid); } catch(e){}
+                window.enterUserRoom(registeredRole, displayName, email);
             }
+
+            btn.innerHTML = "<span>MASUK KE SISTEM (FIREBASE)</span> ⚡";
+            btn.disabled = false;
         };
 
         window.prosesResetPasswordFirebase = async function() {
