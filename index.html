@@ -11,6 +11,9 @@
         window.onunhandledrejection = function() { return true; };
     </script>
 
+    <!-- SheetJS Library for Excel (xlsx / xls / csv) Processing -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -718,10 +721,32 @@
             
             <aside class="sidebar">
                 <div class="sidebar-header">
-                    <div class="badge-logo" style="width: 36px; height: 36px; font-size: 8px;">SMK 1</div>
+                    <div class="badge-logo" style="width: 44px; height: 46px;" title="Logo SMKN 1 Marisa">
+                        <img src="download.jfif" alt="Logo" style="width:100%; height:100%; object-fit:contain; display:none;" onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';" onerror="this.style.display='none';">
+                        <svg viewBox="0 0 100 125" style="width:100%; height:100%; display:block;" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                                <linearGradient id="sbGold" x1="0%" y1="0%" x2="0%" y2="100%">
+                                    <stop offset="0%" stop-color="#fef08a"/>
+                                    <stop offset="100%" stop-color="#eab308"/>
+                                </linearGradient>
+                            </defs>
+                            <path d="M 12,16 Q 50,4 88,16 Q 84,65 50,112 Q 16,65 12,16 Z" fill="#dc2626" />
+                            <path d="M 16,19 Q 50,8 84,19 Q 80,62 50,106 Q 20,62 16,19 Z" fill="url(#sbGold)" />
+                            <circle cx="50" cy="44" r="16" fill="none" stroke="#0284c7" stroke-width="2.5" />
+                            <circle cx="50" cy="44" r="10" fill="#1e3a8a" />
+                            <circle cx="50" cy="44" r="5" fill="#38bdf8" />
+                            <path d="M 50,18 L 47,38 L 53,38 Z" fill="#0f172a" />
+                            <circle cx="50" cy="18" r="2.5" fill="#0f172a" />
+                            <path d="M 22,64 C 34,57 44,60 50,65 C 56,60 66,57 78,64 Z" fill="#15803d"/>
+                            <path d="M 28,68 Q 50,63 50,73 Q 50,63 72,68 Q 70,79 50,76 Q 30,79 28,68 Z" fill="#ea580c" />
+                            <path d="M 22,86 L 78,86 L 75,93 L 50,94 L 25,93 Z" fill="#fde047" stroke="#b45309" stroke-width="0.8" />
+                            <text x="50" y="90" font-family="Arial, sans-serif" font-size="5" font-weight="900" fill="#78350f" text-anchor="middle">SMKN 1 MARISA</text>
+                        </svg>
+                    </div>
                     <div>
                         <div style="font-weight: 800; font-size: 13px;">SIP-PKL</div>
-                        <div style="font-size: 10px; color: #38bdf8;">SMKN 1 MARISA</div>
+                        <div style="font-size: 10px; color: #38bdf8; font-weight: 700;">SMKN 1 MARISA</div>
+                        <div style="font-size: 7.5px; color: #fde047; font-weight: 800;">SMK PUSAT KEUNGGULAN</div>
                     </div>
                 </div>
 
@@ -859,7 +884,10 @@
             jurnal: [],
             dokumen: [],
             pengaturanGps: {},
-            banner: []
+            banner: [],
+            agendaKunjungan: [],
+            tugas: [],
+            laporanAkhir: []
         };
 
         const initialSeeds = {
@@ -884,14 +912,28 @@
             ],
             absensi: [
                 { nama: "Ahmad Rizky", tanggal: "2026-10-05", jam: "07:48", status: "Hadir (Radius 18m - Valid)" },
-                { nama: "Ahmad Rizky", tanggal: "2026-10-02", jam: "07:55", status: "Hadir (Radius 22m - Valid)" }
+                { nama: "Ahmad Rizky", tanggal: "2026-10-02", jam: "07:55", status: "Hadir (Radius 22m - Valid)" },
+                { nama: "Siti Aminah", tanggal: "2026-10-05", jam: "07:50", status: "Hadir (Radius 20m - Valid)" },
+                { nama: "Fajar Pratama", tanggal: "2026-10-05", jam: "08:05", status: "Terlambat (Radius 15m)" }
             ],
             jurnal: [
                 { id: "j1", siswa: "Ahmad Rizky", tanggal: "2026-10-05", kegiatan: "Instalasi Server Debian & Konfigurasi MikroTik RouterOS di PT Maju Teknologi", kendala: "Konfigurasi port SSH", solusi: "Menyesuaikan port forwarding NAT", status: "Disetujui Industri" }
             ],
+            dokumen: [
+                { id: "d1", judul: "Buku Panduan Pelaksanaan PKL 2026", tipe: "PDF", target: "Semua", url: "#" },
+                { id: "d2", judul: "Format Lembar Penilaian DUDI Berstempel", tipe: "DOCX", target: "Industri & Guru", url: "#" }
+            ],
             banner: [
                 { id: "b1", judul: "Pemberitahuan Monitoring PKL Tahap I", pesan: "Bapak/Ibu Guru Pembimbing menyelesaikan monitoring kunjungan pertama sebelum 20 Oktober 2026.", tipe: "teks", target: ["guru", "admin"] }
-            ]
+            ],
+            agendaKunjungan: [
+                { id: "ak1", guru: "Budi, S.Pd.", industri: "PT Maju Teknologi", tanggal: "2026-10-12", jam: "09:00", agenda: "Monitoring Tahap 1 & Cek Logbook", status: "Terjadwal" },
+                { id: "ak2", guru: "Budi, S.Pd.", industri: "Telkom Cabang Marisa", tanggal: "2026-10-15", jam: "10:30", agenda: "Evaluasi Pelaksanaan PKL", status: "Terjadwal" }
+            ],
+            tugas: [
+                { id: "t1", judul: "Dokumentasi Topologi Jaringan Industri", tenggat: "2026-10-25", instruksi: "Gambarkan topologi fisik dan logis jaringan di DUDI tempat Anda magang.", status: "Belum Mengumpulkan" }
+            ],
+            laporanAkhir: []
         };
 
         // Initialize state cache
@@ -901,7 +943,11 @@
         window.cloudState.penempatan = [...initialSeeds.penempatan];
         window.cloudState.absensi = [...initialSeeds.absensi];
         window.cloudState.jurnal = [...initialSeeds.jurnal];
+        window.cloudState.dokumen = [...initialSeeds.dokumen];
         window.cloudState.banner = [...initialSeeds.banner];
+        window.cloudState.agendaKunjungan = [...initialSeeds.agendaKunjungan];
+        window.cloudState.tugas = [...initialSeeds.tugas];
+        window.cloudState.laporanAkhir = [...initialSeeds.laporanAkhir];
 
         const roleMenus = {
             siswa: [
@@ -1667,376 +1713,599 @@
         function renderMasterGuruTable() {
             let rows = "";
             window.cloudState.guru.forEach((g, idx) => {
-                rows += `<tr><td>${idx+1}</td><td><b>${g.nama}</b></td><td>${g.nip}</td><td>${g.mapel}</td><td>${g.wa}</td></tr>`;
+                rows += `<tr><td>${idx+1}</td><td><b>${g.nama}</b></td><td>${g.nip}</td><td>${g.mapel}</td><td>${g.wa}</td><td><button onclick="window.hapusMasterGuru(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td></tr>`;
             });
 
             return `<div class="card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                <div><h3 style="font-size:14px; font-weight:bold;">👩‍‍🏫 Data Master Guru Pembimbing</h3><p style="font-size:11px; color:var(--text-muted);">Kelola data guru pembimbing PKL SMKN 1 Marisa.</p></div>
-                <button onclick="window.bukaModalUploadExcel('Guru')" class="btn-action btn-emerald">📥 Impor Excel</button>
+                <div><h3 style="font-size:14px; font-weight:bold;">👩‍🏫 Data Master Guru Pembimbing</h3><p style="font-size:11px; color:var(--text-muted);">Kelola data guru pembimbing PKL SMKN 1 Marisa.</p></div>
+                <div style="display:flex; gap:8px;">
+                    <button onclick="window.bukaModalUploadExcel('Guru')" class="btn-action btn-emerald">📥 Impor Excel</button>
+                    <button onclick="window.bukaModalInputGuru()" class="btn-action btn-blue">+ Tambah Manual</button>
+                </div>
             </div>
-            <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Guru</th><th>NIP</th><th>Mata Pelajaran</th><th>No WhatsApp</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+            <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Guru</th><th>NIP</th><th>Mata Pelajaran</th><th>No WhatsApp</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div>`;
         }
+
+        window.bukaModalInputGuru = function() {
+            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;">👩‍🏫 Formulir Tambah Guru Pembimbing</h3>
+                <div class="form-group"><label class="form-label">Nama Lengkap & Gelar:</label><input type="text" id="addGuruNama" class="form-control" placeholder="Contoh: Siti Rahma, M.Pd."></div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div><label class="form-label">NIP Guru:</label><input type="text" id="addGuruNip" class="form-control" placeholder="19850202 201202 2 002"></div>
+                    <div><label class="form-label">Guru Mata Pelajaran:</label><input type="text" id="addGuruMapel" class="form-control" placeholder="Produktif RPL / TKJ"></div>
+                </div>
+                <div class="form-group"><label class="form-label">Nomor WhatsApp Aktif:</label><input type="text" id="addGuruWa" class="form-control" placeholder="0812xxxxxxxx"></div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#475569;">Batal</button>
+                    <button onclick="window.simpanGuruManual()" class="btn-action btn-blue">💾 Simpan Guru</button>
+                </div>`;
+            window.openDynamicModal(modalHtml);
+        };
+
+        window.simpanGuruManual = function() {
+            const nama = document.getElementById("addGuruNama")?.value.trim();
+            const nip = document.getElementById("addGuruNip")?.value.trim();
+            const mapel = document.getElementById("addGuruMapel")?.value.trim();
+            const wa = document.getElementById("addGuruWa")?.value.trim();
+
+            if (!nama || !nip) {
+                window.showModalInfo("Lengkapi Data", "Nama dan NIP guru wajib diisi!");
+                return;
+            }
+
+            const item = { nama, nip, mapel: mapel || "Guru Pembimbing", wa: wa || "0812xxxxxxxx" };
+            window.cloudState.guru.unshift(item);
+            window.syncToGoogleAppsScript("TAMBAH_GURU", item);
+            window.closeDynamicModal();
+            window.showModalInfo("Berhasil Disimpan 💾", `Data guru ${nama} berhasil ditambahkan!`);
+            window.openFeature("master-guru", "Data Master Guru");
+        };
+
+        window.hapusMasterGuru = function(idx) {
+            window.cloudState.guru.splice(idx, 1);
+            window.showModalInfo("Terhapus", "Data guru berhasil dihapus dari sistem.");
+            window.openFeature("master-guru", "Data Master Guru");
+        };
 
         function renderMasterIndustriTable() {
             let rows = "";
             window.cloudState.industri.forEach((d, idx) => {
-                rows += `<tr><td>${idx+1}</td><td><b>${d.nama}</b></td><td>${d.pimpinan}</td><td>${d.wa}</td><td>${d.alamat}</td><td>${d.radius}m</td></tr>`;
+                rows += `<tr><td>${idx+1}</td><td><b>${d.nama}</b></td><td>${d.pimpinan}</td><td>${d.wa}</td><td>${d.alamat}</td><td>${d.radius}m</td><td><button onclick="window.hapusMasterIndustri(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td></tr>`;
             });
 
             return `<div class="card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                 <div><h3 style="font-size:14px; font-weight:bold;">🏭 Data Perusahaan / Industri Mitra (DUDI)</h3><p style="font-size:11px; color:var(--text-muted);">Kelola data mitra kerja sama PKL.</p></div>
-                <button onclick="window.bukaModalUploadExcel('Industri')" class="btn-action btn-emerald">📥 Impor Excel</button>
+                <div style="display:flex; gap:8px;">
+                    <button onclick="window.bukaModalUploadExcel('Industri')" class="btn-action btn-emerald">📥 Impor Excel</button>
+                    <button onclick="window.bukaModalInputIndustri()" class="btn-action btn-blue">+ Tambah Manual</button>
+                </div>
             </div>
-            <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Industri</th><th>Pimpinan</th><th>No WA</th><th>Alamat</th><th>Radius GPS</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+            <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Industri</th><th>Pimpinan</th><th>No WA</th><th>Alamat</th><th>Radius GPS</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div>`;
         }
 
-        function renderPengaturanJamGPS() {
-            let itemsHtml = "";
-            window.cloudState.industri.forEach(ind => {
-                itemsHtml += `<div style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:14px; padding:16px; margin-bottom:14px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                        <div style="font-weight:800; font-size:14px; color:#38bdf8;">🏭 ${ind.nama}</div>
-                        <span class="badge-status badge-blue">Radius: ${ind.radius} Meter</span>
-                    </div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
-                        <div><label class="form-label">Jam Masuk Kerja:</label><input type="time" id="jamMasuk-${ind.id}" class="form-control" value="${ind.masuk || '08:00'}"></div>
-                        <div><label class="form-label">Jam Pulang Kerja:</label><input type="time" id="jamPulang-${ind.id}" class="form-control" value="${ind.pulang || '16:00'}"></div>
-                    </div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
-                        <div><label class="form-label">Latitude Satelit:</label><input type="text" id="lat-${ind.id}" class="form-control" value="${ind.lat || '0.45612'}"></div>
-                        <div><label class="form-label">Longitude Satelit:</label><input type="text" id="lng-${ind.id}" class="form-control" value="${ind.lng || '121.94210'}"></div>
-                    </div>
-                    <button onclick="window.simpanGpsIndustri('${ind.id}')" class="btn-action btn-blue">💾 Simpan Konfigurasi GPS Ini</button>
+        window.bukaModalInputIndustri = function() {
+            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;">🏭 Formulir Tambah Perusahaan / Industri DUDI</h3>
+                <div class="form-group"><label class="form-label">Nama Perusahaan / Industri:</label><input type="text" id="addIndNama" class="form-control" placeholder="Contoh: PT Telkom Marisa"></div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div><label class="form-label">Nama Pimpinan / HRD:</label><input type="text" id="addIndPimpinan" class="form-control" placeholder="Ir. Rahmat Hidayat"></div>
+                    <div><label class="form-label">No WhatsApp DUDI:</label><input type="text" id="addIndWa" class="form-control" placeholder="0811xxxxxxxx"></div>
+                </div>
+                <div class="form-group"><label class="form-label">Alamat Lengkap Perusahaan:</label><input type="text" id="addIndAlamat" class="form-control" placeholder="Jl. Trans Sulawesi KM 10, Marisa"></div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+                    <div><label class="form-label">Toleransi Radius GPS (Meter):</label><input type="number" id="addIndRadius" class="form-control" value="50"></div>
+                    <div><label class="form-label">Latitude Satelit:</label><input type="text" id="addIndLat" class="form-control" value="0.45612"></div>
+                    <div><label class="form-label">Longitude Satelit:</label><input type="text" id="addIndLng" class="form-control" value="121.94210"></div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#475569;">Batal</button>
+                    <button onclick="window.simpanIndustriManual()" class="btn-action btn-blue">💾 Simpan Industri</button>
                 </div>`;
-            });
+            window.openDynamicModal(modalHtml);
+        };
 
-            return `<div class="card">
-                <h3 style="font-size:15px; font-weight:bold; margin-bottom:4px;">📍 Pengaturan Jam Kerja & Radius Geofence GPS</h3>
-                <p style="font-size:11px; color:var(--text-muted); margin-bottom:16px;">Tentukan koordinat satelit resmi setiap industri untuk presensi selfie siswa.</p>
-                ${itemsHtml}
-            </div>`;
-        }
+        window.simpanIndustriManual = function() {
+            const nama = document.getElementById("addIndNama")?.value.trim();
+            const pimpinan = document.getElementById("addIndPimpinan")?.value.trim();
+            const wa = document.getElementById("addIndWa")?.value.trim();
+            const alamat = document.getElementById("addIndAlamat")?.value.trim();
+            const radius = parseInt(document.getElementById("addIndRadius")?.value) || 50;
+            const lat = document.getElementById("addIndLat")?.value.trim() || "0.45612";
+            const lng = document.getElementById("addIndLng")?.value.trim() || "121.94210";
 
-        window.simpanGpsIndustri = function(id) {
-            const ind = window.cloudState.industri.find(x => x.id === id);
-            if (ind) {
-                ind.masuk = document.getElementById(`jamMasuk-${id}`).value;
-                ind.pulang = document.getElementById(`jamPulang-${id}`).value;
-                ind.lat = document.getElementById(`lat-${id}`).value;
-                ind.lng = document.getElementById(`lng-${id}`).value;
+            if (!nama || !pimpinan) {
+                window.showModalInfo("Lengkapi Data", "Nama industri dan pimpinan wajib diisi!");
+                return;
+            }
 
-                window.syncToGoogleAppsScript("UPDATE_GPS_INDUSTRI", ind);
-                window.showModalInfo("Tersimpan 💾", `Pengaturan jam kerja & koordinat untuk ${ind.nama} berhasil diperbarui di cloud!`);
+            const item = { id: "ind" + Date.now(), nama, pimpinan, wa: wa || "0811xxxxxxxx", alamat: alamat || "Marisa, Pohuwato", radius, lat, lng, masuk: "08:00", pulang: "16:00" };
+            window.cloudState.industri.unshift(item);
+            window.syncToGoogleAppsScript("TAMBAH_INDUSTRI", item);
+            window.closeDynamicModal();
+            window.showModalInfo("Berhasil Disimpan 💾", `Data industri ${nama} berhasil disimpan ke sistem!`);
+            window.openFeature("master-industri", "Data Perusahaan / Industri");
+        };
+
+        window.hapusMasterIndustri = function(idx) {
+            window.cloudState.industri.splice(idx, 1);
+            window.showModalInfo("Terhapus", "Data industri berhasil dihapus dari sistem.");
+            window.openFeature("master-industri", "Data Perusahaan / Industri");
+        };
+
+        // ==========================================
+        // FITUR IMPOR EXCEL LENGKAP & TEMPLATE
+        // ==========================================
+        window.currentParsedExcelData = [];
+
+        window.bukaModalUploadExcel = function(kategori) {
+            window.currentParsedExcelData = [];
+
+            let headerHint = "";
+            if (kategori === "Siswa") {
+                headerHint = "Nama Lengkap, Jenis Kelamin (L/P), NISN, Kelas, No WhatsApp, Nama Industri Mitra";
+            } else if (kategori === "Guru") {
+                headerHint = "Nama Lengkap & Gelar, NIP, Mata Pelajaran, No WhatsApp";
+            } else {
+                headerHint = "Nama Industri, Nama Pimpinan/HRD, No WhatsApp, Alamat Industri, Radius GPS (Meter)";
+            }
+
+            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#10b981; margin-bottom:8px;">📥 Impor Data Master ${kategori} via Excel / CSV</h3>
+                <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Dukung format berkas <b>.xlsx, .xls, .csv</b>. Pastikan susunan kolom sesuai panduan.</p>
+                <div style="background:rgba(2, 132, 199, 0.12); border:1px solid #0284c7; padding:10px 12px; border-radius:10px; margin-bottom:14px; font-size:11px;">
+                    <div style="color:#38bdf8; font-weight:700;">Format Kolom yang Dibaca:</div>
+                    <div style="color:var(--text-main); margin-top:2px;">${headerHint}</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                    <button onclick="window.unduhTemplateExcel('${kategori}')" class="btn-action" style="background:#0284c7;">📄 Unduh Format Template ${kategori}</button>
+                    <span style="font-size:11px; color:#94a3b8;">Template siap isi</span>
+                </div>
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label">Pilih Berkas Excel / CSV dari Perangkat:</label>
+                    <input type="file" id="inputBerkasExcel" accept=".xlsx, .xls, .csv" onchange="window.bacaBerkasExcel(event, '${kategori}')" class="form-control">
+                </div>
+                <div id="previewExcelContainer" style="display:none; margin-bottom:14px;">
+                    <div style="font-size:12px; font-weight:700; color:#38bdf8; margin-bottom:6px;" id="previewExcelCount">Pratinjau Data (0 Baris):</div>
+                    <div style="max-height:160px; overflow:auto; border:1px solid var(--border-color); border-radius:10px;" id="previewExcelTableWrap"></div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#475569;">Batal</button>
+                    <button id="btnEksekusiImpor" onclick="window.simpanHasilImporExcel('${kategori}')" class="btn-action btn-emerald" disabled>🚀 Eksekusi & Simpan ke Cloud</button>
+                </div>`;
+
+            window.openDynamicModal(modalHtml);
+        };
+
+        window.unduhTemplateExcel = function(kategori) {
+            let csvContent = "";
+            let filename = `Template_Master_${kategori}_SMKN1Marisa.csv`;
+
+            if (kategori === "Siswa") {
+                csvContent = "Nama Lengkap,Jenis Kelamin,NISN,Kelas,No WhatsApp,Nama Industri Mitra\n" +
+                             "Ahmad Dani,L,0061234501,XI TKJ 1,081234567820,PT Maju Teknologi\n" +
+                             "Nur Fadilah,P,0061234502,XI RPL 1,081234567821,CV Gorontalo Digital\n" +
+                             "Reza Pahlevi,L,0061234503,XI TKJ 2,081234567822,Telkom Cabang Marisa\n";
+            } else if (kategori === "Guru") {
+                csvContent = "Nama Guru,NIP,Mata Pelajaran,No WhatsApp\n" +
+                             "Mansur S.Pd.,19820303 201101 1 003,Produktif Multimedia,081234567830\n" +
+                             "Fauziah M.Kom.,19890404 201502 2 004,Rekayasa Perangkat Lunak,081234567831\n";
+            } else {
+                csvContent = "Nama Industri,Nama Pimpinan,No WhatsApp,Alamat Industri,Radius GPS\n" +
+                             "PLN UP3 Marisa,Ir. Sulaiman Basri,081199887766,Jl. Trans Sulawesi KM 8,60\n" +
+                             "Bank BNI Cabang Marisa,H. Irwan Mantali,081144556677,Jl. Pelabuhan Bumbulan,50\n";
+            }
+
+            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute("download", filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        window.bacaBerkasExcel = function(event, kategori) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            const btn = document.getElementById("btnEksekusiImpor");
+
+            // Jika file bertipe CSV atau SheetJS tersedia
+            if (typeof XLSX !== 'undefined') {
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+                        if (!jsonData || jsonData.length <= 1) {
+                            window.showModalInfo("Berkas Kosong", "Berkas Excel tidak memiliki baris data!");
+                            return;
+                        }
+
+                        window.renderPratinjauExcel(jsonData, kategori);
+                    } catch (err) {
+                        console.error("Gagal membaca xlsx via SheetJS:", err);
+                        // Fallback jika xlsx parsing gagal, coba sebagai teks CSV
+                        window.fallbackParseCSV(file, kategori);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                window.fallbackParseCSV(file, kategori);
             }
         };
 
-        function renderValidasiJurnalList() {
+        window.fallbackParseCSV = function(file, kategori) {
+            const textReader = new FileReader();
+            textReader.onload = function(e) {
+                const lines = e.target.result.split(/\r?\n/).filter(l => l.trim() !== "");
+                const parsed = lines.map(line => line.split(",").map(c => c.trim().replace(/^"|"$/g, '')));
+                window.renderPratinjauExcel(parsed, kategori);
+            };
+            textReader.readAsText(file);
+        };
+
+        window.renderPratinjauExcel = function(rows, kategori) {
+            if (rows.length <= 1) {
+                window.showModalInfo("Data Tidak Ditemukan", "Format berkas tidak valid atau tidak memiliki data.");
+                return;
+            }
+
+            const headers = rows[0];
+            const dataRows = rows.slice(1).filter(r => r.length > 0 && r[0]);
+
+            window.currentParsedExcelData = [];
+
+            let tableHtml = `<table style="width:100%; border-collapse:collapse; font-size:11px;"><thead><tr>`;
+            headers.forEach(h => { tableHtml += `<th style="padding:6px 8px; background:rgba(0,0,0,0.5);">${h}</th>`; });
+            tableHtml += `</tr></thead><tbody>`;
+
+            dataRows.forEach((r, idx) => {
+                tableHtml += `<tr>`;
+                r.forEach(cell => { tableHtml += `<td style="padding:6px 8px;">${cell || '-'}</td>`; });
+                tableHtml += `</tr>`;
+
+                if (kategori === "Siswa") {
+                    window.currentParsedExcelData.push({
+                        nama: r[0] || `Siswa Baru ${idx+1}`,
+                        jk: (r[1] || 'L').toUpperCase().startsWith('P') ? 'P' : 'L',
+                        nisn: r[2] || String(Date.now() + idx).slice(-10),
+                        kelas: r[3] || 'XI PKL',
+                        noWa: r[4] || '0812xxxxxxxx',
+                        industri: r[5] || 'PT Maju Teknologi',
+                        pembimbing: 'Budi, S.Pd.',
+                        hadir: 100
+                    });
+                } else if (kategori === "Guru") {
+                    window.currentParsedExcelData.push({
+                        nama: r[0] || `Guru Baru ${idx+1}`,
+                        nip: r[1] || `198${idx}0101 201001 1 00${idx}`,
+                        mapel: r[2] || 'Produktif',
+                        wa: r[3] || '0812xxxxxxxx'
+                    });
+                } else {
+                    window.currentParsedExcelData.push({
+                        id: "ind_" + Date.now() + "_" + idx,
+                        nama: r[0] || `Mitra Industri ${idx+1}`,
+                        pimpinan: r[1] || 'Pimpinan DUDI',
+                        wa: r[2] || '0811xxxxxxxx',
+                        alamat: r[3] || 'Pohuwato / Marisa',
+                        radius: parseInt(r[4]) || 50,
+                        lat: "0.45612",
+                        lng: "121.94210",
+                        masuk: "08:00",
+                        pulang: "16:00"
+                    });
+                }
+            });
+
+            tableHtml += `</tbody></table>`;
+
+            document.getElementById("previewExcelTableWrap").innerHTML = tableHtml;
+            document.getElementById("previewExcelCount").innerText = `Pratinjau Data Valid: (${window.currentParsedExcelData.length} Baris Siap Diimpor)`;
+            document.getElementById("previewExcelContainer").style.display = "block";
+
+            const btn = document.getElementById("btnEksekusiImpor");
+            btn.disabled = false;
+            btn.innerText = `🚀 Eksekusi Impor ${window.currentParsedExcelData.length} Data ${kategori}`;
+        };
+
+        window.simpanHasilImporExcel = function(kategori) {
+            const list = window.currentParsedExcelData;
+            if (!list || list.length === 0) {
+                window.showModalInfo("Data Kosong", "Belum ada baris data yang siap diimpor!");
+                return;
+            }
+
+            const targetKey = kategori.toLowerCase();
+            window.cloudState[targetKey] = [...list, ...window.cloudState[targetKey]];
+
+            // Sinkronisasi ke GAS Google Sheets
+            window.syncToGoogleAppsScript("impor_masal", { kategori: kategori, items: list });
+
+            window.closeDynamicModal();
+            window.showModalInfo("Impor Berhasil 🎉", `Sebanyak ${list.length} data master ${kategori} berhasil diimpor dan tersimpan di database Cloud!`);
+
+            if (kategori === "Siswa") window.openFeature("master-siswa", "Data Master Siswa");
+            else if (kategori === "Guru") window.openFeature("master-guru", "Data Master Guru");
+            else window.openFeature("master-industri", "Data Perusahaan / Industri");
+        };
+
+        // ==========================================
+        // AGENDA KUNJUNGAN GURU (LENGKAP)
+        // ==========================================
+        function renderAgendaKunjungan() {
             let rows = "";
-            window.cloudState.jurnal.forEach((j, idx) => {
+            (window.cloudState.agendaKunjungan || []).forEach((ak, idx) => {
                 rows += `<tr>
                     <td>${idx+1}</td>
-                    <td>${j.tanggal}</td>
-                    <td><b>${j.siswa}</b></td>
-                    <td>${j.kegiatan}</td>
-                    <td><span class="badge-status ${j.status.includes('Disetujui') ? 'badge-green' : 'badge-amber'}">${j.status}</span></td>
+                    <td><b>${ak.industri}</b></td>
+                    <td>${ak.tanggal} &bull; ${ak.jam} WITA</td>
+                    <td>${ak.agenda}</td>
+                    <td><span class="badge-status badge-green">${ak.status}</span></td>
+                </tr>`;
+            });
+
+            return `<div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <h3 style="font-size:15px; font-weight:bold;">🚗 Agenda Monitoring & Kunjungan Guru</h3>
+                        <p style="font-size:11px; color:var(--text-muted);">Jadwalkan dan catat agenda kunjungan supervisi ke DUDI mitra.</p>
+                    </div>
+                    <button onclick="window.bukaModalJadwalKunjungan()" class="btn-action btn-blue">+ Jadwalkan Kunjungan Baru</button>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr><th>No</th><th>Industri Mitra</th><th>Waktu Kunjungan</th><th>Agenda Supervisi</th><th>Status</th></tr>
+                        </thead>
+                        <tbody>${rows || '<tr><td colspan="5" style="text-align:center;">Belum ada jadwal kunjungan</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        }
+
+        window.bukaModalJadwalKunjungan = function() {
+            let indOpts = "";
+            window.cloudState.industri.forEach(ind => indOpts += `<option value="${ind.nama}">${ind.nama}</option>`);
+
+            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:12px;">🚗 Jadwalkan Kunjungan Supervisi</h3>
+                <div class="form-group"><label class="form-label">Pilih Industri Tujuan:</label><select id="kunjunganInd" class="form-control">${indOpts}</select></div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div><label class="form-label">Tanggal Kunjungan:</label><input type="date" id="kunjunganTgl" class="form-control" value="2026-10-15"></div>
+                    <div><label class="form-label">Jam Kunjungan (WITA):</label><input type="time" id="kunjunganJam" class="form-control" value="09:00"></div>
+                </div>
+                <div class="form-group"><label class="form-label">Tujuan / Agenda Supervisi:</label><input type="text" id="kunjunganAgenda" class="form-control" placeholder="Contoh: Monitoring Tahap I & Evaluasi Logbook"></div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#475569;">Batal</button>
+                    <button onclick="window.simpanJadwalKunjungan()" class="btn-action btn-blue">💾 Simpan Jadwal</button>
+                </div>`;
+            window.openDynamicModal(modalHtml);
+        };
+
+        window.simpanJadwalKunjungan = function() {
+            const ind = document.getElementById("kunjunganInd")?.value;
+            const tgl = document.getElementById("kunjunganTgl")?.value;
+            const jam = document.getElementById("kunjunganJam")?.value;
+            const agenda = document.getElementById("kunjunganAgenda")?.value.trim();
+
+            if (!agenda) {
+                window.showModalInfo("Lengkapi Agenda", "Silakan masukkan tujuan atau agenda kunjungan!");
+                return;
+            }
+
+            const profile = window.cloudState.userProfile || { nama: "Budi, S.Pd." };
+            const item = {
+                id: "ak_" + Date.now(),
+                guru: profile.nama,
+                industri: ind,
+                tanggal: tgl,
+                jam: jam,
+                agenda: agenda,
+                status: "Terjadwal"
+            };
+
+            window.cloudState.agendaKunjungan.unshift(item);
+            window.syncToGoogleAppsScript("jadwal_kunjungan", item);
+            window.closeDynamicModal();
+            window.showModalInfo("Jadwal Tersimpan 🚗", `Kunjungan ke ${ind} pada ${tgl} berhasil dijadwalkan!`);
+            window.openFeature("agenda-kunjungan", "Agenda Kunjungan");
+        };
+
+        // ==========================================
+        // REKAP ABSENSI GLOBAL (ADMIN)
+        // ==========================================
+        function renderRekapAbsensiGlobal() {
+            const list = window.cloudState.absensi || [];
+            let rows = "";
+            let hadirCount = 0;
+            let terlambatCount = 0;
+
+            list.forEach((a, idx) => {
+                const isLate = (a.status || "").toLowerCase().includes("terlambat");
+                if (isLate) terlambatCount++; else hadirCount++;
+                const badge = isLate ? "badge-amber" : "badge-green";
+
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${a.nama}</b></td>
+                    <td>${a.industri || 'PT Maju Teknologi'}</td>
+                    <td>${a.tanggal}</td>
+                    <td>${a.jam} WITA</td>
+                    <td><span class="badge-status ${badge}">${a.status}</span></td>
+                </tr>`;
+            });
+
+            return `<div class="card" style="margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <div>
+                        <h3 style="font-size:15px; font-weight:bold;">📊 Rekapitulasi Presensi Global Seluruh Siswa</h3>
+                        <p style="font-size:11px; color:var(--text-muted);">Data rekap kehadiran GPS & Selfie terkunci secara realtime.</p>
+                    </div>
+                    <button onclick="window.unduhRekapPresensiCSV()" class="btn-action btn-emerald">📥 Ekspor Presensi (CSV)</button>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-top:12px;">
+                    <div style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); padding:10px; border-radius:10px; text-align:center;">
+                        <div style="font-size:11px; color:var(--text-muted);">Total Presensi Masuk</div>
+                        <div style="font-size:18px; font-weight:800; color:#38bdf8;">${list.length}</div>
+                    </div>
+                    <div style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); padding:10px; border-radius:10px; text-align:center;">
+                        <div style="font-size:11px; color:var(--text-muted);">Hadir Tepat Waktu</div>
+                        <div style="font-size:18px; font-weight:800; color:#10b981;">${hadirCount}</div>
+                    </div>
+                    <div style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); padding:10px; border-radius:10px; text-align:center;">
+                        <div style="font-size:11px; color:var(--text-muted);">Terlambat / Izin</div>
+                        <div style="font-size:18px; font-weight:800; color:#f59e0b;">${terlambatCount}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr><th>No</th><th>Nama Siswa</th><th>Industri Mitra</th><th>Tanggal</th><th>Jam Masuk</th><th>Validasi Geofence GPS</th></tr>
+                    </thead>
+                    <tbody>${rows || '<tr><td colspan="6" style="text-align:center;">Belum ada catatan presensi</td></tr>'}</tbody>
+                </table>
+            </div>`;
+        }
+
+        window.unduhRekapPresensiCSV = function() {
+            const list = window.cloudState.absensi || [];
+            let csv = "Nama Siswa,Industri,Tanggal,Jam,Status Kehadiran\n";
+            list.forEach(a => {
+                csv += `"${a.nama}","${a.industri || 'DUDI'}","${a.tanggal}","${a.jam}","${a.status}"\n`;
+            });
+            const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `Rekap_Presensi_PKL_SMKN1Marisa_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+        };
+
+        // ==========================================
+        // MANAJEMEN DOKUMEN (UNGGAH & IZIN AKSES)
+        // ==========================================
+        function renderManajemenDokumen() {
+            let rows = "";
+            (window.cloudState.dokumen || []).forEach((doc, idx) => {
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${doc.judul}</b></td>
+                    <td><span class="badge-status badge-blue">${doc.tipe}</span></td>
+                    <td>${doc.target}</td>
                     <td>
-                        <button onclick="window.setujuiJurnalCloud('${j.id}')" class="btn-action btn-emerald" style="padding:4px 8px;">Setujui</button>
+                        <button onclick="window.showModalInfo('Unduh Berkas', 'Mengunduh berkas: ' + '${doc.judul}')" class="btn-action btn-blue">Download</button>
                     </td>
                 </tr>`;
             });
 
-            return `<div class="card"><h3 style="font-size:15px; font-weight:bold;">📋 Validasi & Verifikasi Jurnal Siswa</h3><p style="font-size:11px; color:var(--text-muted);">Verifikasi harian siswa bimbingan secara realtime.</p></div>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Tanggal</th><th>Siswa</th><th>Aktivitas</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-        }
-
-        window.setujuiJurnalCloud = function(id) {
-            const role = window.cloudState.activeRole;
-            const j = window.cloudState.jurnal.find(x => x.id === id);
-            if (j) {
-                j.status = `Disetujui ${role === 'guru' ? 'Guru Pembimbing' : 'Pembimbing Industri'}`;
-                window.syncToGoogleAppsScript("VALIDASI_JURNAL", j);
-                window.showModalInfo("Disahkan ✅", "Jurnal harian siswa berhasil diverifikasi.");
-                window.openFeature("validasi-jurnal", "Validasi Jurnal");
-            }
-        };
-
-        function renderPenilaianIndustri() {
-            return `<div class="card">
-                <h3 style="font-size:15px; font-weight:bold; margin-bottom:4px;">🏆 Penilaian Evaluasi & Unggah Borang Nilai Fisik</h3>
-                <p style="font-size:11px; color:var(--text-muted); margin-bottom:14px;">Masukkan skor kompetensi peserta magang dan lampirkan dokumen scan nilai bertanda tangan & stempel DUDI.</p>
-                <div class="form-group"><label class="form-label">Pilih Siswa yang Dinilai:</label><select id="nilaiSiswaSelect" class="form-control"><option value="Ahmad Rizky">Ahmad Rizky (XI TKJ 1)</option><option value="Nurul Hasanah">Nurul Hasanah (XI TKJ 1)</option></select></div>
-                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px;">
-                    <div><label class="form-label">Aspek Teknis (0-100):</label><input type="number" id="nilaiTeknis" class="form-control" value="92"></div>
-                    <div><label class="form-label">Kedisiplinan (0-100):</label><input type="number" id="nilaiDisiplin" class="form-control" value="95"></div>
-                    <div><label class="form-label">Inisiatif (0-100):</label><input type="number" id="nilaiInisiatif" class="form-control" value="90"></div>
-                </div>
-                <div class="form-group"><label class="form-label">Unggah Scan Lembar Nilai Resmi Berstempel (PDF/Gambar):</label><input type="file" id="scanNilaiFile" class="form-control"></div>
-                <button onclick="window.simpanPenilaianCloud()" class="btn-action btn-amber" style="padding:10px 16px; font-weight:800;">🏆 Simpan & Kirim Nilai ke Sekolah</button>
-            </div>`;
-        }
-
-        window.simpanPenilaianCloud = function() {
-            const siswa = document.getElementById("nilaiSiswaSelect").value;
-            const tek = document.getElementById("nilaiTeknis").value;
-            const dis = document.getElementById("nilaiDisiplin").value;
-            const ini = document.getElementById("nilaiInisiatif").value;
-            const avg = ((parseFloat(tek) + parseFloat(dis) + parseFloat(ini)) / 3).toFixed(1);
-
-            const payload = { 
-                siswa: siswa, 
-                industri: "PT Maju Teknologi",
-                teknis: tek, 
-                disiplin: dis, 
-                inisiatif: ini, 
-                rataRata: avg, 
-                fileScanUrl: "Dokumen Lembar Nilai Fisik",
-                timestamp: new Date().toISOString() 
-            };
-            window.syncToGoogleAppsScript("simpan_penilaian", payload);
-
-            window.showModalInfo("Nilai Terkirim 🏆", `Nilai untuk ${siswa} dengan skor rata-rata ${avg} berhasil tersimpan di sistem cloud.`);
-        };
-
-        function renderManajemenDokumen() {
             return `<div class="card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                <div><h3 style="font-size:15px; font-weight:bold;">📁 Manajemen Dokumen & Panduan PKL</h3><p style="font-size:11px; color:var(--text-muted);">Pusat unduhan buku panduan, jurnal cetak, dan borang.</p></div>
-                <button onclick="window.showModalInfo('Upload Dokumen', 'Pilih berkas panduan PDF/DOCX untuk dibagikan ke siswa dan guru.')" class="btn-action btn-blue">+ Upload Dokumen Baru</button>
+                <div><h3 style="font-size:15px; font-weight:bold;">📁 Manajemen Dokumen & Panduan PKL</h3><p style="font-size:11px; color:var(--text-muted);">Pusat unduhan buku panduan, jurnal cetak, dan borang berizin akses.</p></div>
+                <button onclick="window.bukaModalUploadDokumen()" class="btn-action btn-blue">+ Upload Dokumen Baru</button>
             </div>
-            <div class="table-wrap"><table><thead><tr><th>No</th><th>Judul Berkas</th><th>Format</th><th>Izin Akses</th><th>Aksi</th></tr></thead><tbody>
-                <tr><td>1</td><td><b>Buku Panduan Pelaksanaan PKL 2026</b></td><td>PDF</td><td>Semua</td><td><button onclick="window.showModalInfo('Unduh', 'Mengunduh Buku Panduan PKL 2026')" class="btn-action btn-blue">Download</button></td></tr>
-                <tr><td>2</td><td><b>Format Lembar Penilaian DUDI Berstempel</b></td><td>DOCX</td><td>Industri & Guru</td><td><button onclick="window.showModalInfo('Unduh', 'Mengunduh Format Lembar Penilaian DUDI')" class="btn-action btn-blue">Download</button></td></tr>
-            </tbody></table></div>`;
+            <div class="table-wrap"><table><thead><tr><th>No</th><th>Judul Berkas</th><th>Format</th><th>Izin Akses</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div>`;
         }
 
-        function renderPengaturanSistem() {
-            return `<div class="card">
-                <h3 style="font-size:15px; font-weight:bold; margin-bottom:4px;">⚙️ Pengaturan Sistem & Integrasi Cloud</h3>
-                <p style="font-size:11px; color:var(--text-muted); margin-bottom:14px;">Konfigurasi Webhook Google Apps Script (GAS) dan Banner Pengumuman.</p>
-                <div style="margin-bottom:16px;">
-                    <label class="form-label">Webhook URL Google Apps Script (GAS):</label>
-                    <input type="text" id="inputGasUrl" class="form-control" value="${window.cloudState.gasWebhookUrl}">
-                    <button onclick="window.simpanGasUrl()" class="btn-action btn-blue">💾 Simpan URL GAS</button>
+        window.bukaModalUploadDokumen = function() {
+            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:12px;">📁 Unggah Dokumen / Panduan Resmi</h3>
+                <div class="form-group"><label class="form-label">Judul Dokumen:</label><input type="text" id="docJudul" class="form-control" placeholder="Contoh: Format Laporan Akhir PKL 2026"></div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div><label class="form-label">Tipe Berkas:</label><select id="docTipe" class="form-control"><option value="PDF">PDF</option><option value="DOCX">DOCX</option><option value="XLSX">XLSX</option></select></div>
+                    <div><label class="form-label">Izin Akses Peran:</label><select id="docTarget" class="form-control"><option value="Semua">Semua Pengguna</option><option value="Siswa & Guru">Siswa & Guru</option><option value="Industri & Guru">Industri & Guru</option></select></div>
                 </div>
-                <div style="border-top:1px solid var(--border-color); padding-top:14px;">
-                    <label class="form-label" style="color:#38bdf8;">Buat Banner Pengumuman Baru:</label>
-                    <input type="text" id="inputBannerJudul" class="form-control" placeholder="Judul Banner...">
-                    <textarea id="inputBannerPesan" class="form-control" placeholder="Pesan pengumuman untuk tampil di dashboard..."></textarea>
-                    <button onclick="window.simpanBannerCloud()" class="btn-action btn-emerald">+ Pasang Banner di Dashboard</button>
-                </div>
-            </div>`;
-        }
-
-        window.simpanGasUrl = function() {
-            const url = document.getElementById("inputGasUrl").value.trim();
-            if (url) {
-                window.cloudState.gasWebhookUrl = url;
-                window.showModalInfo("GAS URL Tersimpan", "Webhook Google Apps Script berhasil diperbarui.");
-            }
-        };
-
-        window.simpanBannerCloud = async function() {
-            const j = document.getElementById("inputBannerJudul").value.trim();
-            const p = document.getElementById("inputBannerPesan").value.trim();
-            if (!j || !p) {
-                window.showModalInfo("Lengkapi Banner", "Silakan isi judul dan pesan pengumuman!");
-                return;
-            }
-
-            const item = { id: Date.now().toString(), judul: j, pesan: p, target: ["siswa", "guru", "industri", "orangtua", "admin"], timestamp: new Date().toISOString() };
-            window.cloudState.banner.unshift(item);
-
-            try {
-                const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'banner');
-                await addDoc(colRef, item);
-            } catch (e) {
-                console.log("Banner saved in memory");
-            }
-
-            window.showModalInfo("Banner Terpasang 📢", "Pengumuman berhasil disebarkan ke dashboard seluruh ekosistem.");
-            window.openFeature("dashboard", "Dashboard Utama");
-        };
-
-        function renderRekapAbsensiGlobal() {
-            return renderPresensiGPS();
-        }
-
-        function renderSiswaBimbinganList() {
-            let rows = "";
-            window.cloudState.siswa.forEach((s, idx) => {
-                rows += `<tr><td>${idx+1}</td><td><b>${s.nama}</b></td><td>${s.kelas}</td><td>${s.industri}</td><td style="color:#10b981; font-weight:bold;">${s.hadir}%</td><td><button onclick="window.showModalInfo('Detail Siswa', 'Profil Siswa: ' + '${s.nama}' + ' &bull; NISN: ' + '${s.nisn}' + ' &bull; WA: ' + '${s.noWa}')" class="btn-action btn-blue" style="padding:4px 8px;">Detail</button></td></tr>`;
-            });
-            return `<div class="card"><h3 style="font-size:15px; font-weight:bold;">👥 Siswa dalam Naungan Bimbingan</h3></div>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Siswa</th><th>Kelas</th><th>Industri</th><th>Kehadiran</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-        }
-
-        function renderTugasKhusus() {
-            return `<div class="card"><h3>📝 Tugas Lapangan PKL</h3><p style="font-size:12px; color:var(--text-muted); margin-top:6px;">Tugas Dokumentasi Topologi Jaringan dan Konfigurasi Gateway Kantor.</p></div>`;
-        }
-
-        function renderLaporanAkhir() {
-            return `<div class="card"><h3>📄 Laporan Akhir PKL</h3><p style="font-size:12px; color:var(--text-muted); margin:6px 0 12px 0;">Unggah dokumen laporan akhir (Format PDF) untuk verifikasi guru penguji.</p><input type="file" class="form-control"><button onclick="window.showModalInfo('Laporan Terkirim', 'Laporan akhir Anda telah masuk ke sistem cloud.')" class="btn-action btn-blue">Kirim Laporan</button></div>`;
-        }
-
-        function renderPengaduanMasalah() {
-            return `<div class="card">
-                <h3>⚠️ Laporan Kendala / Eskalasi Masalah</h3>
-                <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Laporan terkirim langsung ke Panitia dan Guru Pembimbing secara rahasia.</p>
-                <textarea id="aduanIsiPesan" class="form-control" placeholder="Tuliskan kendala di industri..."></textarea>
-                <button onclick="window.kirimAduanCloud()" class="btn-action btn-red">Kirim Aduan</button>
-            </div>`;
-        }
-
-        window.kirimAduanCloud = function() {
-            const pesan = document.getElementById("aduanIsiPesan")?.value.trim();
-            if (!pesan) {
-                window.showModalInfo("Laporan Kosong", "Silakan ketik kendala yang dialami!");
-                return;
-            }
-            const profile = window.cloudState.userProfile || { nama: "Siswa PKL" };
-            const payload = {
-                siswa: profile.nama,
-                industri: "PT Maju Teknologi",
-                kategori: "Kendala Lapangan",
-                urgensi: "Penting",
-                pesan: pesan,
-                timestamp: new Date().toISOString()
-            };
-            window.syncToGoogleAppsScript("kirim_aduan", payload);
-            window.showModalInfo("Laporan Terkirim ⚠️", "Laporan kendala telah diteruskan ke panitia sekolah dan Google Sheets!");
-            document.getElementById("aduanIsiPesan").value = "";
-        };
-
-        window.bukaModalGasSync = function() {
-            const codeSample = "function doPost(e) {\n  var ss = SpreadsheetApp.getActiveSpreadsheet();\n  var body = JSON.parse(e.postData.contents);\n  var sheet = ss.getSheetByName(body.action) || ss.insertSheet(body.action);\n  sheet.appendRow([new Date(), JSON.stringify(body.data)]);\n  return ContentService.createTextOutput('OK');\n}";
-            
-            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#10b981; margin-bottom:10px;">📊 Integrasi Google Apps Script & Google Sheets</h3>
-                <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Salin kode Google Apps Script ke <b>script.google.com</b> yang terhubung ke Google Sheets Anda, lalu Publish sebagai <i>Web App (Access: Anyone)</i>.</p>
-                <textarea class="form-control" style="height:120px; font-family:monospace; font-size:11px;" readonly>${codeSample}</textarea>
-                <div class="form-group">
-                    <label class="form-label">Webhook URL Web App GAS Aktif:</label>
-                    <input type="text" id="modalGasUrlInput" class="form-control" value="${window.cloudState.gasWebhookUrl}">
-                </div>
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#475569;">Tutup</button>
-                    <button onclick="window.simpanGasUrlModal()" class="btn-action btn-blue">💾 Simpan URL GAS</button>
-                </div>`;
-
-            window.openDynamicModal(modalHtml);
-        };
-
-        window.simpanGasUrlModal = function() {
-            const val = document.getElementById("modalGasUrlInput")?.value.trim();
-            if (val) {
-                window.cloudState.gasWebhookUrl = val;
-                window.closeDynamicModal();
-                window.showModalInfo("GAS URL Tersimpan", "Webhook Google Apps Script berhasil diperbarui.");
-            }
-        };
-
-        window.syncToGoogleAppsScript = function(action, payload) {
-            const url = window.cloudState.gasWebhookUrl;
-            if (!url) return;
-
-            try {
-                fetch(url, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: action, data: payload, timestamp: new Date().toISOString() })
-                });
-            } catch (err) {
-                console.log("GAS sync queued", err);
-            }
-        };
-
-        window.switchAuthMode = function(mode) {
-            window.cloudState.authMode = mode;
-            const tabLogin = document.getElementById("tabBtnLogin");
-            const tabReg = document.getElementById("tabBtnRegister");
-            const secLogin = document.getElementById("loginFormSection");
-            const secReg = document.getElementById("registerFormSection");
-            const roleLabel = document.getElementById("roleSectionLabel");
-
-            if (mode === "login") {
-                tabLogin.classList.add("active");
-                tabReg.classList.remove("active");
-                secLogin.style.display = "block";
-                secReg.style.display = "none";
-                roleLabel.innerText = "Pilihan Masuk sebagai:";
-            } else {
-                tabReg.classList.add("active");
-                tabLogin.classList.remove("active");
-                secLogin.style.display = "none";
-                secReg.style.display = "block";
-                roleLabel.innerText = "Daftarkan Akun sebagai:";
-            }
-        };
-
-        window.selectAuthRole = function(role) {
-            window.cloudState.activeRole = role;
-            const roles = ["siswa", "guru", "orangtua", "admin", "industri"];
-            roles.forEach(r => {
-                const btn = document.getElementById(`btnRole-${r}`);
-                if (btn) {
-                    if (r === role) btn.classList.add("active");
-                    else btn.classList.remove("active");
-                }
-            });
-
-            const labels = {
-                siswa: "👨‍🎓 SISWA PKL",
-                guru: "👩‍🏫 GURU PEMBIMBING",
-                orangtua: "👨‍👩‍👧 ORANG TUA / WALI",
-                admin: "👨‍💼 ADMIN / PANITIA PKL",
-                industri: "🏭 MITRA INDUSTRI DUDI"
-            };
-            document.getElementById("labelSelectedRole").innerText = labels[role] || role.toUpperCase();
-        };
-
-        window.togglePasswordEye = function(inputId, iconEl) {
-            const input = document.getElementById(inputId);
-            if (!input) return;
-            if (input.type === "password") {
-                input.type = "text";
-                iconEl.innerText = "🙈";
-            } else {
-                input.type = "password";
-                iconEl.innerText = "👁️";
-            }
-        };
-
-        window.bukaModalLupaPassword = function() {
-            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:12px;">🔑 Reset Kata Sandi Resmi (Firebase)</h3>
-                <p style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">Masukkan email Anda. Firebase akan mengirimkan tautan reset kata sandi ke kotak masuk Anda.</p>
-                <div class="form-group"><label class="form-label">Email Terdaftar:</label><input type="email" id="inputResetEmail" class="form-control" placeholder="nama@email.com"></div>
+                <div class="form-group"><label class="form-label">Pilih Berkas (PDF / Dokumen):</label><input type="file" id="docFile" class="form-control"></div>
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
                     <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#475569;">Batal</button>
-                    <button onclick="window.prosesResetPasswordFirebase()" class="btn-action btn-blue">Kirim Tautan Reset</button>
+                    <button onclick="window.simpanDokumenBaru()" class="btn-action btn-blue">💾 Unggah Dokumen</button>
                 </div>`;
             window.openDynamicModal(modalHtml);
         };
 
-        window.showModalInfo = function(title, desc) {
-            document.getElementById("modalInfoTitle").innerText = title;
-            document.getElementById("modalInfoDesc").innerText = desc;
-            document.getElementById("modalInfo").style.display = "flex";
+        window.simpanDokumenBaru = function() {
+            const judul = document.getElementById("docJudul")?.value.trim();
+            const tipe = document.getElementById("docTipe")?.value;
+            const target = document.getElementById("docTarget")?.value;
+
+            if (!judul) {
+                window.showModalInfo("Lengkapi Judul", "Mohon isi judul dokumen yang diunggah!");
+                return;
+            }
+
+            const item = { id: "d_" + Date.now(), judul, tipe, target, url: "#" };
+            window.cloudState.dokumen.unshift(item);
+            window.closeDynamicModal();
+            window.showModalInfo("Dokumen Terunggah 📁", `Dokumen "${judul}" berhasil diunggah dengan izin akses ${target}.`);
+            window.openFeature("dokumen", "Manajemen Dokumen");
         };
 
-        window.closeModalInfo = function() {
-            document.getElementById("modalInfo").style.display = "none";
+        // ==========================================
+        // TUGAS LAPANGAN & LAPORAN AKHIR (SISWA)
+        // ==========================================
+        function renderTugasKhusus() {
+            let tasksHtml = "";
+            (window.cloudState.tugas || []).forEach(t => {
+                tasksHtml += `<div style="background:rgba(0,0,0,0.25); border:1px solid var(--border-color); border-radius:14px; padding:16px; margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                        <h4 style="font-size:14px; font-weight:800; color:#38bdf8;">📝 ${t.judul}</h4>
+                        <span class="badge-status badge-amber">Tenggat: ${t.tenggat}</span>
+                    </div>
+                    <p style="font-size:12px; color:var(--text-muted); margin:8px 0;">${t.instruksi}</p>
+                    <div style="display:flex; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap;">
+                        <input type="file" id="fileTugas_${t.id}" class="form-control" style="max-width:300px; margin-bottom:0;">
+                        <button onclick="window.kumpulTugasSiswa('${t.id}')" class="btn-action btn-emerald">Kirim Tugas Lapangan</button>
+                    </div>
+                </div>`;
+            });
+
+            return `<div class="card">
+                <h3 style="font-size:15px; font-weight:bold; margin-bottom:4px;">📝 Tugas Lapangan & Kompetensi PKL</h3>
+                <p style="font-size:11px; color:var(--text-muted); margin-bottom:14px;">Kerjakan tugas yang diberikan oleh Guru Pembimbing dan unggah berkas tugas Anda.</p>
+                ${tasksHtml}
+            </div>`;
+        }
+
+        window.kumpulTugasSiswa = function(id) {
+            window.showModalInfo("Tugas Terkumpul 🚀", "Berkas tugas lapangan PKL berhasil dikirimkan ke Guru Pembimbing untuk diperiksa!");
         };
 
-        window.openDynamicModal = function(htmlContent) {
-            document.getElementById("dynamicModalContent").innerHTML = htmlContent;
-            document.getElementById("dynamicModalOverlay").style.display = "flex";
-        };
+        function renderLaporanAkhir() {
+            let reportsHtml = "";
+            (window.cloudState.laporanAkhir || []).forEach(r => {
+                reportsHtml += `<tr><td>${r.tanggal}</td><td><b>${r.judul}</b></td><td>${r.evaluator}</td><td><span class="badge-status badge-green">${r.status}</span></td></tr>`;
+            });
 
-        window.closeDynamicModal = function() {
-            document.getElementById("dynamicModalOverlay").style.display = "none";
-        };
+            return `<div class="card">
+                <h3 style="font-size:15px; font-weight:bold; margin-bottom:4px;">📄 Laporan Akhir PKL</h3>
+                <p style="font-size:11px; color:var(--text-muted); margin-bottom:14px;">Unggah dokumen laporan akhir (Format PDF) untuk verifikasi guru penguji dan panitia.</p>
+                <div class="form-group"><label class="form-label">Judul Laporan PKL:</label><input type="text" id="lapJudul" class="form-control" placeholder="Contoh: Laporan PKL Implementasi MikroTik di PT Maju Teknologi"></div>
+                <div class="form-group"><label class="form-label">Pilih Berkas Laporan (PDF):</label><input type="file" id="lapFile" accept=".pdf" class="form-control"></div>
+                <button onclick="window.simpanLaporanAkhir()" class="btn-action btn-blue" style="padding:10px 16px; font-weight:800;">🚀 Kirim Laporan Akhir ke Sekolah</button>
+            </div>
+            <div class="card">
+                <h4 style="font-size:13px; font-weight:700; margin-bottom:6px;">Riwayat Pengajuan Laporan</h4>
+                <div class="table-wrap"><table><thead><tr><th>Tanggal Kirim</th><th>Judul Laporan</th><th>Penguji / Pembimbing</th><th>Status Laporan</th></tr></thead><tbody>${reportsHtml || '<tr><td colspan="4" style="text-align:center;">Belum ada pengajuan laporan</td></tr>'}</tbody></table></div>
+            </div>`;
+        }
 
-        window.toggleGlobalTheme = function() {
-            document.body.classList.toggle("light-mode");
+        window.simpanLaporanAkhir = function() {
+            const judul = document.getElementById("lapJudul")?.value.trim();
+            if (!judul) {
+                window.showModalInfo("Lengkapi Judul", "Silakan masukkan judul laporan akhir!");
+                return;
+            }
+
+            const item = {
+                id: "lap_" + Date.now(),
+                judul: judul,
+                tanggal: new Date().toISOString().split('T')[0],
+                evaluator: "Budi, S.Pd. & Tim Penguji",
+                status: "Menunggu Pengujian"
+            };
+
+            window.cloudState.laporanAkhir.unshift(item);
+            window.syncToGoogleAppsScript("simpan_laporan_akhir", item);
+            window.showModalInfo("Laporan Terkirim 📄", "Laporan akhir PKL Anda telah diterima di sistem cloud dan siap diuji oleh Tim Pembimbing!");
+            window.openFeature("laporan", "Laporan PKL");
         };
 
         // Listen to Auth State
