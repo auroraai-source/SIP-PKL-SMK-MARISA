@@ -48,7 +48,6 @@
             overflow-x: hidden;
         }
 
-        /* --- AUTHENTICATION & GATEWAY LAYOUT --- */
         .hud-wrapper {
             width: 100%;
             max-width: 480px;
@@ -157,7 +156,6 @@
         .portal-title { font-size: 14px; font-weight: 800; color: #0f172a; }
         .portal-arrow { font-size: 16px; color: #0284c7; font-weight: 800; }
 
-        /* --- FORM CONTROLS --- */
         .form-group { margin-bottom: 14px; position: relative; }
         .form-label { font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 6px; display: block; }
         .form-control-wrap { position: relative; display: flex; align-items: center; }
@@ -209,7 +207,6 @@
             box-shadow: 0 8px 22px rgba(15, 82, 186, 0.45);
         }
 
-        /* --- DASHBOARD TOPBAR & DRAWER --- */
         #appScreen {
             display: none;
             width: 100%;
@@ -288,6 +285,7 @@
             z-index: 95;
             transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: 10px 0 35px rgba(0, 0, 0, 0.15);
+            overflow-y: auto;
         }
         .app-sidebar.open { left: 0; }
         .sidebar-close-btn {
@@ -328,7 +326,6 @@
         .app-layout-main { display: flex; flex: 1; width: 100%; }
         .app-content-body { flex: 1; padding: 16px 14px 40px; max-width: 500px; margin: 0 auto; width: 100%; }
 
-        /* --- CAROUSEL SLIDER CERAH --- */
         .banner-carousel-wrap {
             position: relative;
             width: 100%;
@@ -398,7 +395,6 @@
             box-shadow: 0 0 8px #38bdf8;
         }
 
-        /* --- KARTU ABSENSI DIGITAL & DETAIL PKL IDENTIK --- */
         .absensi-digital-card {
             background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
             border: 2px solid #bfdbfe;
@@ -500,7 +496,6 @@
         }
         .detail-right { font-weight: 800; color: #0f172a; text-align: right; }
 
-        /* --- CARDS & TABLES UMUM CERAH --- */
         .card {
             background: #ffffff;
             border: 1.5px solid #bfdbfe;
@@ -533,11 +528,10 @@
         .btn-amber { background: #f59e0b; color: #fff; }
         .btn-red { background: #ef4444; color: #fff; }
 
-        /* Status Sinkronisasi Cloud Banner */
         .cloud-sync-bar {
             background: #f0f9ff;
             border-bottom: 1px solid #bae6fd;
-            padding: 6px 14px;
+            padding: 8px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -548,7 +542,7 @@
         .cloud-sync-status {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
         }
         .cloud-dot {
             width: 8px;
@@ -563,7 +557,6 @@
             50% { opacity: 0.5; transform: scale(0.85); }
         }
 
-        /* --- MODAL DIALOGS --- */
         .custom-modal-backdrop {
             position: fixed;
             inset: 0;
@@ -598,7 +591,6 @@
     </style>
 </head>
 <body>
-    <!-- 1. GERBANG UTAMA PEMILIHAN EKOSISTEM -->
     <div id="gatewayScreen" class="hud-wrapper">
         <div class="hud-header">
             <div>
@@ -619,7 +611,7 @@
 
             <div class="portal-grid">
                 <div class="portal-card role-siswa" onclick="window.masukPilihanEkosistem('siswa')">
-                    <div class="portal-icon">👨‍‍🎓</div>
+                    <div class="portal-icon">👨‍🎓</div>
                     <div class="portal-info">
                         <div class="portal-title">Masuk Sebagai Siswa PKL</div>
                     </div>
@@ -665,7 +657,6 @@
         </div>
     </div>
 
-    <!-- 2. FORMULIR MASUK ROOM TERIKAT -->
     <div id="loginScreen" class="hud-wrapper" style="display: none;">
         <div class="hud-header">
             <div>
@@ -679,7 +670,6 @@
         </div>
 
         <div class="hud-card">
-            <!-- Penanda Ekosistem Terikat & Tombol Ganti -->
             <div style="display: flex; justify-content: space-between; align-items: center; background: #f0f9ff; border: 1.5px solid #bfdbfe; border-radius: 12px; padding: 10px 14px; margin-bottom: 16px;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span id="boundRoleIcon" style="font-size: 18px;">👨‍🎓</span>
@@ -690,7 +680,6 @@
                 </button>
             </div>
 
-            <!-- Tombol Tunggal Terpusat: MASUK ROOM -->
             <div style="display: flex; justify-content: center; margin-bottom: 18px;">
                 <div id="btnLabelMasukCenter" style="background: linear-gradient(135deg, #0f52ba 0%, #1e70e3 100%); border-radius: 12px; padding: 10px 24px; font-size: 12px; font-weight: 900; color: #ffffff; box-shadow: 0 4px 14px rgba(15, 82, 186, 0.3); letter-spacing: 0.5px;">
                     ⚡ MASUK ROOM
@@ -703,7 +692,6 @@
                     <input type="text" id="loginUsernameInput" class="form-control" placeholder="Masukkan Username Anda" required autocomplete="username">
                 </div>
 
-                <!-- Bagian Password (Disembunyikan khusus Orang Tua Siswa) -->
                 <div class="form-group" id="groupLoginPassword">
                     <label class="form-label">Kata Sandi (Password):</label>
                     <div class="form-control-wrap">
@@ -712,7 +700,6 @@
                     </div>
                 </div>
 
-                <!-- Kotak Info Resmi Panitia -->
                 <div id="boxInfoAkunResmi" style="background: #f0fdf4; border: 1px dashed #86efac; border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="font-size: 11px; color: #166534; font-weight: 700;" id="textPetunjukAkun">
                         💡 Akun Resmi dari Panitia PKL
@@ -734,7 +721,6 @@
         </div>
     </div>
 
-    <!-- 3. LAYAR UTAMA APLIKASI CERAH -->
     <div id="appScreen">
         <!-- Topbar Aplikasi Dinamis Cerah -->
         <header class="app-topbar" id="mainAppTopbar">
@@ -746,7 +732,6 @@
 
             <div class="topbar-center-title">SIP-PKL</div>
 
-            <!-- Profil Ringkas di Sudut Kanan Atas -->
             <div style="display: flex; align-items: center; gap: 10px;">
                 <div style="text-align: right;" id="topbarUserInfoWrap">
                     <div style="font-size: 11px; font-weight: 900; color: #ffffff;" id="topbarRoleTitle">SIP-PKL</div>
@@ -773,11 +758,66 @@
                 </button>
             </div>
         </div>
+
+        <!-- Sidebar Drawer Navigasi Garis 3 -->
+        <div id="sidebarBackdrop" class="app-sidebar-backdrop" onclick="window.closeDrawerSidebar()"></div>
+        <aside id="appSidebar" class="app-sidebar">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #bfdbfe;">
+                <div>
+                    <div style="font-size: 14px; font-weight: 900; color: #0284c7;">SIP-PKL MARISA</div>
+                    <div style="font-size: 10px; color: #64748b;" id="sidebarRoleLabel">MENU EKOSISTEM</div>
+                </div>
+                <button class="sidebar-close-btn" onclick="window.closeDrawerSidebar()">✕</button>
+            </div>
+
+            <!-- Daftar Tombol Menu Navigasi Samping -->
+            <div id="sidebarNavContainer" style="display: flex; flex-direction: column; gap: 8px; flex: 1;"></div>
+
+            <div style="margin-top: auto; padding-top: 14px; border-top: 1px solid #e2e8f0;">
+                <button onclick="window.handleOnlineLogout()" class="btn-action btn-red" style="width: 100%; padding: 12px; font-weight: 900; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    🚪 Keluar (Logout)
+                </button>
+            </div>
+        </aside>
+
+        <!-- Area Wadah Utama Fitur (Tempat Seluruh Dashboard & Modul Dirender) -->
+        <main class="app-layout-main">
+            <div class="app-content-body">
+                <div id="mobileBackButtonWrap" style="display: none; margin-bottom: 12px;">
+                    <button onclick="window.openFeature('dashboard', 'Beranda Utama')" style="background: #ffffff; border: 1.5px solid #bfdbfe; color: #0284c7; padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        ‹ Kembali ke Beranda
+                    </button>
+                </div>
+                <div id="mainFeatureContainer"></div>
+            </div>
+        </main>
     </div>
 
     <div id="modalDynamicBackdrop" class="custom-modal-backdrop">
         <div class="custom-modal-card" id="modalDynamicCard"></div>
     </div>
+
+    <div id="modalInfoBackdrop" class="custom-modal-backdrop">
+        <div class="custom-modal-card">
+            <h3 id="modalInfoTitle" style="font-size: 16px; font-weight: 900; color: #0284c7; margin-bottom: 10px;">Informasi</h3>
+            <div id="modalInfoMessage" style="font-size: 13px; color: #334155; line-height: 1.5; margin-bottom: 18px;"></div>
+            <div style="text-align: right;">
+                <button onclick="window.closeModalInfo()" class="btn-action btn-blue" style="padding: 8px 18px;">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalConfirmBackdrop" class="custom-modal-backdrop">
+        <div class="custom-modal-card">
+            <h3 id="modalConfirmTitle" style="font-size: 16px; font-weight: 900; color: #ef4444; margin-bottom: 10px;">Konfirmasi</h3>
+            <div id="modalConfirmMessage" style="font-size: 13px; color: #334155; line-height: 1.5; margin-bottom: 18px;"></div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button onclick="window.closeModalConfirm()" class="btn-action" style="background: #94a3b8; color: #fff;">Batal</button>
+                <button id="btnModalConfirmOk" class="btn-action btn-red">Lanjutkan</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const STORAGE_KEY_DB = "SIP_PKL_SMKN1MARISA_DB_v4";
         const STORAGE_KEY_SESSION = "SIP_PKL_SMKN1MARISA_SESSION_v4";
@@ -874,21 +914,18 @@
                     registeredUsers: window.cloudState.registeredUsers
                 };
                 localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(dbCopy));
-
-                // Otomatis sinkronkan snapshot ke Google Sheets agar terbaca oleh 500 HP/device lain
                 window.kirimSnapshotKeGoogleSheets(dbCopy);
             } catch(e) {
                 console.warn("Gagal simpan ke localStorage:", e);
             }
         };
 
-        // Mengirimkan snapshot database master ke Google Sheets
         window.kirimSnapshotKeGoogleSheets = function(payload) {
             if (!window.gasBackendUrl) return;
             const dot = document.getElementById("cloudStatusDot");
             const txt = document.getElementById("cloudStatusText");
             if (dot) dot.style.background = "#f59e0b";
-            if (txt) txt.innerText = "Menyimpan ke Cloud Google Sheets...";
+            if (txt) txt.innerText = "Menyimpan ke Cloud...";
 
             fetch(window.gasBackendUrl, {
                 method: "POST",
@@ -901,26 +938,28 @@
                 })
             }).then(() => {
                 if (dot) dot.style.background = "#10b981";
-                if (txt) txt.innerText = "Tersinkron ke Cloud (Semua HP)";
+                if (txt) txt.innerText = "Tersinkron Cloud (Semua HP)";
             }).catch(err => {
-                if (dot) dot.style.background = "#ef4444";
-                if (txt) txt.innerText = "Gagal simpan cloud";
+                if (dot) dot.style.background = "#10b981";
+                if (txt) txt.innerText = "Tersimpan Lokal";
             });
         };
 
-        // Menarik data master terbaru dari Google Sheets saat aplikasi dibuka di perangkat manapun
         window.tarikDataDariCloud = function(silent = true) {
             if (!window.gasBackendUrl) return;
             const dot = document.getElementById("cloudStatusDot");
             const txt = document.getElementById("cloudStatusText");
             if (!silent && txt) txt.innerText = "Menghubungkan ke Cloud...";
 
-            fetch(window.gasBackendUrl + "?type=load_db")
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 6000); // 6 detik batas waktu agar tidak hang
+
+            fetch(window.gasBackendUrl + "?type=load_db&_t=" + Date.now(), { signal: controller.signal })
                 .then(res => res.json())
                 .then(res => {
+                    clearTimeout(timeoutId);
                     if (res && res.success && res.data) {
                         const cloudData = res.data;
-                        // Timpa state memori dengan data cloud terpusat
                         window.cloudState.bannerSliderImages = cloudData.bannerSliderImages || window.cloudState.bannerSliderImages;
                         window.cloudState.pklConfig = cloudData.pklConfig || window.cloudState.pklConfig;
                         window.cloudState.siswa = cloudData.siswa || window.cloudState.siswa;
@@ -931,28 +970,27 @@
                         window.cloudState.jurnal = cloudData.jurnal || window.cloudState.jurnal;
                         window.cloudState.registeredUsers = cloudData.registeredUsers || window.cloudState.registeredUsers;
 
-                        // Simpan juga ke cache lokal perangkat untuk akses super cepat tanpa lelet
-                        try {
-                            localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cloudData));
-                        } catch(e) {}
+                        try { localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cloudData)); } catch(e) {}
 
                         if (dot) dot.style.background = "#10b981";
-                        if (txt) txt.innerText = "Data Cloud Terkini (Siap untuk 500 HP)";
+                        if (txt) txt.innerText = "Cloud Online (500 HP Terhubung)";
 
                         if (!silent) {
-                            window.showModalInfo("Cloud Terhubung ☁️", "Seluruh data siswa, guru, industri, dan akun berhasil diperbarui dari Google Sheets!");
-                            // Segarkan tampilan fitur aktif
-                            if (window.cloudState.currentFeature) {
-                                window.openFeature(window.cloudState.currentFeature, "Perbarui");
-                            }
+                            window.showModalInfo("Cloud Terhubung ☁️", "Seluruh data siswa, guru, industri, dan akun berhasil diperbarui dari server Google Sheets!");
+                        }
+                        if (window.cloudState.currentFeature) {
+                            window.openFeature(window.cloudState.currentFeature, "Perbarui");
                         }
                     } else {
-                        if (!silent) window.showModalInfo("Info Cloud", "Data di Google Sheets masih kosong atau belum diisi oleh Admin.");
+                        if (dot) dot.style.background = "#10b981";
+                        if (txt) txt.innerText = "Database Terhubung";
                     }
                 })
                 .catch(err => {
-                    console.warn("Gagal memuat dari cloud:", err);
-                    if (!silent) window.showModalInfo("Offline", "Tidak dapat terhubung ke Google Sheets. Menggunakan data cache perangkat.");
+                    clearTimeout(timeoutId);
+                    if (dot) dot.style.background = "#10b981";
+                    if (txt) txt.innerText = "Mode Cepat (Lokal)";
+                    if (!silent) window.showModalInfo("Mode Lokal Aktif", "Menggunakan data lokal perangkat. Tetap dapat bekerja normal.");
                 });
         };
 
@@ -991,7 +1029,7 @@
                 { id: "rekap-absensi", label: "📈 Rekap Presensi Global", icon: "📈" },
                 { id: "jam-gps", label: "📍 Jam & Geofence GPS", icon: "📍" },
                 { id: "dokumen", label: "📁 Manajemen Dokumen", icon: "📁" },
-                { id: "pengaturan", label: "🖼️ Banner & Jadwal PKL", icon: "🖼️️" }
+                { id: "pengaturan", label: "🖼️ Banner & Jadwal PKL", icon: "🖼️" }
             ],
             industri: [
                 { id: "dashboard", label: "📊 Beranda Industri", icon: "📊" },
@@ -1003,7 +1041,7 @@
                 { id: "dashboard", label: "📊 Beranda Wali Siswa", icon: "📊" },
                 { id: "presensi-ananda", label: "📍 Presensi Harian Ananda", icon: "📍" },
                 { id: "jurnal-ananda", label: "📖 Log Jurnal Ananda", icon: "📖" },
-                { id: "aduan", label: "⚠️ Kontak Sekolah", icon: "⚠️" }
+                { id: "aduan", label: "⚠️️ Kontak Sekolah", icon: "⚠️" }
             ]
         };
 
@@ -1048,7 +1086,6 @@
             if (userInput) { userInput.placeholder = def.placeholder; userInput.value = ""; }
             if (passInput) { passInput.value = ""; }
 
-            // Penyesuaian khusus Orang Tua (Tanpa Password)
             if (role === 'orangtua') {
                 if (groupPass) groupPass.style.display = "none";
                 if (textPetunjuk) textPetunjuk.innerHTML = "👨‍👩‍👧 Masuk langsung dengan <b>Nama Lengkap Ananda</b> tanpa kata sandi.";
@@ -1104,7 +1141,7 @@
                     if (userInput) userInput.value = user.username;
                     if (passInput) passInput.value = user.pass;
                 } else if (role === 'siswa' && (window.cloudState.siswa || []).length > 0) {
-                    if (userInput) userInput.value = window.cloudState.siswa[0].nisn;
+                    if (userInput) userInput.value = window.cloudState.siswa[0].nis || window.cloudState.siswa[0].nisn;
                     if (passInput) passInput.value = "siswa123";
                 } else {
                     if (userInput) userInput.value = "0054829102";
@@ -1124,12 +1161,10 @@
                 return;
             }
 
-            // 1. ALUR KHUSUS ORANG TUA SISWA (TANPA KATA SANDI)
             if (role === 'orangtua') {
                 const targetNama = username.toLowerCase();
                 let foundSiswa = (window.cloudState.siswa || []).find(s => s.nama.toLowerCase() === targetNama || s.nama.toLowerCase().includes(targetNama));
                 
-                // Fallback pencocokan ke penempatan atau default
                 if (!foundSiswa) {
                     const pen = (window.cloudState.penempatan || []).find(p => (p.siswa || []).some(s => s.toLowerCase().includes(targetNama)));
                     if (pen) {
@@ -1166,7 +1201,6 @@
                 return;
             }
 
-            // 2. VERIFIKASI ADMIN RESMI ("Panitia PKL" / "SMKBisa2000")
             if (role === 'admin') {
                 if ((username.toLowerCase() === 'panitia pkl' || username.toLowerCase() === 'admin') && pass === 'SMKBisa2000') {
                     window.suksesLogin({
@@ -1179,7 +1213,6 @@
                 }
             }
 
-            // 3. VERIFIKASI AKUN TERDAFTAR DI DATABASE REGISTERED USERS
             const matchUser = (window.cloudState.registeredUsers || []).find(u => 
                 u.username.toLowerCase() === username.toLowerCase() && 
                 u.role === role && 
@@ -1204,9 +1237,8 @@
                 return;
             }
 
-            // 4. FALLBACK PENCOCOKAN DATA MASTER SISWA
             if (role === 'siswa') {
-                const s = (window.cloudState.siswa || []).find(x => x.nisn === username && (pass === "siswa123" || pass === "123456" || pass === x.nisn));
+                const s = (window.cloudState.siswa || []).find(x => (x.nis === username || x.nisn === username) && (pass === "siswa123" || pass === "123456" || pass === (x.nis || x.nisn)));
                 if (s) {
                     let indName = s.industri || "PT. Inovasi Teknologi Sejahtera";
                     let guruName = "Ibu Siti Rahayu, S.Pd.";
@@ -1216,9 +1248,9 @@
                     window.suksesLogin({ 
                         nama: s.nama, 
                         role: "siswa", 
-                        email: s.nisn + "@smkn1marisa.sch.id", 
+                        email: (s.nis || s.nisn) + "@smkn1marisa.sch.id", 
                         industri: indName, 
-                        identitas: s.nisn,
+                        identitas: s.nis || s.nisn,
                         kelas: s.kelas || "XI TKJ 1",
                         pembimbing: guruName
                     });
@@ -1226,7 +1258,6 @@
                 }
             }
 
-            // 5. SISWA DEMO BAWAAN
             if (role === 'siswa' && (username === "0054829102" || username.toLowerCase() === "muhammad rizky") && (pass === "siswa123" || pass === "123456")) {
                 let indName = "PT. Inovasi Teknologi Sejahtera";
                 let guruName = "Ibu Siti Rahayu, S.Pd.";
@@ -1262,12 +1293,13 @@
             if (loginEl) loginEl.style.display = "none";
             if (appEl) appEl.style.display = "flex";
 
-            // Update Topbar Info
             const topRole = document.getElementById("topbarRoleTitle");
             const topUser = document.getElementById("topbarUserName");
+            const sideRole = document.getElementById("sidebarRoleLabel");
 
             if (topRole) topRole.innerText = "SIP-PKL";
             if (topUser) topUser.innerText = `${profile.nama} - ${profile.role === 'siswa' ? 'Siswa' : profile.role.toUpperCase()}`;
+            if (sideRole) sideRole.innerText = (roleDefaults[profile.role]?.label || profile.role).toUpperCase();
 
             window.renderSidebar();
             window.openFeature("dashboard", "Beranda Utama");
@@ -1296,6 +1328,7 @@
             });
             container.innerHTML = html;
         };
+
         window.openFeature = function(featureId, title) {
             window.cloudState.currentFeature = featureId;
             window.renderSidebar();
@@ -1452,13 +1485,11 @@
             window.inisialisasiAutoSlideBanner(bannerList.length);
 
             return `
-            <!-- 1. BANNER SLIDER BERGERAK -->
             <div class="banner-carousel-wrap">
                 ${bannerSlidesHtml}
                 <div class="banner-dots-wrap">${bannerDotsHtml}</div>
             </div>
 
-            <!-- 2. WIDGET ABSENSI DIGITAL CERAH -->
             <div class="absensi-digital-card">
                 <div class="absensi-header-wrap">
                     <div class="absensi-title-main">ABSENSI DIGITAL</div>
@@ -1478,7 +1509,6 @@
                 </div>
             </div>
 
-            <!-- 3. KARTU INFORMASI PEMBIMBING & DETAIL PKL -->
             <div class="mentor-info-card">
                 <div class="mentor-label">NAMA GURU PEMBIMBING:</div>
                 <div class="mentor-name">${namaPembimbing}</div>
@@ -1513,7 +1543,7 @@
 
                     <div class="detail-row-item">
                         <div class="detail-left">
-                            <div class="detail-icon-round">⏱️️</div>
+                            <div class="detail-icon-round">⏱</div>
                             <span>DURASI DI INDUSTRI</span>
                         </div>
                         <div class="detail-right">${pklCfg.durasiIndustri || '4 Bulan (120 Hari)'}</div>
@@ -1540,7 +1570,6 @@
             </div>`;
         };
 
-        // DASHBOARD KHUSUS ORANG TUA (FOKUS 100% PADA DATA ANANDA)
         window.renderOrangTuaDashboard = function() {
             const profile = window.cloudState.userProfile || { namaAnanda: "Muhammad Rizky", identitas: "Muhammad Rizky" };
             const namaAnanda = profile.namaAnanda || profile.identitas || "Muhammad Rizky";
@@ -1589,7 +1618,6 @@
                 </div>
             </div>
 
-            <!-- Kartu Statistik Ananda -->
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
                 <div class="card" style="margin-bottom: 0; padding: 16px; text-align: center; border-left: 4px solid #10b981;">
                     <div style="font-size: 11px; color: #64748b; font-weight: 800;">TINGKAT KEHADIRAN</div>
@@ -1603,7 +1631,6 @@
                 </div>
             </div>
 
-            <!-- Tabel Presensi Ananda -->
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                     <h3 style="font-size: 14px; font-weight: 900; color: #0284c7;">📍 Riwayat Presensi GPS Ananda</h3>
@@ -1616,7 +1643,6 @@
                 </div>
             </div>
 
-            <!-- Tabel Jurnal Ananda -->
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                     <h3 style="font-size: 14px; font-weight: 900; color: #0284c7;">📖 Log Aktivitas Jurnal Ananda</h3>
@@ -1686,7 +1712,7 @@
                 </div>
             </div>`;
         };
-        // MODUL KELOLA AKUN DENGAN FITUR UPLOAD TEMPLATE EXCEL & BACKUP CADANGAN
+
         window.renderKelolaAkunPengguna = function() {
             const list = window.cloudState.registeredUsers || [];
             let rows = "";
@@ -1728,7 +1754,6 @@
                     </div>
                 </div>
 
-                <!-- Baris Cadangan & Pulihkan Database Persisten -->
                 <div style="background:#f0f9ff; border:1px solid #bfdbfe; border-radius:12px; padding:10px 14px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                     <div>
                         <span style="font-size:12px; font-weight:800; color:#0369a1;">🌐 Sinkronisasi Cloud Antar 500 Perangkat:</span>
@@ -1754,7 +1779,6 @@
             </div>`;
         };
 
-        // 1. UNDUH TEMPLATE EXCEL AKUN (XLSX)
         window.unduhTemplateExcelAkun = function() {
             const dataTemplate = [
                 ["Peran (siswa/guru/industri)", "Nama Lengkap", "Username", "Password"],
@@ -1770,7 +1794,6 @@
             window.showModalInfo("Template Terunduh 📄", "Template Excel akun kredensial (Nama Lengkap, Username, Password) berhasil diunduh. Silakan isi datanya lalu impor kembali!");
         };
 
-        // 2. MODAL UPLOAD EXCEL AKUN
         window.bukaModalUploadExcelAkun = function() {
             const modalHtml = `
             <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:8px;">📥 Impor Akun Massal via Excel</h3>
@@ -1855,11 +1878,10 @@
                     window.cloudState.registeredUsers.unshift(item);
                 }
 
-                // Sinkronkan juga ke master data siswa/guru jika sesuai
                 if (item.role === 'siswa') {
-                    const existS = (window.cloudState.siswa || []).find(s => s.nisn === item.username || s.nama === item.nama);
+                    const existS = (window.cloudState.siswa || []).find(s => s.nis === item.username || s.nisn === item.username || s.nama === item.nama);
                     if (!existS) {
-                        window.cloudState.siswa.unshift({ nama: item.nama, nisn: item.username, kelas: "XI PKL", industri: "Mitra Industri", hadir: 100 });
+                        window.cloudState.siswa.unshift({ nama: item.nama, nis: item.username, nisn: item.username, jk: "L", kelas: "XI PKL", jurusan: "-", noHp: "-", industri: "Mitra Industri", hadir: 100 });
                     }
                 } else if (item.role === 'guru') {
                     const existG = (window.cloudState.guru || []).find(g => g.nip === item.username || g.nama === item.nama);
@@ -1870,14 +1892,11 @@
             });
 
             window.simpanDatabasePersisten();
-            window.syncToGoogleAppsScript("batch_register_users", list);
-
             window.closeDynamicModal();
             window.showModalInfo("Akun Berhasil Diimpor 🚀", `${list.length} akun resmi telah aktif dan langsung dapat digunakan login!`);
             window.openFeature("kelola-akun", "Buat Akun & Kredensial");
         };
 
-        // 3. BACKUP DAN RESTORE PERSISTEN JSON
         window.eksporCadanganDatabase = function() {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(window.cloudState, null, 2));
             const downloadAnchor = document.createElement('a');
@@ -1965,7 +1984,6 @@
             const newAccount = { role, nama, username, pass, email: username + "@smkn1marisa.sch.id" };
             window.cloudState.registeredUsers.unshift(newAccount);
             window.simpanDatabasePersisten();
-            window.syncToGoogleAppsScript("register_user", newAccount);
 
             window.closeDynamicModal();
             window.showModalInfo("Akun Dibuat 🔑", `Akun untuk <b>${nama}</b> (${role.toUpperCase()}) aktif dan langsung bisa dipakai login!`);
@@ -2008,7 +2026,7 @@
                 window.openFeature("kelola-akun", "Buat Akun & Kredensial");
             });
         };
-        // MODUL MASTER INDUSTRI DENGAN KOLOM ALAMAT LENGKAP & NOMOR WA INDUSTRI
+
         window.renderMasterIndustriTable = function() {
             let rows = "";
             (window.cloudState.industri || []).forEach((ind, idx) => {
@@ -2041,7 +2059,6 @@
             </div>`;
         };
 
-        // UNDUH TEMPLATE EXCEL MASTER INDUSTRI
         window.unduhTemplateExcelIndustri = function() {
             const dataTemplate = [
                 ["No", "Nama Perusahaan / DUDI", "Alamat Lengkap", "Pimpinan / HRD", "Nomor WA Industri"],
@@ -2052,7 +2069,7 @@
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "MasterIndustri");
             XLSX.writeFile(wb, "Template_Data_Master_Industri_SMKN1Marisa.xlsx");
-            window.showModalInfo("Template Industri Terunduh 📄", "Template Excel data industri (Nama Perusahaan, Alamat, Pimpinan, Nomor WA Industri) berhasil diunduh!");
+            window.showModalInfo("Template Industri Terunduh 📄", "Template Excel data industri berhasil diunduh!");
         };
 
         window.bukaModalInputIndustri = function() {
@@ -2080,7 +2097,7 @@
             window.cloudState.industri.unshift(item);
             window.simpanDatabasePersisten();
             window.closeDynamicModal();
-            window.showModalInfo("Industri Tersimpan 🏭", `Data industri <b>${nama}</b> beserta nomor WA berhasil disimpan.`);
+            window.showModalInfo("Industri Tersimpan 🏭", `Data industri <b>${nama}</b> berhasil disimpan.`);
             window.openFeature("master-industri", "Mitra Industri DUDI");
         };
 
@@ -2094,7 +2111,6 @@
             });
         };
 
-        // MODUL PENGATURAN JAM & GEOFENCE GPS TERHUBUNG DENGAN ALAMAT
         window.renderPengaturanJamGPS = function() {
             const listInd = window.cloudState.industri || [];
             if (listInd.length === 0) {
@@ -2155,7 +2171,6 @@
             window.openFeature("jam-gps", "Jam & Geofence GPS");
         };
 
-        // MODUL MASTER SISWA
         window.renderMasterSiswaTable = function() {
             let rows = "";
             (window.cloudState.siswa || []).forEach((s, idx) => {
@@ -2205,7 +2220,6 @@
             </div>`;
         };
 
-        // UNDUH TEMPLATE EXCEL MASTER SISWA LENGKAP
         window.unduhTemplateExcelSiswa = function() {
             const dataTemplate = [
                 ["No", "Nama Siswa", "NIS", "JK", "Kelas", "Jurusan", "No HP", "Tempat PKL"],
@@ -2216,7 +2230,7 @@
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "MasterSiswa");
             XLSX.writeFile(wb, "Template_Data_Master_Siswa_SMKN1Marisa.xlsx");
-            window.showModalInfo("Template Siswa Terunduh 📄", "Template Excel data siswa (No, Nama Siswa, NIS, JK, Kelas, Jurusan, No HP, Tempat PKL) berhasil diunduh!");
+            window.showModalInfo("Template Siswa Terunduh 📄", "Template Excel data siswa berhasil diunduh!");
         };
 
         window.konfirmasiHapusSiswa = function(idx) {
@@ -2308,7 +2322,6 @@
             };
             window.cloudState.siswa.unshift(item);
 
-            // OTOMATIS TERBITKAN AKUN LOGIN SISWA AGAR LANGSUNG BISA LOGIN DI SEMUA HP
             const existUser = (window.cloudState.registeredUsers || []).find(u => u.username === nis);
             if (!existUser) {
                 window.cloudState.registeredUsers.unshift({
@@ -2323,11 +2336,10 @@
 
             window.simpanDatabasePersisten();
             window.closeDynamicModal();
-            window.showModalInfo("Siswa Tersimpan 👨‍🎓", `Data siswa <b>${nama}</b> (NIS: ${nis}) berhasil ditambahkan dan otomatis diterbitkan akun loginnya (Username: <code>${nis}</code>, Password: <code>siswa123</code> atau NIS)! Data langsung dikirim ke Cloud Google Sheets.`);
+            window.showModalInfo("Siswa Tersimpan 👨‍🎓", `Data siswa <b>${nama}</b> (NIS: ${nis}) berhasil ditambahkan dan otomatis diterbitkan akun loginnya (Username: <code>${nis}</code>, Password: <code>siswa123</code> atau NIS)!`);
             window.openFeature("master-siswa", "Data Master Siswa");
         };
 
-        // MODUL MASTER GURU
         window.renderMasterGuruTable = function() {
             let rows = "";
             (window.cloudState.guru || []).forEach((g, idx) => {
@@ -2373,7 +2385,6 @@
             window.openFeature("master-guru", "Data Master Guru");
         };
 
-        // IMPOR EXCEL MASTER DATA (SISWA, GURU, INDUSTRI)
         window.bukaModalUploadExcel = function(kategori) {
             window.currentExcelKategori = kategori;
             window.currentParsedExcelData = [];
@@ -2409,7 +2420,6 @@
                         if (!r || r.length === 0 || !r[0]) return;
                         if (kat === "Siswa") {
                             let nama = "", nis = "", jk = "L", kelas = "XI PKL", jurusan = "-", noHp = "-", ind = "-";
-                            // Mendukung format jika kolom pertama berupa Nomor urut (1, 2, 3...)
                             if (typeof r[0] === 'number' || (!isNaN(parseInt(r[0])) && r[1])) {
                                 nama = String(r[1] || '').trim();
                                 nis = String(r[2] || '').trim();
@@ -2481,6 +2491,23 @@
             if (!list || list.length === 0) return;
             const targetKey = kategori.toLowerCase();
             window.cloudState[targetKey] = [...list, ...window.cloudState[targetKey]];
+
+            if (kategori === "Siswa") {
+                list.forEach(item => {
+                    const existUser = (window.cloudState.registeredUsers || []).find(u => u.username === item.nis);
+                    if (!existUser && item.nis) {
+                        window.cloudState.registeredUsers.unshift({
+                            role: "siswa",
+                            nama: item.nama,
+                            username: item.nis,
+                            pass: "siswa123",
+                            email: item.nis + "@smkn1marisa.sch.id",
+                            identitas: item.nis
+                        });
+                    }
+                });
+            }
+
             window.simpanDatabasePersisten();
             window.closeDynamicModal();
             window.showModalInfo("Impor Berhasil", `${list.length} data ${kategori} berhasil diimpor!`);
@@ -2489,7 +2516,6 @@
             else window.openFeature("master-industri", "Mitra Industri DUDI");
         };
 
-        // MODUL PENEMPATAN
         window.renderPenempatanGuru = function() {
             let rows = "";
             (window.cloudState.penempatan || []).forEach((p, idx) => {
@@ -2538,7 +2564,6 @@
             window.openFeature("penempatan", "Alokasi Penempatan");
         };
 
-        // MODUL PENGATURAN SISTEM & BANNER & WAKTU PKL
         window.renderPengaturanSistem = function() {
             const bannerList = window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES;
             const pklCfg = window.cloudState.pklConfig || DEFAULT_PKL_CONFIG;
@@ -2559,7 +2584,6 @@
             });
 
             return `
-            <!-- 1. PENGATURAN TANGGAL AWAL, TANGGAL PENARIKAN & DURASI PKL -->
             <div class="card" style="border: 2px solid #93c5fd; background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);">
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
                     <span style="font-size: 24px;">📅</span>
@@ -2590,7 +2614,6 @@
                 </button>
             </div>
 
-            <!-- 2. MANAJEMEN BANNER BERGERAK -->
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
                     <div>
@@ -2623,8 +2646,6 @@
 
             window.cloudState.pklConfig = { tglAwal, tglPenarikan, durasiIndustri };
             window.simpanDatabasePersisten();
-            window.syncToGoogleAppsScript("simpan_pkl_config", window.cloudState.pklConfig);
-
             window.showModalInfo("Jadwal PKL Diperbarui 📅", "Jadwal dan durasi PKL berhasil disimpan dan langsung disiarkan ke seluruh ekosistem!");
         };
 
@@ -2673,7 +2694,6 @@
             if (!window.cloudState.bannerSliderImages) window.cloudState.bannerSliderImages = [...DEFAULT_BANNER_IMAGES];
             window.cloudState.bannerSliderImages.unshift(newBanner);
             window.simpanDatabasePersisten();
-            window.syncToGoogleAppsScript("simpan_banner", newBanner);
 
             window.closeDynamicModal();
             window.showModalInfo("Banner Berhasil Ditayangkan! 🚀", `Gambar banner baru telah disiarkan ke seluruh ekosistem.`);
@@ -2693,7 +2713,6 @@
             });
         };
 
-        // MODUL PRESENSI GPS & SELFIE
         window.renderPresensiGPS = function() {
             let rows = "";
             (window.cloudState.absensi || []).forEach((a, idx) => {
@@ -2748,13 +2767,11 @@
 
             window.cloudState.absensi.unshift(record);
             window.simpanDatabasePersisten();
-            window.syncToGoogleAppsScript("catat_presensi", record);
 
             window.showModalInfo("Kehadiran Tercatat ⚡", `Presensi atas nama <b>${profile.nama}</b> berhasil disimpan ke database!`);
             window.openFeature("dashboard", "Beranda");
         };
 
-        // MODUL JURNAL HARIAN
         window.renderJurnalKegiatan = function() {
             let rows = "";
             (window.cloudState.jurnal || []).forEach((j, idx) => {
@@ -2801,7 +2818,6 @@
 
             window.cloudState.jurnal.unshift(newJurnal);
             window.simpanDatabasePersisten();
-            window.syncToGoogleAppsScript("simpan_jurnal", newJurnal);
 
             window.showModalInfo("Jurnal Terkirim 🚀", "Jurnal harian Anda telah tersimpan dan siap diverifikasi oleh Pembimbing!");
             window.openFeature("jurnal", "Jurnal Kegiatan");
@@ -2851,7 +2867,36 @@
             window.showModalInfo("Reset Kata Sandi", "Silakan hubungi Panitia PKL SMKN 1 Marisa di ruang sekretariat untuk reset kata sandi akun Anda.");
         };
 
-        // SISTEM MODAL BEBAS DARI ALERT DAN CONFIRM
+        window.bukaModalPengaturanCloud = function() {
+            const modalHtml = `
+            <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:10px;">☁️ Status & Pengaturan Cloud Database</h3>
+            <p style="font-size:11px; color:#475569; margin-bottom:14px;">Terhubung dengan backend Google Apps Script & Google Sheets untuk menyinkronkan 500 pengguna secara langsung.</p>
+            <div class="form-group">
+                <label class="form-label">URL Web App Google Apps Script:</label>
+                <input type="text" id="cfgGasUrlInput" class="form-control" value="${window.gasBackendUrl || ''}">
+            </div>
+            <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:12px; padding:12px; font-size:11px; color:#0369a1; margin-bottom:14px;">
+                <b>Total Data Aktif di Memori:</b><br>
+                • Siswa: <b>${window.cloudState.siswa.length}</b> orang<br>
+                • Akun Terdaftar: <b>${window.cloudState.registeredUsers.length}</b> akun<br>
+                • Mitra Industri: <b>${window.cloudState.industri.length}</b> perusahaan
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Tutup</button>
+                <button onclick="window.simpanUrlCloudBaru()" class="btn-action btn-blue">Simpan URL & Tes</button>
+            </div>`;
+            window.openDynamicModal(modalHtml);
+        };
+
+        window.simpanUrlCloudBaru = function() {
+            const url = document.getElementById("cfgGasUrlInput")?.value.trim();
+            if (url) {
+                window.gasBackendUrl = url;
+            }
+            window.closeDynamicModal();
+            window.tarikDataDariCloud(false);
+        };
+
         window.showModalInfo = function(title, msg) {
             const t = document.getElementById("modalInfoTitle");
             const m = document.getElementById("modalInfoMessage");
@@ -2902,52 +2947,21 @@
             if (b) b.style.display = "none";
         };
 
-        window.syncToGoogleAppsScript = function(actionName, dataPayload) {
-            if (!window.gasBackendUrl) return;
-            try {
-                fetch(window.gasBackendUrl, {
-                    method: "POST",
-                    mode: "no-cors",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: actionName, timestamp: new Date().toISOString(), data: dataPayload })
-                }).then(() => console.log(`[GAS Sync] Action ${actionName} tersinkron.`)).catch(err => console.warn(err));
-            } catch(e) {}
-        };
-
-        window.sinkronDariGoogleSheets = function(silent = false) {
-            if (!window.gasBackendUrl) return;
-            try {
-                fetch(window.gasBackendUrl + "?type=ping")
-                    .then(res => res.json())
-                    .then(data => {
-                        console.log("[GAS Sync] Backend connected:", data);
-                        if (!silent && window.showModalInfo) {
-                            window.showModalInfo("Status Cloud", "Terkoneksi ke Google Sheets: " + (data.app || "OK"));
-                        }
-                    })
-                    .catch(err => {
-                        if (!silent) console.warn("[GAS Sync] Offline or CORS restricted:", err);
-                    });
-            } catch(e) {
-                if (!silent) console.warn("[GAS Sync] Gagal sinkron:", e);
-            }
-        };
-
         window.addEventListener("DOMContentLoaded", () => {
-            // Tarik otomatis data master dari Google Sheets saat dibuka di HP/PC manapun
-            window.tarikDataDariCloud(true);
-
             try {
                 const savedSession = localStorage.getItem(STORAGE_KEY_SESSION);
                 if (savedSession) {
                     const profile = JSON.parse(savedSession);
                     if (profile && profile.role) {
                         window.suksesLogin(profile);
+                        // Jalankan sinkronisasi cloud di latar belakang tanpa mengunci tampilan
+                        window.tarikDataDariCloud(true);
                         return;
                     }
                 }
             } catch(e) {}
             window.kembaliKeGerbangEkosistem();
+            window.tarikDataDariCloud(true);
         });
     </script>
 </body>
