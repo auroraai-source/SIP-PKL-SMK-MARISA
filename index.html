@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SIP-PKL SMK Negeri 1 Marisa</title>
-    <!-- Script SheetJS untuk Impor Berkas Excel (.xlsx, .xls) -->
+    <!-- Script SheetJS untuk Impor Berkas Excel (.xlsx, .xls, .csv) -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         :root {
             --bg-base: #030712;
-            --bg-card: rgba(13, 24, 46, 0.85);
+            --bg-card: rgba(13, 24, 46, 0.88);
             --border-hud: #0284c7;
             --border-gold: #eab308;
             --text-main: #f8fafc;
@@ -62,7 +62,7 @@
             justify-content: center;
         }
         .hud-header {
-            background: rgba(10, 20, 40, 0.7);
+            background: rgba(10, 20, 40, 0.75);
             border: 2px solid var(--border-gold);
             border-radius: 20px;
             padding: 16px 20px;
@@ -141,10 +141,10 @@
             margin-top: 16px;
         }
         .portal-card {
-            background: rgba(15, 23, 42, 0.65);
-            border: 1.5px solid rgba(56, 189, 248, 0.3);
+            background: rgba(15, 23, 42, 0.7);
+            border: 1.5px solid rgba(56, 189, 248, 0.35);
             border-radius: 16px;
-            padding: 14px 16px;
+            padding: 16px 18px;
             display: flex;
             align-items: center;
             gap: 14px;
@@ -155,8 +155,8 @@
         }
         .portal-card:hover, .portal-card:active {
             transform: translateY(-2px);
-            background: rgba(15, 23, 42, 0.9);
-            box-shadow: 0 4px 20px rgba(56, 189, 248, 0.35);
+            background: rgba(15, 23, 42, 0.95);
+            box-shadow: 0 4px 20px rgba(56, 189, 248, 0.4);
         }
         .portal-card.role-siswa { border-color: #38bdf8; }
         .portal-card.role-guru { border-color: #10b981; }
@@ -175,31 +175,7 @@
         }
         .portal-info { flex: 1; }
         .portal-title { font-size: 14px; font-weight: 800; color: #fff; }
-        .portal-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
         .portal-arrow { font-size: 16px; color: #94a3b8; }
-        .auth-nav-tabs {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 20px;
-        }
-        .auth-tab-btn {
-            background: rgba(0, 0, 0, 0.4);
-            border: 1.5px solid rgba(255, 255, 255, 0.1);
-            color: #94a3b8;
-            padding: 10px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        .auth-tab-btn.active {
-            background: #0284c7;
-            border-color: #38bdf8;
-            color: #ffffff;
-            box-shadow: 0 0 15px rgba(2, 132, 199, 0.5);
-        }
         .form-group { margin-bottom: 14px; position: relative; }
         .form-label { font-size: 11px; font-weight: 700; color: #94a3b8; margin-bottom: 6px; display: block; }
         .form-control-wrap {
@@ -259,7 +235,7 @@
             flex-direction: column;
         }
         .app-topbar {
-            background: rgba(10, 20, 40, 0.9);
+            background: rgba(10, 20, 40, 0.92);
             border-bottom: 1.5px solid var(--border-hud);
             padding: 12px 20px;
             display: flex;
@@ -277,7 +253,7 @@
         }
         .app-sidebar {
             width: 260px;
-            background: rgba(13, 24, 46, 0.9);
+            background: rgba(13, 24, 46, 0.92);
             border-right: 1.5px solid var(--border-hud);
             padding: 16px 12px;
             display: flex;
@@ -416,6 +392,12 @@
             max-height: 90vh;
             overflow-y: auto;
         }
+        .empty-placeholder {
+            text-align: center;
+            padding: 30px 16px;
+            color: var(--text-muted);
+            font-size: 12px;
+        }
         @media (max-width: 768px) {
             .app-sidebar { display: none; }
             .app-content-body { padding: 14px; }
@@ -423,7 +405,7 @@
     </style>
 </head>
 <body>
-    <!-- LAYAR 1: GERBANG PEMILIHAN EKOSISTEM UTAMA -->
+    <!-- LAYAR 1: GERBANG PEMILIHAN PERAN UTAMA -->
     <div id="gatewayScreen" class="hud-wrapper">
         <div class="hud-header">
             <div>
@@ -439,7 +421,7 @@
         <div class="hud-card">
             <h3 style="font-size: 16px; font-weight: 800; color: #38bdf8; text-align: center;">⚡ GERBANG EKOSISTEM PKL</h3>
             <p style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 4px; margin-bottom: 16px;">
-                Pilih peran Anda untuk masuk atau mendaftar ke ekosistem resmi:
+                Pilih peran Anda untuk masuk ke ekosistem resmi:
             </p>
 
             <div class="portal-grid">
@@ -447,7 +429,6 @@
                     <div class="portal-icon" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8;">👨‍🎓</div>
                     <div class="portal-info">
                         <div class="portal-title">Masuk Sebagai Siswa PKL</div>
-                        <div class="portal-sub">Presensi GPS, Jurnal Harian, Tugas & Laporan</div>
                     </div>
                     <div class="portal-arrow">➔</div>
                 </div>
@@ -456,16 +437,14 @@
                     <div class="portal-icon" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">👩‍🏫</div>
                     <div class="portal-info">
                         <div class="portal-title">Masuk Sebagai Guru Pembimbing</div>
-                        <div class="portal-sub">Validasi Jurnal, Monitoring & Penilaian</div>
                     </div>
                     <div class="portal-arrow">➔</div>
                 </div>
 
                 <div class="portal-card role-orangtua" onclick="window.masukPilihanEkosistem('orangtua')">
-                    <div class="portal-icon" style="background: rgba(192, 132, 252, 0.2); color: #c084fc;">👨‍‍‍‍👩‍👧</div>
+                    <div class="portal-icon" style="background: rgba(192, 132, 252, 0.2); color: #c084fc;">👨‍👩‍👧</div>
                     <div class="portal-info">
                         <div class="portal-title">Masuk Sebagai Orang Tua Siswa</div>
-                        <div class="portal-sub">Pemantauan Presensi & Log Jurnal Ananda</div>
                     </div>
                     <div class="portal-arrow">➔</div>
                 </div>
@@ -474,7 +453,6 @@
                     <div class="portal-icon" style="background: rgba(34, 211, 238, 0.2); color: #22d3ee;">👨‍💼</div>
                     <div class="portal-info">
                         <div class="portal-title">Masuk Sebagai Panitia / Admin PKL</div>
-                        <div class="portal-sub">Master Data, Alokasi Guru, Jam & Radius GPS</div>
                     </div>
                     <div class="portal-arrow">➔</div>
                 </div>
@@ -483,7 +461,6 @@
                     <div class="portal-icon" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b;">🏭</div>
                     <div class="portal-info">
                         <div class="portal-title">Masuk Sebagai Industri Mitra DUDI</div>
-                        <div class="portal-sub">Borang Nilai Berstempel & Verifikasi Magang</div>
                     </div>
                     <div class="portal-arrow">➔</div>
                 </div>
@@ -494,7 +471,8 @@
             </div>
         </div>
     </div>
-    <!-- LAYAR 2: FORMULIR LOGIN / REGISTER TERIKAT PERAN -->
+
+    <!-- LAYAR 2: FORMULIR LOGIN TERIKAT PERAN -->
     <div id="loginScreen" class="hud-wrapper" style="display: none;">
         <div class="hud-header">
             <div>
@@ -509,9 +487,9 @@
 
         <div class="hud-card">
             <!-- Indikator Ekosistem Terikat & Tombol Ganti -->
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; background: rgba(0,0,0,0.35); padding: 8px 12px; border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; background: rgba(0,0,0,0.35); padding: 8px 12px; border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.25);">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <span id="boundRoleIcon" style="font-size: 16px;">👨‍‍🎓</span>
+                    <span id="boundRoleIcon" style="font-size: 16px;">👨‍🎓</span>
                     <span id="boundRoleText" style="font-size: 12px; font-weight: 800; color: #38bdf8;">ROOM SISWA PKL</span>
                 </div>
                 <button onclick="window.kembaliKeGerbangEkosistem()" style="background: none; border: 1px solid #475569; color: #94a3b8; font-size: 11px; padding: 4px 8px; border-radius: 6px; cursor: pointer;">
@@ -519,71 +497,52 @@
                 </button>
             </div>
 
-            <!-- Tab Masuk vs Daftar -->
-            <div class="auth-nav-tabs">
-                <button id="tabMasukBtn" class="auth-tab-btn active" onclick="window.switchAuthMode('login')">⚡ MASUK ROOM</button>
-                <button id="tabDaftarBtn" class="auth-tab-btn" onclick="window.switchAuthMode('register')">📝 DAFTAR AKUN</button>
+            <!-- Penanda Fitur Masuk di Bagian Tengah -->
+            <div style="display: flex; justify-content: center; margin-bottom: 18px;">
+                <div style="background: linear-gradient(135deg, rgba(2, 132, 199, 0.35), rgba(37, 99, 235, 0.35)); border: 1.5px solid #38bdf8; color: #ffffff; padding: 9px 24px; border-radius: 12px; font-size: 12px; font-weight: 800; letter-spacing: 0.5px; box-shadow: 0 0 15px rgba(2, 132, 199, 0.35); text-align: center;">
+                    ⚡ MASUK ROOM
+                </div>
             </div>
 
             <!-- FORM MASUK (LOGIN) -->
             <form id="formLoginView" onsubmit="window.submitOnlineAuth(event, 'login')">
                 <div class="form-group">
-                    <label class="form-label">Email Terdaftar:</label>
+                    <label class="form-label" id="labelLoginUsername">Username / NISN Siswa:</label>
                     <div class="form-control-wrap">
-                        <input type="email" id="loginEmailInput" class="form-control" placeholder="nama@smkn1marisa.sch.id" required>
+                        <input type="text" id="loginUsernameInput" class="form-control" placeholder="Masukkan NISN / Username" required autocomplete="username">
                     </div>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Kata Sandi (Password):</label>
                     <div class="form-control-wrap">
-                        <input type="password" id="loginPassInput" class="form-control" placeholder="••••••••" required>
+                        <input type="password" id="loginPassInput" class="form-control" placeholder="••••••••" required autocomplete="current-password">
                         <button type="button" class="btn-eye-toggle" onclick="window.togglePasswordEye('loginPassInput', this)">👁️</button>
                     </div>
                 </div>
 
-                <button type="submit" id="btnSubmitLogin" class="btn-action-primary" style="margin-top: 10px;">
+                <!-- Info Kredensial Resmi Panitia -->
+                <div style="background: rgba(2, 132, 199, 0.12); border: 1px dashed #38bdf8; border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: #38bdf8; font-weight: 700;">💡 Akun Resmi dari Panitia PKL</span>
+                    <button type="button" onclick="window.isiKredensialCepat()" style="background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; font-size: 10px; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-weight: 700;">Isi Cepat</button>
+                </div>
+
+                <button type="submit" id="btnSubmitLogin" class="btn-action-primary" style="margin-top: 4px;">
                     MASUK KE ROOM SEKARANG ⚡
                 </button>
 
-                <div style="text-align: center; margin-top: 16px;">
-                    <a href="javascript:void(0)" onclick="window.bukaModalLupaPassword()" style="font-size: 11px; color: #38bdf8; text-decoration: none;">
-                        Lupa Kata Sandi? (Reset Akun) 📝
+                <div style="text-align: center; margin-top: 14px; display: flex; justify-content: space-between; font-size: 11px;">
+                    <a href="javascript:void(0)" onclick="window.bukaModalBantuanAdmin()" style="color: #94a3b8; text-decoration: none;">
+                        Format Username? ❓
+                    </a>
+                    <a href="javascript:void(0)" onclick="window.bukaModalLupaPassword()" style="color: #38bdf8; text-decoration: none;">
+                        Lupa Sandi? 🔑
                     </a>
                 </div>
             </form>
-
-            <!-- FORM DAFTAR (REGISTER) -->
-            <form id="formRegisterView" style="display: none;" onsubmit="window.submitOnlineAuth(event, 'register')">
-                <div class="form-group">
-                    <label class="form-label">Nama Lengkap & Gelar:</label>
-                    <input type="text" id="regNamaInput" class="form-control" placeholder="Contoh: Muhammad Farhan" required>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Alamat Email Aktif:</label>
-                    <input type="email" id="regEmailInput" class="form-control" placeholder="farhan@gmail.com" required>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label" id="labelRegIdentitas">NISN / Identitas Resmi:</label>
-                    <input type="text" id="regIdentitasInput" class="form-control" placeholder="0054829102" required>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Kata Sandi Baru:</label>
-                    <div class="form-control-wrap">
-                        <input type="password" id="regPassInput" class="form-control" placeholder="Minimal 6 karakter" required minlength="6">
-                        <button type="button" class="btn-eye-toggle" onclick="window.togglePasswordEye('regPassInput', this)">👁️</button>
-                    </div>
-                </div>
-
-                <button type="submit" id="btnSubmitRegister" class="btn-action-primary" style="background: linear-gradient(135deg, #059669, #10b981); border-color: #34d399; margin-top: 10px;">
-                    DAFTARKAN AKUN RESMI 🚀
-                </button>
-            </form>
         </div>
     </div>
+
     <!-- LAYAR 3: APLIKASI UTAMA (DASHBOARD & FITUR) -->
     <div id="appScreen">
         <!-- TOPBAR -->
@@ -651,54 +610,75 @@
         // Active Google Apps Script Web App URL
         window.gasBackendUrl = "https://script.google.com/macros/s/AKfycbxoKWB-X6cMeFgJE43hzG-zmDtifENZ0W8z0wuS-_WdcIpO2V8LHiKo1KUjmG-LrC7wZg/exec";
 
-        // Global State
+        // Global safe fallback
+        window.switchAuthMode = function(mode) {
+            console.log("Mode switch request:", mode);
+        };
+
+        // Global State - ZERO DUMMY DATA (SIAP INPUT RIIL)
         window.cloudState = {
             activeRole: "siswa",
             authMode: "login",
             currentFeature: "dashboard",
-            userProfile: { nama: "Ahmad Rizky", email: "rizky@smkn1marisa.sch.id", role: "siswa" },
-            banner: [
-                { id: "b1", judul: "Pelepasan PKL T.A 2026/2027", pesan: "Seluruh peserta wajib melengkapi rekap presensi dan logbook sebelum penarikan.", target: ["semua"] }
-            ],
-            siswa: [
-                { nama: "Ahmad Rizky", jk: "L", nisn: "0054829102", kelas: "XI TKJ 1", noWa: "081234567890", industri: "PT Maju Teknologi", hadir: 98, pembimbing: "Budi, S.Pd." },
-                { nama: "Siti Rahma", jk: "P", nisn: "0054829103", kelas: "XI RPL 1", noWa: "081234567891", industri: "CV Gorontalo Digital", hadir: 100, pembimbing: "Budi, S.Pd." }
-            ],
-            guru: [
-                { nama: "Budi, S.Pd.", nip: "19800101 200501 1 001", mapel: "Produktif TKJ", wa: "081244556677" },
-                { nama: "Dewi, M.Kom.", nip: "19850202 201001 2 002", mapel: "Produktif RPL", wa: "081244556688" }
-            ],
-            industri: [
-                { id: "ind1", nama: "PT Maju Teknologi", pimpinan: "Ir. Rahmat", wa: "0811223344", alamat: "Jl. Trans Sulawesi KM 5", radius: 50, lat: "0.45612", lng: "121.94210", masuk: "08:00", pulang: "16:00" },
-                { id: "ind2", nama: "CV Gorontalo Digital", pimpinan: "Hendra, S.T.", wa: "0811998877", alamat: "Kawasan Industri Marisa", radius: 40, lat: "0.45780", lng: "121.94350", masuk: "08:00", pulang: "16:00" }
-            ],
-            penempatan: [
-                { guru: "Budi, S.Pd.", industri: "PT Maju Teknologi", siswa: ["Ahmad Rizky (XI TKJ 1)", "Fajar Sidiq (XI TKJ 1)"] }
-            ],
-            absensi: [
-                { nama: "Ahmad Rizky", tanggal: "2026-10-05", jam: "07:55", status: "Hadir (Radius 16m)", industri: "PT Maju Teknologi" }
-            ],
-            jurnal: [
-                { id: "j1", siswa: "Ahmad Rizky", tanggal: "2026-10-05", kegiatan: "Konfigurasi MikroTik Router & Firewall Filter", kendala: "IP conflict", solusi: "Setting static binding", status: "Disetujui Pembimbing" }
-            ],
-            dokumen: [
-                { id: "d1", judul: "Buku Panduan & Borang Penilaian PKL 2026", tipe: "PDF", target: "Semua" }
-            ],
-            agendaKunjungan: [
-                { industri: "PT Maju Teknologi", tanggal: "2026-10-12", jam: "09:30", agenda: "Supervisi & Evaluasi Jurnal Tahap I", status: "Terjadwal" }
-            ],
-            laporanAkhir: [
-                { judul: "Laporan PKL Implementasi MikroTik SMKN 1 Marisa", tanggal: "2026-10-04", evaluator: "Budi, S.Pd.", status: "Menunggu Pengujian" }
+            userProfile: { nama: "Pengguna SIP-PKL", email: "user@smkn1marisa.sch.id", role: "siswa" },
+            banner: [],
+            siswa: [],
+            guru: [],
+            industri: [],
+            penempatan: [],
+            absensi: [],
+            jurnal: [],
+            dokumen: [],
+            agendaKunjungan: [],
+            laporanAkhir: [],
+            // Hanya akun Panitia/Admin yang disiapkan untuk login awal input data riil
+            registeredUsers: [
+                { username: "admin", pass: "admin123", role: "admin", nama: "Panitia PKL SMKN 1 Marisa", identitas: "PANITIA-2026", email: "admin.pkl@smkn1marisa.sch.id" }
             ]
         };
 
-        // Kredensial Bawaan untuk Pilihan Cepat
+        // Kredensial Bawaan untuk Pilihan Cepat berdasarkan Peran
         const roleDefaults = {
-            siswa: { email: "rizky@smkn1marisa.sch.id", pass: "siswa123", label: "ROOM SISWA PKL", icon: "👨‍🎓", identitasLabel: "NISN Siswa:" },
-            guru: { email: "budi@smkn1marisa.sch.id", pass: "guru123", label: "ROOM GURU PEMBIMBING", icon: "👩‍🏫", identitasLabel: "NIP Guru:" },
-            orangtua: { email: "hendra.wali@gmail.com", pass: "ortu123", label: "ROOM ORANG TUA SISWA", icon: "👨‍👩‍👧", identitasLabel: "No WA / NISN Ananda:" },
-            admin: { email: "admin.pkl@smkn1marisa.sch.id", pass: "admin123", label: "ROOM PANITIA / ADMIN PKL", icon: "👨‍💼", identitasLabel: "NIP / ID Panitia:" },
-            industri: { email: "hrd@majuteknologi.co.id", pass: "industri123", label: "ROOM INDUSTRI MITRA DUDI", icon: "🏭", identitasLabel: "ID Mitra / No Telp DUDI:" }
+            siswa: { 
+                username: "", 
+                pass: "siswa123", 
+                label: "ROOM SISWA PKL", 
+                icon: "👨‍🎓", 
+                usernameLabel: "Username / NISN Siswa:", 
+                placeholder: "Masukkan NISN Siswa Terdaftar" 
+            },
+            guru: { 
+                username: "", 
+                pass: "guru123", 
+                label: "ROOM GURU PEMBIMBING", 
+                icon: "👩‍🏫", 
+                usernameLabel: "Username / NIP Guru:", 
+                placeholder: "Masukkan NIP Guru Terdaftar" 
+            },
+            orangtua: { 
+                username: "", 
+                pass: "ortu123", 
+                label: "ROOM ORANG TUA SISWA", 
+                icon: "👨‍👩‍👧", 
+                usernameLabel: "Username / No WA Wali:", 
+                placeholder: "Masukkan Username Wali Terdaftar" 
+            },
+            admin: { 
+                username: "admin", 
+                pass: "admin123", 
+                label: "ROOM PANITIA / ADMIN PKL", 
+                icon: "👨‍💼", 
+                usernameLabel: "Username Panitia / Admin:", 
+                placeholder: "Masukkan Username Admin (admin)" 
+            },
+            industri: { 
+                username: "", 
+                pass: "industri123", 
+                label: "ROOM INDUSTRI MITRA DUDI", 
+                icon: "🏭", 
+                usernameLabel: "Username / ID Mitra DUDI:", 
+                placeholder: "Masukkan ID Mitra Terdaftar" 
+            }
         };
 
         // Definisi Menu Peran
@@ -756,19 +736,80 @@
             // Update status terikat
             const iconEl = document.getElementById("boundRoleIcon");
             const textEl = document.getElementById("boundRoleText");
-            const idLabelEl = document.getElementById("labelRegIdentitas");
-            const emailInput = document.getElementById("loginEmailInput");
+            const userLabelEl = document.getElementById("labelLoginUsername");
+            const userInput = document.getElementById("loginUsernameInput");
             const passInput = document.getElementById("loginPassInput");
 
             if (iconEl) iconEl.innerText = def.icon;
             if (textEl) textEl.innerText = def.label;
-            if (idLabelEl) idLabelEl.innerText = def.identitasLabel;
+            if (userLabelEl) userLabelEl.innerText = def.usernameLabel;
 
-            // Isi nilai bawaan untuk kemudahan testing
-            if (emailInput) emailInput.value = def.email;
-            if (passInput) passInput.value = def.pass;
+            if (userInput) {
+                userInput.placeholder = def.placeholder;
+                userInput.value = def.username || "";
+            }
+            if (passInput) {
+                passInput.value = (role === 'admin') ? "admin123" : "";
+            }
+        };
 
-            window.switchAuthMode('login');
+        // Fungsi Bantuan untuk Menyalin Kredensial Cepat (Admin atau Akun Terdaftar)
+        window.isiKredensialCepat = function() {
+            const role = window.cloudState.activeRole;
+            const userInput = document.getElementById("loginUsernameInput");
+            const passInput = document.getElementById("loginPassInput");
+
+            if (role === 'admin') {
+                if (userInput) userInput.value = "admin";
+                if (passInput) passInput.value = "admin123";
+            } else if (role === 'siswa') {
+                const firstSiswa = (window.cloudState.siswa || [])[0];
+                if (firstSiswa) {
+                    if (userInput) userInput.value = firstSiswa.nisn;
+                    if (passInput) passInput.value = "siswa123";
+                } else {
+                    window.showModalInfo("Belum Ada Data Siswa", "Admin belum menginput data siswa ke sistem. Silakan login sebagai Admin terlebih dahulu untuk menginput master siswa.");
+                }
+            } else if (role === 'guru') {
+                const firstGuru = (window.cloudState.guru || [])[0];
+                if (firstGuru) {
+                    if (userInput) userInput.value = (firstGuru.nip || "").replace(/\s+/g, '');
+                    if (passInput) passInput.value = "guru123";
+                } else {
+                    window.showModalInfo("Belum Ada Data Guru", "Admin belum menginput data guru ke sistem. Silakan login sebagai Admin untuk menginput master guru.");
+                }
+            } else if (role === 'industri') {
+                const firstInd = (window.cloudState.industri || [])[0];
+                if (firstInd) {
+                    if (userInput) userInput.value = (firstInd.nama || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (passInput) passInput.value = "industri123";
+                } else {
+                    window.showModalInfo("Belum Ada Mitra Industri", "Admin belum menginput mitra industri ke sistem. Silakan login sebagai Admin untuk menginput master industri.");
+                }
+            }
+        };
+
+        // Modal Bantuan Akun dari Panitia
+        window.bukaModalBantuanAdmin = function() {
+            const role = window.cloudState.activeRole;
+            const def = roleDefaults[role] || roleDefaults.siswa;
+            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:10px;">📋 Informasi Akun ${def.label}</h3>
+                <p style="font-size:12px; color:#e2e8f0; line-height:1.5; margin-bottom:12px;">
+                    Seluruh akun peserta, guru, dan mitra DUDI dikelola langsung oleh <b>Panitia PKL SMK Negeri 1 Marisa</b>.
+                </p>
+                <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(56,189,248,0.25); border-radius:10px; padding:12px; font-size:11px; margin-bottom:14px;">
+                    <div style="color:#fde047; font-weight:700; margin-bottom:4px;">Format Standar Username:</div>
+                    <ul style="padding-left:18px; line-height:1.6; color:#94a3b8;">
+                        <li><b>Siswa:</b> Menggunakan nomor NISN yang diinput oleh admin sekolah.</li>
+                        <li><b>Guru:</b> Menggunakan nomor NIP tanpa spasi.</li>
+                        <li><b>Industri / DUDI:</b> Menggunakan nama atau ID DUDI yang terdaftar.</li>
+                        <li><b>Admin:</b> Username: <code>admin</code> (Kata Sandi: <code>admin123</code>).</li>
+                    </ul>
+                </div>
+                <div style="display:flex; justify-content:flex-end;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action btn-blue">Saya Mengerti</button>
+                </div>`;
+            window.openDynamicModal(modalHtml);
         };
 
         // Kembali ke Gerbang Utama
@@ -777,27 +818,6 @@
             const loginEl = document.getElementById("loginScreen");
             if (loginEl) loginEl.style.display = "none";
             if (gateEl) gateEl.style.display = "flex";
-        };
-
-        // Ganti Tab Masuk vs Daftar
-        window.switchAuthMode = function(mode) {
-            window.cloudState.authMode = mode;
-            const formLogin = document.getElementById("formLoginView");
-            const formRegister = document.getElementById("formRegisterView");
-            const tabMasuk = document.getElementById("tabMasukBtn");
-            const tabDaftar = document.getElementById("tabDaftarBtn");
-
-            if (mode === 'login') {
-                if (formLogin) formLogin.style.display = "block";
-                if (formRegister) formRegister.style.display = "none";
-                if (tabMasuk) tabMasuk.classList.add("active");
-                if (tabDaftar) tabDaftar.classList.remove("active");
-            } else {
-                if (formLogin) formLogin.style.display = "none";
-                if (formRegister) formRegister.style.display = "block";
-                if (tabMasuk) tabMasuk.classList.remove("active");
-                if (tabDaftar) tabDaftar.classList.add("active");
-            }
         };
 
         // Ikon Mata Password
@@ -813,36 +833,94 @@
             }
         };
 
-        // Submit Login atau Register
-        window.submitOnlineAuth = async function(event, mode) {
+        // Submit Login dengan Verifikasi Kredensial Riil
+        window.submitOnlineAuth = async function(event) {
             event.preventDefault();
             const role = window.cloudState.activeRole;
             const def = roleDefaults[role] || roleDefaults.siswa;
 
-            if (mode === 'login') {
-                const email = document.getElementById("loginEmailInput")?.value.trim();
-                const pass = document.getElementById("loginPassInput")?.value;
+            const inputUser = document.getElementById("loginUsernameInput")?.value.trim() || "";
+            const inputPass = document.getElementById("loginPassInput")?.value || "";
 
-                window.cloudState.userProfile = {
-                    nama: email.split('@')[0].toUpperCase(),
-                    email: email,
-                    role: role
-                };
-
-                window.masukKeRuangAplikasi();
-            } else {
-                const nama = document.getElementById("regNamaInput")?.value.trim();
-                const email = document.getElementById("regEmailInput")?.value.trim();
-                const identitas = document.getElementById("regIdentitasInput")?.value.trim();
-
-                window.cloudState.userProfile = { nama, email, role, identitas };
-
-                // Kirim pendaftaran ke backend GAS
-                window.syncToGoogleAppsScript("register_user", { nama, email, identitas, role });
-
-                window.showModalInfo("Pendaftaran Berhasil 🎉", `Selamat, akun ${nama} berhasil didaftarkan di ${def.label}! Anda akan langsung masuk ke sistem.`);
-                window.masukKeRuangAplikasi();
+            if (!inputUser || !inputPass) {
+                window.showModalInfo("Lengkapi Kredensial", "Mohon masukkan Username dan Password!");
+                return;
             }
+
+            // 1. Cek Admin
+            if (role === 'admin' && inputUser === "admin" && inputPass === "admin123") {
+                window.cloudState.userProfile = { nama: "Panitia PKL SMKN 1 Marisa", email: "admin.pkl@smkn1marisa.sch.id", role: "admin" };
+                window.masukKeRuangAplikasi();
+                return;
+            }
+
+            // 2. Cek Akun Terdaftar di database registeredUsers
+            const registered = (window.cloudState.registeredUsers || []).find(u => {
+                const matchUser = (u.username || "").toLowerCase() === inputUser.toLowerCase() ||
+                                  (u.identitas || "").replace(/\s+/g, '') === inputUser.replace(/\s+/g, '') ||
+                                  (u.email || "").toLowerCase() === inputUser.toLowerCase();
+                return matchUser && u.role === role;
+            });
+
+            if (registered) {
+                if (registered.pass !== inputPass) {
+                    window.showModalInfo("Kata Sandi Salah ❌", "Kata sandi yang Anda masukkan tidak sesuai.");
+                    return;
+                }
+                window.cloudState.userProfile = {
+                    nama: registered.nama,
+                    email: registered.email || (inputUser + "@smkn1marisa.sch.id"),
+                    role: registered.role,
+                    identitas: registered.identitas,
+                    industri: registered.industri || ""
+                };
+                window.masukKeRuangAplikasi();
+                return;
+            }
+
+            // 3. Cek Dinamis ke Data Master Riil (Siswa / Guru / Industri)
+            if (role === 'siswa') {
+                const sw = (window.cloudState.siswa || []).find(s => s.nisn === inputUser || s.nama.toLowerCase() === inputUser.toLowerCase());
+                if (sw) {
+                    if (inputPass === "siswa123") {
+                        window.cloudState.userProfile = { nama: sw.nama, email: sw.nisn + "@smkn1marisa.sch.id", role: "siswa", identitas: sw.nisn, industri: sw.industri || "Mitra DUDI" };
+                        window.masukKeRuangAplikasi();
+                        return;
+                    } else {
+                        window.showModalInfo("Kata Sandi Salah", "Kata sandi default untuk siswa baru adalah: <b>siswa123</b>");
+                        return;
+                    }
+                }
+            } else if (role === 'guru') {
+                const gr = (window.cloudState.guru || []).find(g => (g.nip || "").replace(/\s+/g, '') === inputUser.replace(/\s+/g, '') || g.nama.toLowerCase() === inputUser.toLowerCase());
+                if (gr) {
+                    if (inputPass === "guru123") {
+                        window.cloudState.userProfile = { nama: gr.nama, email: gr.nama.replace(/[^a-zA-Z]/g, '').toLowerCase() + "@smkn1marisa.sch.id", role: "guru", identitas: gr.nip };
+                        window.masukKeRuangAplikasi();
+                        return;
+                    } else {
+                        window.showModalInfo("Kata Sandi Salah", "Kata sandi default untuk guru adalah: <b>guru123</b>");
+                        return;
+                    }
+                }
+            } else if (role === 'industri') {
+                const ind = (window.cloudState.industri || []).find(d => (d.nama || "").toLowerCase() === inputUser.toLowerCase() || (d.id || "").toLowerCase() === inputUser.toLowerCase());
+                if (ind) {
+                    if (inputPass === "industri123") {
+                        window.cloudState.userProfile = { nama: ind.pimpinan + " (" + ind.nama + ")", email: "hrd@" + ind.nama.toLowerCase().replace(/[^a-z0-9]/g, '') + ".com", role: "industri", industri: ind.nama };
+                        window.masukKeRuangAplikasi();
+                        return;
+                    } else {
+                        window.showModalInfo("Kata Sandi Salah", "Kata sandi default industri adalah: <b>industri123</b>");
+                        return;
+                    }
+                }
+            }
+
+            // Gagal Login
+            window.showModalInfo("Akun Belum Terdaftar ⚠️", 
+                `Username <b>"${inputUser}"</b> tidak ditemukan di <b>${def.label}</b>.<br><br>Pastikan Panitia PKL telah menginput data Anda melalui menu Data Master Panitia.`
+            );
         };
 
         // Masuk ke Layar Aplikasi Utama
@@ -867,7 +945,7 @@
             window.kembaliKeGerbangEkosistem();
         };
 
-        // Modal Info
+        // Modal Helpers
         window.showModalInfo = function(title, msg) {
             const titleEl = document.getElementById("modalInfoTitle");
             const msgEl = document.getElementById("modalInfoMessage");
@@ -930,7 +1008,6 @@
             });
             sidebar.innerHTML = html;
         };
-
         // Buka Modul Fitur
         window.openFeature = function(featureId, title) {
             window.cloudState.currentFeature = featureId;
@@ -983,6 +1060,7 @@
                 container.innerHTML = window.renderRoleDashboard();
             }
         };
+
         // VIEW: Dashboard Utama
         window.renderRoleDashboard = function() {
             const role = window.cloudState.activeRole;
@@ -1009,11 +1087,11 @@
             return bannerHtml +
                 `<div class="card" style="background: linear-gradient(135deg, #0284c7, #1e3a8a); border: 2px solid #38bdf8; color: #fff;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                        <span style="background: rgba(255, 255, 255, 0.2); padding: 3px 10px; border-radius: 8px; font-size: 10px; font-weight: 800; letter-spacing: 1px;">ONLINE FIREBASE & GAS</span>
+                        <span style="background: rgba(255, 255, 255, 0.2); padding: 3px 10px; border-radius: 8px; font-size: 10px; font-weight: 800; letter-spacing: 1px;">ONLINE CLOUD & GAS</span>
                         <span style="font-size: 11px; color: #fde047; font-weight: 700;">T.A 2026/2027 &bull; SMKN 1 MARISA</span>
                     </div>
                     <h2 style="font-size: 19px; font-weight: 800; margin-top: 8px;">Selamat Datang, ${profile.nama}</h2>
-                    <p style="font-size: 12px; opacity: 0.9;">Ekosistem Terkunci: <b>ROOM ${role.toUpperCase()}</b> &bull; Email: ${profile.email}</p>
+                    <p style="font-size: 12px; opacity: 0.9;">Ekosistem Terkunci: <b>ROOM ${role.toUpperCase()}</b> &bull; ${profile.email}</p>
                 </div>
                 <div style="font-size: 12px; font-weight: 800; color: #38bdf8; margin: 18px 0 8px 0;">⚡ MENU CEPAT SATU LAYAR (KLIK FITUR):</div>
                 <div class="mobile-launcher-grid">${buttonsHtml}</div>`;
@@ -1026,16 +1104,17 @@
                 rows += `<tr><td>${idx+1}</td><td><b>${a.nama}</b></td><td>${a.tanggal}</td><td>${a.jam} WITA</td><td><span class="badge-status badge-green">${a.status}</span></td></tr>`;
             });
 
+            const userInd = window.cloudState.userProfile?.industri || "Mitra Industri";
+
             return `<div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
                     <div><h3 style="font-size: 15px; font-weight: bold;">📍 Presensi GPS & Kamera Wajah Realtime</h3><p style="font-size: 11px; color: var(--text-muted);">Sistem memeriksa jarak koordinat geofence Anda ke industri mitra.</p></div>
-                    <span class="badge-status badge-blue">PT Maju Teknologi</span>
+                    <span class="badge-status badge-blue">${userInd}</span>
                 </div>
                 <div style="background: radial-gradient(circle, rgba(2, 132, 199, 0.15) 0%, rgba(15, 23, 42, 0.7) 80%); border: 1.5px dashed #38bdf8; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 14px;">
                     <div style="font-size: 32px; margin-bottom: 4px;">📡</div>
-                    <div style="font-size: 13px; font-weight: 800; color: #38bdf8;">RADAR SATELIT GPS TERHUBUNG</div>
-                    <div style="font-size: 11px; color: #10b981; font-weight: 700; margin-top: 2px;">Jarak dari Kantor: 16 Meter (Toleransi Radius: 50 Meter - VALID)</div>
-                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Koordinat Terkunci: Lat 0.45612, Lng 121.94210</div>
+                    <div style="font-size: 13px; font-weight: 800; color: #38bdf8;">RADAR SATELIT GPS SIAP REKAM</div>
+                    <div style="font-size: 11px; color: #10b981; font-weight: 700; margin-top: 2px;">Toleransi Radius: 50 Meter (Geofence Otomatis Terkunci)</div>
                 </div>
                 <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-hud); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
                     <label class="form-label">Kondisi Kehadiran:</label>
@@ -1051,7 +1130,7 @@
             </div>
             <div class="card">
                 <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 6px;">Riwayat Kehadiran</h4>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama</th><th>Tanggal</th><th>Jam</th><th>Status Geofence</th></tr></thead><tbody>${rows || '<tr><td colspan="5" style="text-align:center;">Belum ada presensi</td></tr>'}</tbody></table></div>
+                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama</th><th>Tanggal</th><th>Jam</th><th>Status Geofence</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada riwayat kehadiran tercatat</td></tr>'}</tbody></table></div>
             </div>`;
         };
 
@@ -1060,15 +1139,15 @@
             const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
             const dateStr = now.toISOString().split('T')[0];
             const ket = document.getElementById("inputStatusPresensi")?.value || "Hadir Tepat Waktu";
-            const profile = window.cloudState.userProfile || { nama: "Ahmad Rizky" };
+            const profile = window.cloudState.userProfile || { nama: "Siswa PKL" };
 
             const record = {
                 nama: profile.nama,
                 role: window.cloudState.activeRole,
-                industri: "PT Maju Teknologi",
+                industri: profile.industri || "Mitra Industri",
                 tanggal: dateStr,
                 jam: timeStr,
-                status: `${ket} (Radius 16m - Valid)`
+                status: `${ket} (Radius Valid)`
             };
 
             window.cloudState.absensi.unshift(record);
@@ -1100,7 +1179,7 @@
                     <h3 style="font-size: 15px; font-weight: bold; margin-bottom: 4px;">📖 Formulir Jurnal Harian</h3>
                     <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 14px;">Catat kompetensi riil yang Anda laksanakan di industri setiap hari.</p>
                     <label class="form-label">Aktivitas / Pekerjaan Hari Ini:</label>
-                    <textarea id="jurnalAktivitas" class="form-control" style="height: 65px; margin-bottom: 10px;" placeholder="Setting router mikrotik, crimping kabel..."></textarea>
+                    <textarea id="jurnalAktivitas" class="form-control" style="height: 65px; margin-bottom: 10px;" placeholder="Tuliskan pekerjaan hari ini..."></textarea>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
                         <div>
                             <label class="form-label">Kendala:</label>
@@ -1117,7 +1196,7 @@
 
             return formInput + `<div class="card">
                 <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 6px;">Daftar Logbook Jurnal</h4>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Tanggal</th><th>Aktivitas</th><th>Kendala</th><th>Solusi</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="6" style="text-align:center;">Belum ada log jurnal</td></tr>'}</tbody></table></div>
+                <div class="table-wrap"><table><thead><tr><th>No</th><th>Tanggal</th><th>Aktivitas</th><th>Kendala</th><th>Solusi</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada catatan jurnal harian</td></tr>'}</tbody></table></div>
             </div>`;
         };
 
@@ -1125,7 +1204,7 @@
             const akt = document.getElementById("jurnalAktivitas")?.value.trim();
             const ken = document.getElementById("jurnalKendala")?.value.trim();
             const sol = document.getElementById("jurnalSolusi")?.value.trim();
-            const profile = window.cloudState.userProfile || { nama: "Ahmad Rizky" };
+            const profile = window.cloudState.userProfile || { nama: "Siswa PKL" };
 
             if (!akt) {
                 window.showModalInfo("Lengkapi Jurnal", "Mohon isi deskripsi aktivitas pekerjaan Anda!");
@@ -1136,7 +1215,7 @@
             const newJurnal = {
                 id: "j_" + Date.now(),
                 siswa: profile.nama,
-                industri: "PT Maju Teknologi",
+                industri: profile.industri || "Mitra DUDI",
                 tanggal: now,
                 kegiatan: akt,
                 kendala: ken || "Tidak ada kendala",
@@ -1150,6 +1229,7 @@
             window.showModalInfo("Jurnal Terkirim 🚀", "Jurnal harian Anda telah tersimpan dan siap diverifikasi oleh Pembimbing!");
             window.openFeature("jurnal", "Jurnal Kegiatan");
         };
+
         // VIEW: Penempatan PKL
         window.renderPenempatanGuru = function() {
             let cardsHtml = "";
@@ -1178,7 +1258,7 @@
                     <button onclick="window.bukaModalFormPenempatan()" class="btn-action btn-blue">+ Alokasi Bimbingan Baru</button>
                 </div>
                 <div style="margin-bottom: 12px;"><input type="text" id="cariPenempatanInput" onkeyup="window.filterPenempatanList()" class="form-control" placeholder="🔍 Cari nama guru, industri, atau nama siswa..."></div>
-                <div id="penempatanCardsContainer">${cardsHtml}</div>
+                <div id="penempatanCardsContainer">${cardsHtml || '<div class="empty-placeholder">Belum ada alokasi penempatan bimbingan. Silakan klik tombol Alokasi Bimbingan Baru.</div>'}</div>
             </div>`;
         };
 
@@ -1206,21 +1286,26 @@
                     <div>${badges}</div>
                 </div>`;
             });
-            container.innerHTML = cardsHtml || `<div style="text-align:center; padding:20px; font-size:12px; color:var(--text-muted);">Tidak ada alokasi penempatan yang cocok.</div>`;
+            container.innerHTML = cardsHtml || `<div class="empty-placeholder">Tidak ada alokasi penempatan yang cocok.</div>`;
         };
 
         window.bukaModalFormPenempatan = function() {
+            if ((window.cloudState.guru || []).length === 0 || (window.cloudState.industri || []).length === 0) {
+                window.showModalInfo("Data Belum Lengkap", "Silakan lengkapi Data Master Guru dan Data Mitra Industri terlebih dahulu sebelum membuat alokasi penempatan.");
+                return;
+            }
+
             let guruOpts = "";
-            (window.cloudState.guru || []).forEach(g => guruOpts += `<option value="${g.nama}">${g.nama} (${g.mapel})</option>`);
+            (window.cloudState.guru || []).forEach(g => guruOpts += `<option value="${g.nama}">${g.nama} (${g.mapel || 'Guru'})</option>`);
 
             let indOpts = "";
             (window.cloudState.industri || []).forEach(ind => indOpts += `<option value="${ind.nama}">${ind.nama}</option>`);
 
             let siswaChecklist = "";
             (window.cloudState.siswa || []).forEach(sw => {
-                siswaChecklist += `<label class="siswa-item-check" data-name="${(sw.nama + ' ' + sw.kelas).toLowerCase()}" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.05); font-size:12px; cursor:pointer;">
-                    <input type="checkbox" name="selectedSiswaPKL" value="${sw.nama} (${sw.kelas})">
-                    <span><b>${sw.nama}</b> <span style="color:#94a3b8;">- ${sw.kelas}</span></span>
+                siswaChecklist += `<label class="siswa-item-check" data-name="${(sw.nama + ' ' + (sw.kelas || '')).toLowerCase()}" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.05); font-size:12px; cursor:pointer;">
+                    <input type="checkbox" name="selectedSiswaPKL" value="${sw.nama} (${sw.kelas || 'PKL'})">
+                    <span><b>${sw.nama}</b> <span style="color:#94a3b8;">- ${sw.kelas || 'PKL'}</span></span>
                 </label>`;
             });
 
@@ -1230,7 +1315,9 @@
                 <div class="form-group">
                     <label class="form-label">Pilih Siswa yang Ditempatkan:</label>
                     <input type="text" id="cariSiswaAlokasi" onkeyup="window.filterSiswaChecklist()" class="form-control" style="margin-bottom:8px;" placeholder="🔍 Cari nama siswa...">
-                    <div id="containerSiswaChecklist" style="max-height:160px; overflow-y:auto; background:rgba(0,0,0,0.3); border:1px solid rgba(56,189,248,0.25); border-radius:10px; padding:4px;">${siswaChecklist}</div>
+                    <div id="containerSiswaChecklist" style="max-height:160px; overflow-y:auto; background:rgba(0,0,0,0.3); border:1px solid rgba(56,189,248,0.25); border-radius:10px; padding:4px;">
+                        ${siswaChecklist || '<div class="empty-placeholder">Belum ada siswa terdaftar. Tambahkan siswa terlebih dahulu.</div>'}
+                    </div>
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
                     <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#475569; color:#fff;">Batal</button>
@@ -1274,17 +1361,17 @@
         window.renderMasterSiswaTable = function() {
             let rows = "";
             (window.cloudState.siswa || []).forEach((s, idx) => {
-                rows += `<tr><td>${idx+1}</td><td><b>${s.nama}</b></td><td>${s.jk}</td><td>${s.nisn}</td><td>${s.kelas}</td><td>${s.noWa}</td><td style="color:#38bdf8;">${s.industri}</td><td><button onclick="window.hapusMasterSiswa(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td></tr>`;
+                rows += `<tr><td>${idx+1}</td><td><b>${s.nama}</b></td><td>${s.jk || '-'}</td><td>${s.nisn}</td><td>${s.kelas || '-'}</td><td>${s.noWa || '-'}</td><td style="color:#38bdf8;">${s.industri || '-'}</td><td><button onclick="window.hapusMasterSiswa(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td></tr>`;
             });
 
             return `<div class="card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                <div><h3 style="font-size:14px; font-weight:bold;">👨‍🎓 Data Master Siswa Peserta PKL</h3><p style="font-size:11px; color:var(--text-muted);">Kelola data siswa terdaftar di Cloud Database.</p></div>
+                <div><h3 style="font-size:14px; font-weight:bold;">👨‍‍🎓 Data Master Siswa Peserta PKL</h3><p style="font-size:11px; color:var(--text-muted);">Kelola data siswa terdaftar di Cloud Database.</p></div>
                 <div style="display:flex; gap:8px;">
                     <button onclick="window.bukaModalUploadExcel('Siswa')" class="btn-action btn-emerald">📥 Impor Excel</button>
                     <button onclick="window.bukaModalInputSiswa()" class="btn-action btn-blue">+ Tambah Manual</button>
                 </div>
             </div>
-            <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Siswa</th><th>JK</th><th>NISN</th><th>Kelas</th><th>No WA</th><th>Industri</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+            <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Siswa</th><th>JK</th><th>NISN</th><th>Kelas</th><th>No WA</th><th>Industri</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="8" class="empty-placeholder">Belum ada data siswa terdaftar. Silakan tambah data siswa secara manual atau impor dari berkas Excel.</td></tr>'}</tbody></table></div>`;
         };
 
         window.hapusMasterSiswa = function(idx) {
@@ -1294,10 +1381,10 @@
         };
 
         window.bukaModalInputSiswa = function() {
-            let indOpts = "";
+            let indOpts = '<option value="-">-- Pilih Industri (Opsional) --</option>';
             (window.cloudState.industri || []).forEach(ind => indOpts += `<option value="${ind.nama}">${ind.nama}</option>`);
 
-            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;">👨‍🎓 Formulir Tambah Data Siswa</h3>
+            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;">👨‍‍🎓 Formulir Tambah Data Siswa</h3>
                 <div class="form-group"><label class="form-label">Nama Lengkap Siswa:</label><input type="text" id="addSiswaNama" class="form-control" placeholder="Contoh: Muhammad Farhan"></div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                     <div><label class="form-label">NISN Siswa:</label><input type="text" id="addSiswaNisn" class="form-control" placeholder="005xxxxxxx"></div>
@@ -1329,7 +1416,7 @@
                 return;
             }
 
-            const item = { nama, nisn, jk, kelas, noWa: wa || "0812xxxxxxxx", industri: ind, pembimbing: "Budi, S.Pd.", hadir: 100 };
+            const item = { nama, nisn, jk, kelas, noWa: wa || "0812xxxxxxxx", industri: (ind !== '-' ? ind : 'Mitra Industri'), hadir: 100 };
             window.cloudState.siswa.unshift(item);
             window.syncToGoogleAppsScript("register_user", item);
 
@@ -1352,7 +1439,7 @@
                     <button onclick="window.bukaModalInputGuru()" class="btn-action btn-blue">+ Tambah Manual</button>
                 </div>
             </div>
-            <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Guru</th><th>NIP</th><th>Mata Pelajaran</th><th>No WhatsApp</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+            <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Guru</th><th>NIP</th><th>Mata Pelajaran</th><th>No WhatsApp</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada data guru terdaftar. Silakan tambah data guru secara manual atau impor dari berkas Excel.</td></tr>'}</tbody></table></div>`;
         };
 
         window.bukaModalInputGuru = function() {
@@ -1395,11 +1482,11 @@
             window.openFeature("master-guru", "Data Master Guru");
         };
 
-        // VIEW: Master Industri
+        // VIEW: Master Industri (Mitra DUDI)
         window.renderMasterIndustriTable = function() {
             let rows = "";
             (window.cloudState.industri || []).forEach((d, idx) => {
-                rows += `<tr><td>${idx+1}</td><td><b>${d.nama}</b></td><td>${d.pimpinan}</td><td>${d.wa}</td><td>${d.alamat}</td><td>${d.radius}m</td><td><button onclick="window.hapusMasterIndustri(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td></tr>`;
+                rows += `<tr><td>${idx+1}</td><td><b>${d.nama}</b></td><td>${d.pimpinan || '-'}</td><td>${d.wa || '-'}</td><td>${d.alamat || '-'}</td><td>${d.radius || 50}m</td><td><button onclick="window.hapusMasterIndustri(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td></tr>`;
             });
 
             return `<div class="card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
@@ -1409,7 +1496,7 @@
                     <button onclick="window.bukaModalInputIndustri()" class="btn-action btn-blue">+ Tambah Manual</button>
                 </div>
             </div>
-            <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Industri</th><th>Pimpinan</th><th>No WA</th><th>Alamat</th><th>Radius GPS</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+            <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Industri</th><th>Pimpinan</th><th>No WA</th><th>Alamat</th><th>Radius GPS</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada mitra industri terdaftar. Silakan tambah data industri secara manual atau impor dari berkas Excel.</td></tr>'}</tbody></table></div>`;
         };
 
         window.bukaModalInputIndustri = function() {
@@ -1506,8 +1593,7 @@
 
             if (kategori === "Siswa") {
                 csvContent = "Nama Lengkap,Jenis Kelamin,NISN,Kelas,No WhatsApp,Nama Industri Mitra\n" +
-                             "Ahmad Dani,L,0061234501,XI TKJ 1,081234567820,PT Maju Teknologi\n" +
-                             "Nur Fadilah,P,0061234502,XI RPL 1,081234567821,CV Gorontalo Digital\n";
+                             "Ahmad Dani,L,0061234501,XI TKJ 1,081234567820,PT Maju Teknologi\n";
             } else if (kategori === "Guru") {
                 csvContent = "Nama Guru,NIP,Mata Pelajaran,No WhatsApp\n" +
                              "Mansur S.Pd.,19820303 201101 1 003,Produktif Multimedia,081234567830\n";
@@ -1593,8 +1679,7 @@
                         nisn: r[2] || String(Date.now() + idx).slice(-10),
                         kelas: r[3] || 'XI PKL',
                         noWa: r[4] || '0812xxxxxxxx',
-                        industri: r[5] || 'PT Maju Teknologi',
-                        pembimbing: 'Budi, S.Pd.',
+                        industri: r[5] || 'Mitra Industri',
                         hadir: 100
                     });
                 } else if (kategori === "Guru") {
@@ -1655,6 +1740,229 @@
             else if (kategori === "Guru") window.openFeature("master-guru", "Data Master Guru");
             else window.openFeature("master-industri", "Data Perusahaan / Industri");
         };
+        // VIEW: Pengaturan Jam & GPS Terintegrasi Pilihan Industri Riil
+        window.selectedGpsIndIdx = 0;
+
+        window.renderPengaturanJamGPS = function() {
+            // Ambil daftar industri secara dinamis dari database Mitra Industri DUDI
+            const listInd = window.cloudState.industri || [];
+
+            // Jika belum ada data industri sama sekali
+            if (listInd.length === 0) {
+                return `<div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;">
+                        <div>
+                            <h3 style="font-size: 15px; font-weight: 800; color: #38bdf8;">📍 Pengaturan Jam Kerja & Radius Geofence GPS</h3>
+                            <p style="font-size: 11px; color: var(--text-muted);">Pilih industri tujuan dan setel batas toleransi jarak serta jam presensi siswa.</p>
+                        </div>
+                    </div>
+                    <div style="background: rgba(2, 132, 199, 0.1); border: 1.5px dashed #38bdf8; border-radius: 16px; padding: 36px 20px; text-align: center; margin-bottom: 16px;">
+                        <div style="font-size: 42px; margin-bottom: 10px;">🏢</div>
+                        <h4 style="font-size: 15px; font-weight: 800; color: #fde047; margin-bottom: 6px;">Belum Ada Mitra Industri Terdaftar</h4>
+                        <p style="font-size: 12px; color: #94a3b8; max-width: 500px; margin: 0 auto 18px; line-height: 1.6;">
+                            Pilihan industri pada menu pengaturan GPS ini terhubung langsung secara realtime ke database <b>Mitra Industri DUDI</b>.<br>
+                            Silakan input data mitra industri terlebih dahulu agar dapat mengatur titik GPS dan jam kerjanya.
+                        </p>
+                        <button onclick="window.openFeature('master-industri', 'Mitra Industri DUDI')" class="btn-action btn-blue" style="padding: 10px 22px; font-weight: 800; font-size: 12px;">
+                            + Tambah Mitra Industri Sekarang
+                        </button>
+                    </div>
+                </div>`;
+            }
+
+            if (window.selectedGpsIndIdx >= listInd.length) {
+                window.selectedGpsIndIdx = 0;
+            }
+            const activeInd = listInd[window.selectedGpsIndIdx];
+
+            // Bangun Opsi Dropdown Pilihan Industri dari Database Real
+            let indOptions = "";
+            listInd.forEach((ind, idx) => {
+                const selected = idx === window.selectedGpsIndIdx ? "selected" : "";
+                indOptions += `<option value="${idx}" ${selected}>🏢 ${ind.nama} (${ind.alamat || 'Pohuwato'})</option>`;
+            });
+
+            // Bangun Tabel Rekapitulasi Realtime Semua Industri
+            let rekapRows = "";
+            listInd.forEach((ind, idx) => {
+                const isSelected = idx === window.selectedGpsIndIdx;
+                rekapRows += `<tr style="${isSelected ? 'background: rgba(2, 132, 199, 0.2); font-weight: 700;' : ''}">
+                    <td>${idx + 1}</td>
+                    <td><b>${ind.nama}</b></td>
+                    <td>${ind.masuk || '08:00'} - ${ind.pulang || '16:00'} WITA</td>
+                    <td><span class="badge-status badge-blue">${ind.radius || 50} Meter</span></td>
+                    <td style="color:#38bdf8; font-family:monospace; font-size:11px;">${ind.lat || '0.45612'}, ${ind.lng || '121.94210'}</td>
+                    <td>
+                        <button onclick="window.muatDataIndustriGps(${idx})" class="btn-action btn-blue" style="padding:4px 8px;">Pilih & Edit</button>
+                    </td>
+                </tr>`;
+            });
+
+            return `<div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;">
+                    <div>
+                        <h3 style="font-size: 15px; font-weight: 800; color: #38bdf8;">📍 Pengaturan Jam Kerja & Radius Geofence GPS</h3>
+                        <p style="font-size: 11px; color: var(--text-muted);">Data pilihan industri diambil langsung dari database menu <b>Mitra Industri DUDI</b>.</p>
+                    </div>
+                    <span class="badge-status badge-green">${listInd.length} Industri Terkoneksi</span>
+                </div>
+
+                <!-- KOLOM PEMILIHAN INDUSTRI REAL -->
+                <div style="background: rgba(2, 132, 199, 0.12); border: 1.5px solid #38bdf8; border-radius: 14px; padding: 14px 16px; margin-bottom: 16px;">
+                    <label class="form-label" style="color: #38bdf8; font-size: 12px; font-weight: 800; margin-bottom: 8px;">
+                        🏢 Pilih Perusahaan / Industri Mitra yang Akan Disetel:
+                    </label>
+                    <select id="pilihIndustriGps" onchange="window.muatDataIndustriGps(this.value)" class="form-control" style="font-size: 13px; font-weight: 700; background: #0f172a; border-color: #38bdf8;">
+                        ${indOptions}
+                    </select>
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 11px; color: var(--text-muted);">
+                        <span>👤 Pimpinan/HRD: <b style="color: #e2e8f0;">${activeInd.pimpinan || '-'}</b></span>
+                        <span>📍 Alamat: <b style="color: #e2e8f0;">${activeInd.alamat || '-'}</b></span>
+                    </div>
+                </div>
+
+                <!-- FORMULIR EDIT JAM DAN GEOFENCE GPS UNTUK INDUSTRI TERPILIH -->
+                <div style="background: rgba(0,0,0,0.3); border: 1.5px solid var(--border-hud); border-radius: 16px; padding: 18px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; border-bottom: 1px dashed rgba(56, 189, 248, 0.3); padding-bottom: 10px;">
+                        <div style="font-weight: 800; font-size: 14px; color: #38bdf8;">
+                            ⚡ Konfigurasi Lokasi: <span style="color: #fde047;">${activeInd.nama}</span>
+                        </div>
+                        <span class="badge-status badge-blue">Radius Aktif: ${activeInd.radius || 50} Meter</span>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                        <div>
+                            <label class="form-label">Jam Masuk (WITA):</label>
+                            <input type="time" id="selectedJamMasuk" class="form-control" value="${activeInd.masuk || '08:00'}">
+                        </div>
+                        <div>
+                            <label class="form-label">Jam Pulang (WITA):</label>
+                            <input type="time" id="selectedJamPulang" class="form-control" value="${activeInd.pulang || '16:00'}">
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+                        <div>
+                            <label class="form-label">Batas Radius (Meter):</label>
+                            <input type="number" id="selectedRadiusGps" class="form-control" value="${activeInd.radius || 50}" placeholder="Contoh: 50">
+                        </div>
+                        <div>
+                            <label class="form-label">Latitude Satelit (Lintang):</label>
+                            <input type="text" id="selectedLatGps" class="form-control" value="${activeInd.lat || '0.45612'}" placeholder="0.45612">
+                        </div>
+                        <div>
+                            <label class="form-label">Longitude Satelit (Bujur):</label>
+                            <input type="text" id="selectedLngGps" class="form-control" value="${activeInd.lng || '121.94210'}" placeholder="121.94210">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <button type="button" onclick="window.deteksiGpsOtomatisTerpilih()" class="btn-action btn-emerald" style="padding: 10px 16px; font-weight: 700;">
+                            📍 Deteksi Titik GPS Saya Saat Ini
+                        </button>
+                        <button type="button" onclick="window.simpanPengaturanGpsTerpilih()" class="btn-action btn-blue" style="padding: 10px 18px; font-weight: 800;">
+                            💾 Simpan GPS ${activeInd.nama}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- TABEL REKAPITULASI STATUS SEMUA INDUSTRI -->
+                <div style="margin-top: 10px;">
+                    <h4 style="font-size: 13px; font-weight: 800; color: #38bdf8; margin-bottom: 8px;">
+                        📋 Daftar Ringkasan Radius & Jam Semua Industri Mitra:
+                    </h4>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>Nama Industri</th>
+                                    <th>Jam Masuk - Pulang</th>
+                                    <th>Radius Geofence</th>
+                                    <th>Koordinat (Lat, Lng)</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rekapRows}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>`;
+        };
+
+        // Handler Pergantian Pilihan Industri
+        window.muatDataIndustriGps = function(idxVal) {
+            window.selectedGpsIndIdx = parseInt(idxVal) || 0;
+            window.openFeature("jam-gps", "Jam & Geofence GPS");
+        };
+
+        // Deteksi Otomatis Titik Koordinat Pengguna Saat Ini
+        window.deteksiGpsOtomatisTerpilih = function() {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        const latEl = document.getElementById("selectedLatGps");
+                        const lngEl = document.getElementById("selectedLngGps");
+                        if (latEl) latEl.value = pos.coords.latitude.toFixed(6);
+                        if (lngEl) lngEl.value = pos.coords.longitude.toFixed(6);
+                        window.showModalInfo("GPS Terkunci 🛰️", 
+                            `Berhasil mendeteksi titik koordinat Anda:<br><b>Latitude:</b> ${pos.coords.latitude.toFixed(6)}<br><b>Longitude:</b> ${pos.coords.longitude.toFixed(6)}<br><br>Silakan klik <b>Simpan</b> untuk menerapkan pada industri terpilih.`
+                        );
+                    },
+                    err => {
+                        window.showModalInfo("Deteksi GPS Gagal ⚠️", 
+                            "Izin lokasi perangkat tidak aktif atau sinyal GPS belum terbaca. Anda juga dapat menyalin angka koordinat secara manual dari Google Maps."
+                        );
+                    }
+                );
+            } else {
+                window.showModalInfo("Tidak Didukung", "Perangkat/peramban ini tidak mendukung deteksi geolokasi otomatis.");
+            }
+        };
+
+        // Simpan Konfigurasi Industri yang Sedang Dipilih
+        window.simpanPengaturanGpsTerpilih = function() {
+            const listInd = window.cloudState.industri || [];
+            const ind = listInd[window.selectedGpsIndIdx];
+            if (!ind) {
+                window.showModalInfo("Peringatan", "Industri belum dipilih!");
+                return;
+            }
+
+            const masuk = document.getElementById("selectedJamMasuk")?.value || "08:00";
+            const pulang = document.getElementById("selectedJamPulang")?.value || "16:00";
+            const radius = parseInt(document.getElementById("selectedRadiusGps")?.value) || 50;
+            const lat = document.getElementById("selectedLatGps")?.value.trim() || "0.45612";
+            const lng = document.getElementById("selectedLngGps")?.value.trim() || "121.94210";
+
+            ind.masuk = masuk;
+            ind.pulang = pulang;
+            ind.radius = radius;
+            ind.lat = lat;
+            ind.lng = lng;
+
+            // Sinkronkan ke Google Apps Script (Webhook)
+            window.syncToGoogleAppsScript("simpan_pengaturan_gps", {
+                industri: ind.nama,
+                masuk: masuk,
+                pulang: pulang,
+                radius: radius,
+                lat: lat,
+                lng: lng
+            });
+
+            window.showModalInfo("Pengaturan Tersimpan 💾", 
+                `Pengaturan lokasi untuk <b>${ind.nama}</b> berhasil diperbarui:<br>
+                • Jam Kerja: <b>${masuk} - ${pulang} WITA</b><br>
+                • Radius Toleransi: <b>${radius} Meter</b><br>
+                • Koordinat: <b>${lat}, ${lng}</b>`
+            );
+
+            window.openFeature("jam-gps", "Jam & Geofence GPS");
+        };
+
         // VIEW: Agenda Kunjungan
         window.renderAgendaKunjungan = function() {
             let rows = "";
@@ -1681,13 +1989,18 @@
                         <thead>
                             <tr><th>No</th><th>Industri Mitra</th><th>Waktu</th><th>Agenda Supervisi</th><th>Status</th></tr>
                         </thead>
-                        <tbody>${rows || '<tr><td colspan="5" style="text-align:center;">Belum ada jadwal kunjungan</td></tr>'}</tbody>
+                        <tbody>${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada jadwal kunjungan supervisi</td></tr>'}</tbody>
                     </table>
                 </div>
             </div>`;
         };
 
         window.bukaModalJadwalKunjungan = function() {
+            if ((window.cloudState.industri || []).length === 0) {
+                window.showModalInfo("Data Industri Kosong", "Silakan masukkan data Mitra Industri terlebih dahulu sebelum menjadwalkan kunjungan.");
+                return;
+            }
+
             let indOpts = "";
             (window.cloudState.industri || []).forEach(ind => indOpts += `<option value="${ind.nama}">${ind.nama}</option>`);
 
@@ -1745,7 +2058,7 @@
                 rows += `<tr>
                     <td>${idx+1}</td>
                     <td><b>${a.nama}</b></td>
-                    <td>${a.industri || 'PT Maju Teknologi'}</td>
+                    <td>${a.industri || '-'}</td>
                     <td>${a.tanggal}</td>
                     <td>${a.jam} WITA</td>
                     <td><span class="badge-status ${badge}">${a.status}</span></td>
@@ -1780,7 +2093,7 @@
                     <thead>
                         <tr><th>No</th><th>Nama Siswa</th><th>Industri</th><th>Tanggal</th><th>Jam</th><th>Validasi GPS</th></tr>
                     </thead>
-                    <tbody>${rows || '<tr><td colspan="6" style="text-align:center;">Belum ada catatan presensi</td></tr>'}</tbody>
+                    <tbody>${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada catatan presensi siswa</td></tr>'}</tbody>
                 </table>
             </div>`;
         };
@@ -1817,7 +2130,7 @@
                 <div><h3 style="font-size:15px; font-weight:bold;">📁 Manajemen Dokumen & Panduan PKL</h3><p style="font-size:11px; color:var(--text-muted);">Pusat unduhan buku panduan, jurnal cetak, dan borang.</p></div>
                 <button onclick="window.bukaModalUploadDokumen()" class="btn-action btn-blue">+ Upload Dokumen</button>
             </div>
-            <div class="table-wrap"><table><thead><tr><th>No</th><th>Judul Berkas</th><th>Format</th><th>Izin Akses</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+            <div class="table-wrap"><table><thead><tr><th>No</th><th>Judul Berkas</th><th>Format</th><th>Izin Akses</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada dokumen yang diunggah</td></tr>'}</tbody></table></div>`;
         };
 
         window.bukaModalUploadDokumen = function() {
@@ -1850,82 +2163,6 @@
             window.closeDynamicModal();
             window.showModalInfo("Dokumen Terunggah 📁", `Dokumen "${judul}" berhasil diunggah.`);
             window.openFeature("dokumen", "Manajemen Dokumen");
-        };
-
-        // VIEW: Pengaturan Jam & GPS
-        window.renderPengaturanJamGPS = function() {
-            let cards = "";
-            (window.cloudState.industri || []).forEach((ind, idx) => {
-                cards += `<div style="background:rgba(0,0,0,0.25); border:1px solid var(--border-hud); border-radius:14px; padding:16px; margin-bottom:12px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
-                        <div style="font-weight:800; font-size:14px; color:#38bdf8;">🏭 ${ind.nama}</div>
-                        <span class="badge-status badge-blue">Radius Geofence: ${ind.radius} Meter</span>
-                    </div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
-                        <div>
-                            <label class="form-label">Jam Masuk (WITA):</label>
-                            <input type="time" id="jamMasuk_${idx}" class="form-control" value="${ind.masuk || '08:00'}">
-                        </div>
-                        <div>
-                            <label class="form-label">Jam Pulang (WITA):</label>
-                            <input type="time" id="jamPulang_${idx}" class="form-control" value="${ind.pulang || '16:00'}">
-                        </div>
-                    </div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-top:10px;">
-                        <div>
-                            <label class="form-label">Radius (Meter):</label>
-                            <input type="number" id="radiusGps_${idx}" class="form-control" value="${ind.radius || 50}">
-                        </div>
-                        <div>
-                            <label class="form-label">Latitude Satelit:</label>
-                            <input type="text" id="latGps_${idx}" class="form-control" value="${ind.lat || '0.45612'}">
-                        </div>
-                        <div>
-                            <label class="form-label">Longitude Satelit:</label>
-                            <input type="text" id="lngGps_${idx}" class="form-control" value="${ind.lng || '121.94210'}">
-                        </div>
-                    </div>
-                    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
-                        <button onclick="window.deteksiGpsOtomatis(${idx})" class="btn-action btn-emerald">📍 Deteksi Titik GPS Saya</button>
-                        <button onclick="window.simpanPengaturanGpsSingle(${idx})" class="btn-action btn-blue">💾 Simpan GPS ${ind.nama}</button>
-                    </div>
-                </div>`;
-            });
-
-            return `<div class="card">
-                <h3 style="font-size:15px; font-weight:bold; margin-bottom:4px;">📍 Pengaturan Jam Kerja & Radius Geofence GPS</h3>
-                <p style="font-size:11px; color:var(--text-muted); margin-bottom:14px;">Atur batas toleransi jarak dan jam presensi siswa di masing-masing industri.</p>
-                ${cards}
-            </div>`;
-        };
-
-        window.deteksiGpsOtomatis = function(idx) {
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(
-                    pos => {
-                        const latEl = document.getElementById(`latGps_${idx}`);
-                        const lngEl = document.getElementById(`lngGps_${idx}`);
-                        if (latEl) latEl.value = pos.coords.latitude.toFixed(6);
-                        if (lngEl) lngEl.value = pos.coords.longitude.toFixed(6);
-                        window.showModalInfo("GPS Terkunci 🛰️", `Titik lokasi: Lat ${pos.coords.latitude.toFixed(6)}, Lng ${pos.coords.longitude.toFixed(6)}`);
-                    },
-                    err => {
-                        window.showModalInfo("Deteksi GPS", "Izin lokasi tidak aktif atau koordinat belum terbaca.");
-                    }
-                );
-            }
-        };
-
-        window.simpanPengaturanGpsSingle = function(idx) {
-            const ind = window.cloudState.industri[idx];
-            if (!ind) return;
-            ind.masuk = document.getElementById(`jamMasuk_${idx}`)?.value || "08:00";
-            ind.pulang = document.getElementById(`jamPulang_${idx}`)?.value || "16:00";
-            ind.radius = parseInt(document.getElementById(`radiusGps_${idx}`)?.value) || 50;
-            ind.lat = document.getElementById(`latGps_${idx}`)?.value || "0.45612";
-            ind.lng = document.getElementById(`lngGps_${idx}`)?.value || "121.94210";
-
-            window.showModalInfo("Pengaturan Tersimpan 💾", `Konfigurasi jam dan radius ${ind.radius}m untuk ${ind.nama} berhasil disimpan!`);
         };
 
         // VIEW: Pengaturan Sistem & Banner
@@ -1967,17 +2204,17 @@
                 rows += `<tr>
                     <td>${idx+1}</td>
                     <td><b>${s.nama}</b></td>
-                    <td>${s.kelas}</td>
-                    <td>${s.industri}</td>
-                    <td><span class="badge-status badge-green">${s.hadir}% Hadir</span></td>
-                    <td><button onclick="window.showModalInfo('Profil Siswa', 'Nama: <b>${s.nama}</b><br>NISN: ${s.nisn}<br>Kelas: ${s.kelas}<br>Tempat PKL: ${s.industri}<br>Pembimbing: ${s.pembimbing}')" class="btn-action btn-blue">Detail</button></td>
+                    <td>${s.kelas || '-'}</td>
+                    <td>${s.industri || '-'}</td>
+                    <td><span class="badge-status badge-green">${s.hadir || 100}% Hadir</span></td>
+                    <td><button onclick="window.showModalInfo('Profil Siswa', 'Nama: <b>${s.nama}</b><br>NISN: ${s.nisn}<br>Kelas: ${s.kelas || '-'}<br>Tempat PKL: ${s.industri || '-'}<br>Pembimbing: ${s.pembimbing || '-'}')" class="btn-action btn-blue">Detail</button></td>
                 </tr>`;
             });
 
             return `<div class="card">
                 <h3 style="font-size:15px; font-weight:bold; margin-bottom:4px;">👥 Siswa Bimbingan / Magang</h3>
                 <p style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">Daftar siswa peserta PKL dalam naungan bimbingan Anda.</p>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Siswa</th><th>Kelas</th><th>Industri</th><th>Kehadiran</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div>
+                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Siswa</th><th>Kelas</th><th>Industri</th><th>Kehadiran</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada siswa bimbingan yang dialokasikan</td></tr>'}</tbody></table></div>
             </div>`;
         };
 
@@ -2003,7 +2240,7 @@
             return `<div class="card">
                 <h3 style="font-size:15px; font-weight:bold; margin-bottom:4px;">📋 Verifikasi & Validasi Jurnal Siswa</h3>
                 <p style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">Tinjau catatan logbook harian siswa dan berikan pengesahan.</p>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Siswa</th><th>Tanggal</th><th>Aktivitas Kerja</th><th>Status Verifikasi</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="6" style="text-align:center;">Belum ada jurnal</td></tr>'}</tbody></table></div>
+                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Siswa</th><th>Tanggal</th><th>Aktivitas Kerja</th><th>Status Verifikasi</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada catatan jurnal siswa yang menunggu verifikasi</td></tr>'}</tbody></table></div>
             </div>`;
         };
 
@@ -2019,12 +2256,12 @@
         // VIEW: Penilaian Industri
         window.renderPenilaianIndustri = function() {
             let opts = "";
-            (window.cloudState.siswa || []).forEach(s => opts += `<option value="${s.nama}">${s.nama} (${s.kelas} - ${s.industri})</option>`);
+            (window.cloudState.siswa || []).forEach(s => opts += `<option value="${s.nama}">${s.nama} (${s.kelas || 'PKL'} - ${s.industri || 'DUDI'})</option>`);
 
             return `<div class="card">
                 <h3 style="font-size:15px; font-weight:bold; margin-bottom:6px;">🏆 Lembar Penilaian & Borang Berstempel</h3>
                 <p style="font-size:11px; color:var(--text-muted); margin-bottom:14px;">Masukkan evaluasi kompetensi magang dan unggah berkas fisik nilai yang telah distempel.</p>
-                <div class="form-group"><label class="form-label">Pilih Siswa yang Dinilai:</label><select id="nilaiSiswa" class="form-control">${opts}</select></div>
+                <div class="form-group"><label class="form-label">Pilih Siswa yang Dinilai:</label><select id="nilaiSiswa" class="form-control">${opts || '<option value="">-- Belum Ada Siswa Terdaftar --</option>'}</select></div>
                 <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
                     <div><label class="form-label">Nilai Teknis (1-100):</label><input type="number" id="nilaiTeknis" class="form-control" value="88"></div>
                     <div><label class="form-label">Kedisiplinan (1-100):</label><input type="number" id="nilaiDisiplin" class="form-control" value="92"></div>
@@ -2038,6 +2275,10 @@
 
         window.simpanPenilaianIndustri = function() {
             const sw = document.getElementById("nilaiSiswa")?.value;
+            if (!sw) {
+                window.showModalInfo("Peringatan", "Belum ada siswa yang dipilih untuk dinilai.");
+                return;
+            }
             const tek = parseFloat(document.getElementById("nilaiTeknis")?.value) || 0;
             const dis = parseFloat(document.getElementById("nilaiDisiplin")?.value) || 0;
             const ini = parseFloat(document.getElementById("nilaiInisiatif")?.value) || 0;
@@ -2059,13 +2300,13 @@
             return `<div class="card">
                 <h3 style="font-size:15px; font-weight:bold; margin-bottom:4px;">📄 Laporan Akhir PKL</h3>
                 <p style="font-size:11px; color:var(--text-muted); margin-bottom:14px;">Unggah dokumen laporan akhir (Format PDF) untuk verifikasi guru penguji dan panitia.</p>
-                <div class="form-group"><label class="form-label">Judul Laporan PKL:</label><input type="text" id="lapJudul" class="form-control" placeholder="Contoh: Laporan PKL Implementasi MikroTik di PT Maju Teknologi"></div>
+                <div class="form-group"><label class="form-label">Judul Laporan PKL:</label><input type="text" id="lapJudul" class="form-control" placeholder="Contoh: Laporan PKL Implementasi Jaringan di DUDI"></div>
                 <div class="form-group"><label class="form-label">Pilih Berkas Laporan (PDF):</label><input type="file" id="lapFile" accept=".pdf" class="form-control"></div>
                 <button onclick="window.simpanLaporanAkhir()" class="btn-action btn-blue" style="padding:10px 16px; font-weight:800; width:100%;">🚀 Kirim Laporan Akhir ke Sekolah</button>
             </div>
             <div class="card">
                 <h4 style="font-size:13px; font-weight:700; margin-bottom:6px;">Riwayat Pengajuan Laporan</h4>
-                <div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Judul Laporan</th><th>Penguji / Pembimbing</th><th>Status</th></tr></thead><tbody>${reportsHtml || '<tr><td colspan="4" style="text-align:center;">Belum ada pengajuan laporan</td></tr>'}</tbody></table></div>
+                <div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Judul Laporan</th><th>Penguji / Pembimbing</th><th>Status</th></tr></thead><tbody>${reportsHtml || '<tr><td colspan="4" class="empty-placeholder">Belum ada pengajuan laporan akhir</td></tr>'}</tbody></table></div>
             </div>`;
         };
 
@@ -2079,7 +2320,7 @@
             const item = {
                 judul: judul,
                 tanggal: new Date().toISOString().split('T')[0],
-                evaluator: "Budi, S.Pd. & Tim Penguji",
+                evaluator: "Tim Penguji PKL",
                 status: "Menunggu Pengujian"
             };
 
@@ -2118,11 +2359,11 @@
                 return;
             }
 
-            const profile = window.cloudState.userProfile || { nama: "Ahmad Rizky" };
+            const profile = window.cloudState.userProfile || { nama: "Pengguna" };
             const payload = { siswa: profile.nama, kategori: kat, pesan: psn };
             window.syncToGoogleAppsScript("kirim_aduan", payload);
             window.showModalInfo("Laporan Diterima 🚨", "Laporan kendala Anda telah diterima Panitia PKL.");
-            window.openFeature("dashboard", "Dashboard Siswa");
+            window.openFeature("dashboard", "Dashboard Utama");
         };
 
         // Modal Lupa Password
