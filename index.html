@@ -2322,7 +2322,31 @@
             } catch(e) {}
         };
 
+        window.sinkronDariGoogleSheets = function(silent = false) {
+            if (!window.gasBackendUrl) return;
+            try {
+                fetch(window.gasBackendUrl + "?type=ping")
+                    .then(res => res.json())
+                    .then(data => {
+                        console.log("[GAS Sync] Backend connected:", data);
+                        if (!silent && window.showModalInfo) {
+                            window.showModalInfo("Status Cloud", "Terkoneksi ke Google Sheets: " + (data.app || "OK"));
+                        }
+                    })
+                    .catch(err => {
+                        if (!silent) console.warn("[GAS Sync] Offline or CORS restricted:", err);
+                    });
+            } catch(e) {
+                if (!silent) console.warn("[GAS Sync] Gagal sinkron:", e);
+            }
+        };
+
         window.addEventListener("DOMContentLoaded", () => {
+            // Sinkronkan data dari cloud sheets jika fungsi tersedia
+            if (typeof window.sinkronDariGoogleSheets === "function") {
+                window.sinkronDariGoogleSheets(true);
+            }
+
             try {
                 const savedSession = localStorage.getItem(STORAGE_KEY_SESSION);
                 if (savedSession) {
