@@ -760,70 +760,17 @@
 
         <!-- Indikator Cloud Database Realtime -->
         <div class="cloud-sync-bar">
-            <div class="cloud-sync-status">
+            <div class="cloud-sync-status" onclick="window.bukaModalPengaturanCloud()" style="cursor: pointer;" title="Klik untuk cek status Cloud & Diagnostik">
                 <div class="cloud-dot" id="cloudStatusDot"></div>
-                <span id="cloudStatusText">Cloud Database Terhubung (500+ Perangkat)</span>
+                <span id="cloudStatusText">Cloud Database Terhubung</span>
             </div>
-            <button onclick="window.tarikDataDariCloud(false)" style="background: none; border: none; color: #0284c7; cursor: pointer; font-weight: 800; font-size: 11px; display: flex; align-items: center; gap: 4px;">
-                🔄 Refresh Cloud
-            </button>
-        </div>
-
-        <div class="app-sidebar-backdrop" id="sidebarBackdrop" onclick="window.closeDrawerSidebar()"></div>
-        <aside class="app-sidebar" id="appSidebar">
-            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid #bfdbfe; margin-bottom: 10px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div class="badge-logo" style="width: 38px; height: 38px; border-radius: 8px;">
-                        <img src="Logo SMK.png" alt="Logo" onerror="this.onerror=null; this.src='download.jfif';">
-                    </div>
-                    <div>
-                        <div style="font-size: 13px; font-weight: 900; color: #0284c7;">SIP-PKL</div>
-                        <div style="font-size: 9px; color: #b45309; font-weight: 800;">SMKN 1 MARISA</div>
-                    </div>
-                </div>
-                <button class="sidebar-close-btn" onclick="window.closeDrawerSidebar()">✕</button>
-            </div>
-
-            <!-- Wadah Navigasi Peran -->
-            <div id="sidebarNavContainer" style="display: flex; flex-direction: column; gap: 8px; flex: 1; overflow-y: auto;"></div>
-
-            <!-- Tombol Keluar / Logout -->
-            <div style="padding-top: 12px; border-top: 1px solid #e2e8f0; margin-top: auto;">
-                <button onclick="window.handleOnlineLogout()" class="sidebar-nav-item" style="width: 100%; color: #dc2626; border-color: #fecaca; background: #fef2f2;">
-                    <span>🚪</span>
-                    <span>Keluar Sistem (Logout)</span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button onclick="window.bukaModalPengaturanCloud()" style="background: none; border: none; color: #0284c7; cursor: pointer; font-weight: 800; font-size: 11px; display: flex; align-items: center; gap: 4px;">
+                    ⚙️ Status Cloud
                 </button>
-            </div>
-        </aside>
-
-        <div class="app-layout-main">
-            <main class="app-content-body">
-                <div id="mobileBackButtonWrap" style="display: none; margin-bottom: 12px;">
-                    <button onclick="window.openFeature('dashboard', 'Beranda')" class="btn-action btn-blue" style="box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);">
-                        ‹ Kembali ke Beranda
-                    </button>
-                </div>
-                <div id="mainFeatureContainer"></div>
-            </main>
-        </div>
-    </div>
-
-    <!-- MODAL DIALOGS -->
-    <div id="modalInfoBackdrop" class="custom-modal-backdrop">
-        <div class="custom-modal-card">
-            <h3 id="modalInfoTitle" style="font-size: 16px; font-weight: 900; color: #0284c7; margin-bottom: 10px;">Informasi</h3>
-            <div id="modalInfoMessage" style="font-size: 12px; color: #334155; line-height: 1.6; margin-bottom: 16px;"></div>
-            <button onclick="window.closeModalInfo()" class="btn-action-primary" style="padding: 10px;">OK, Mengerti</button>
-        </div>
-    </div>
-
-    <div id="modalConfirmBackdrop" class="custom-modal-backdrop">
-        <div class="custom-modal-card">
-            <h3 id="modalConfirmTitle" style="font-size: 16px; font-weight: 900; color: #ef4444; margin-bottom: 10px;">Konfirmasi Tindakan</h3>
-            <div id="modalConfirmMessage" style="font-size: 12px; color: #334155; line-height: 1.6; margin-bottom: 18px;"></div>
-            <div style="display: flex; justify-content: flex-end; gap: 8px;">
-                <button onclick="window.closeModalConfirm()" class="btn-action" style="background: #94a3b8; color: #fff;">Batal</button>
-                <button id="btnModalConfirmOk" class="btn-action btn-red">Lanjutkan Hapus</button>
+                <button onclick="window.tarikDataDariCloud(false)" style="background: none; border: none; color: #10b981; cursor: pointer; font-weight: 800; font-size: 11px; display: flex; align-items: center; gap: 4px;">
+                    🔄 Refresh
+                </button>
             </div>
         </div>
     </div>
@@ -2360,9 +2307,23 @@
                 hadir: 100 
             };
             window.cloudState.siswa.unshift(item);
+
+            // OTOMATIS TERBITKAN AKUN LOGIN SISWA AGAR LANGSUNG BISA LOGIN DI SEMUA HP
+            const existUser = (window.cloudState.registeredUsers || []).find(u => u.username === nis);
+            if (!existUser) {
+                window.cloudState.registeredUsers.unshift({
+                    role: "siswa",
+                    nama: nama,
+                    username: nis,
+                    pass: "siswa123",
+                    email: nis + "@smkn1marisa.sch.id",
+                    identitas: nis
+                });
+            }
+
             window.simpanDatabasePersisten();
             window.closeDynamicModal();
-            window.showModalInfo("Siswa Tersimpan 👨‍🎓", `Data siswa <b>${nama}</b> (NIS: ${nis}) berhasil ditambahkan.`);
+            window.showModalInfo("Siswa Tersimpan 👨‍🎓", `Data siswa <b>${nama}</b> (NIS: ${nis}) berhasil ditambahkan dan otomatis diterbitkan akun loginnya (Username: <code>${nis}</code>, Password: <code>siswa123</code> atau NIS)! Data langsung dikirim ke Cloud Google Sheets.`);
             window.openFeature("master-siswa", "Data Master Siswa");
         };
 
