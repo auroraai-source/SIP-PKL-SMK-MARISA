@@ -632,10 +632,9 @@
             dokumen: [],
             agendaKunjungan: [],
             laporanAkhir: [],
-            // Akun Panitia/Admin disiapkan dengan password resmi SMKBisa2000
+            // Akun Panitia/Admin resmi: Username "Panitia PKL" & Password "SMKBisa2000"
             registeredUsers: [
-                { username: "SMKBisa2000", pass: "SMKBisa2000", role: "admin", nama: "Panitia PKL SMKN 1 Marisa", identitas: "PANITIA-2026", email: "admin.pkl@smkn1marisa.sch.id" },
-                { username: "admin", pass: "SMKBisa2000", role: "admin", nama: "Panitia PKL SMKN 1 Marisa", identitas: "PANITIA-2026", email: "admin.pkl@smkn1marisa.sch.id" }
+                { username: "Panitia PKL", pass: "SMKBisa2000", role: "admin", nama: "Panitia PKL SMKN 1 Marisa", identitas: "PANITIA-2026", email: "admin.pkl@smkn1marisa.sch.id" }
             ]
         };
 
@@ -643,7 +642,7 @@
         const roleDefaults = {
             siswa: { 
                 username: "", 
-                pass: "siswa123", 
+                pass: "", 
                 label: "ROOM SISWA PKL", 
                 icon: "👨‍🎓", 
                 usernameLabel: "Username / NISN Siswa:", 
@@ -651,7 +650,7 @@
             },
             guru: { 
                 username: "", 
-                pass: "guru123", 
+                pass: "", 
                 label: "ROOM GURU PEMBIMBING", 
                 icon: "👩‍🏫", 
                 usernameLabel: "Username / NIP Guru:", 
@@ -659,23 +658,23 @@
             },
             orangtua: { 
                 username: "", 
-                pass: "ortu123", 
+                pass: "", 
                 label: "ROOM ORANG TUA SISWA", 
                 icon: "👨‍👩‍👧", 
                 usernameLabel: "Username / No WA Wali:", 
                 placeholder: "Masukkan Username Wali Terdaftar" 
             },
             admin: { 
-                username: "SMKBisa2000", 
-                pass: "SMKBisa2000", 
+                username: "", 
+                pass: "", 
                 label: "ROOM PANITIA / ADMIN PKL", 
                 icon: "👨‍💼", 
                 usernameLabel: "Username Panitia / Admin:", 
-                placeholder: "Masukkan Username Admin (SMKBisa2000)" 
+                placeholder: "Masukkan Username Panitia PKL" 
             },
             industri: { 
                 username: "", 
-                pass: "industri123", 
+                pass: "", 
                 label: "ROOM INDUSTRI MITRA DUDI", 
                 icon: "🏭", 
                 usernameLabel: "Username / ID Mitra DUDI:", 
@@ -747,12 +746,13 @@
             if (textEl) textEl.innerText = def.label;
             if (userLabelEl) userLabelEl.innerText = def.usernameLabel;
 
+            // Kolom input username & password selalu bersih dan kosong di semua ekosistem
             if (userInput) {
                 userInput.placeholder = def.placeholder;
-                userInput.value = def.username || "";
+                userInput.value = "";
             }
             if (passInput) {
-                passInput.value = (role === 'admin') ? "SMKBisa2000" : "";
+                passInput.value = "";
             }
         };
 
@@ -787,7 +787,7 @@
             const passInput = document.getElementById("loginPassInput");
 
             if (role === 'admin') {
-                if (userInput) userInput.value = "SMKBisa2000";
+                if (userInput) userInput.value = "Panitia PKL";
                 if (passInput) passInput.value = "SMKBisa2000";
             } else {
                 // Cari pengguna terdaftar untuk peran ini
@@ -817,10 +817,10 @@
                 return;
             }
 
-            // 1. Cek Admin
+            // 1. Cek Admin Resmi ("Panitia PKL" / "SMKBisa2000")
             if (role === 'admin') {
-                if ((username.toLowerCase() === 'smkbisa2000' || username.toLowerCase() === 'admin') && 
-                    (pass === 'SMKBisa2000' || pass === 'admin123')) {
+                if ((username.toLowerCase() === 'panitia pkl' || username.toLowerCase() === 'smkbisa2000' || username.toLowerCase() === 'admin') && 
+                    pass === 'SMKBisa2000') {
                     window.suksesLogin({
                         nama: "Panitia PKL SMKN 1 Marisa",
                         role: "admin",
@@ -1027,7 +1027,7 @@
                 else if (u.role === 'industri') badgeClass = "badge-amber";
                 else if (u.role === 'orangtua') badgeClass = "badge-purple";
 
-                const isProtectedAdmin = u.role === 'admin' && (u.username === 'SMKBisa2000' || u.username === 'admin');
+                const isProtectedAdmin = u.role === 'admin' && (u.username.toLowerCase() === 'panitia pkl' || u.username.toLowerCase() === 'smkbisa2000' || u.username === 'admin');
 
                 rows += `<tr>
                     <td>${idx + 1}</td>
@@ -2587,7 +2587,7 @@
             else if (role === 'guru') info = "Gunakan <b>Nomor Induk Pegawai (NIP)</b> tanpa spasi atau username guru resmi dari panitia.";
             else if (role === 'orangtua') info = "Gunakan <b>Username Akun Wali</b> yang diterbitkan oleh panitia (format: <code>wali.[nama_siswa]</code>).";
             else if (role === 'industri') info = "Gunakan <b>ID Mitra DUDI</b> resmi yang diberikan pihak sekolah (format: <code>dudi.[nama_mitra]</code>).";
-            else info = "Username Panitia / Admin PKL: <b>SMKBisa2000</b> atau <b>admin</b>.";
+            else info = "Username Panitia / Admin PKL: <b>Panitia PKL</b>.";
 
             window.showModalInfo("Panduan Kredensial Resmi", info);
         };
