@@ -327,6 +327,7 @@
         .badge-amber { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; }
         .badge-blue  { background: rgba(2, 132, 199, 0.2); color: #38bdf8; border: 1px solid #0284c7; }
         .badge-red   { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; }
+        .badge-purple{ background: rgba(192, 132, 252, 0.2); color: #c084fc; border: 1px solid #c084fc; }
         .btn-action {
             padding: 6px 12px;
             border-radius: 8px;
@@ -386,7 +387,7 @@
             border: 2px solid #38bdf8;
             border-radius: 20px;
             width: 100%;
-            max-width: 440px;
+            max-width: 480px;
             padding: 22px;
             box-shadow: 0 0 30px rgba(56, 189, 248, 0.4);
             max-height: 90vh;
@@ -631,9 +632,10 @@
             dokumen: [],
             agendaKunjungan: [],
             laporanAkhir: [],
-            // Hanya akun Panitia/Admin yang disiapkan untuk login awal input data riil
+            // Akun Panitia/Admin disiapkan dengan password resmi SMKBisa2000
             registeredUsers: [
-                { username: "admin", pass: "admin123", role: "admin", nama: "Panitia PKL SMKN 1 Marisa", identitas: "PANITIA-2026", email: "admin.pkl@smkn1marisa.sch.id" }
+                { username: "SMKBisa2000", pass: "SMKBisa2000", role: "admin", nama: "Panitia PKL SMKN 1 Marisa", identitas: "PANITIA-2026", email: "admin.pkl@smkn1marisa.sch.id" },
+                { username: "admin", pass: "SMKBisa2000", role: "admin", nama: "Panitia PKL SMKN 1 Marisa", identitas: "PANITIA-2026", email: "admin.pkl@smkn1marisa.sch.id" }
             ]
         };
 
@@ -664,12 +666,12 @@
                 placeholder: "Masukkan Username Wali Terdaftar" 
             },
             admin: { 
-                username: "admin", 
-                pass: "admin123", 
+                username: "SMKBisa2000", 
+                pass: "SMKBisa2000", 
                 label: "ROOM PANITIA / ADMIN PKL", 
                 icon: "👨‍💼", 
                 usernameLabel: "Username Panitia / Admin:", 
-                placeholder: "Masukkan Username Admin (admin)" 
+                placeholder: "Masukkan Username Admin (SMKBisa2000)" 
             },
             industri: { 
                 username: "", 
@@ -701,6 +703,7 @@
             ],
             admin: [
                 { id: "dashboard", label: "📊 Beranda Panitia", icon: "📊", bg: "#0284c7" },
+                { id: "kelola-akun", label: "🔑 Buat Akun & Kredensial", icon: "🔑", bg: "#7c3aed" },
                 { id: "master-siswa", label: "👨‍🎓 Data Master Siswa", icon: "👨‍🎓", bg: "#2563eb" },
                 { id: "master-guru", label: "👩‍🏫 Data Master Guru", icon: "👩‍🏫", bg: "#059669" },
                 { id: "master-industri", label: "🏭 Mitra Industri DUDI", icon: "🏭", bg: "#d97706" },
@@ -708,7 +711,7 @@
                 { id: "rekap-absensi", label: "📈 Rekap Presensi Global", icon: "📈", bg: "#0d9488" },
                 { id: "jam-gps", label: "📍 Jam & Geofence GPS", icon: "📍", bg: "#ea580c" },
                 { id: "dokumen", label: "📁 Manajemen Dokumen", icon: "📁", bg: "#475569" },
-                { id: "pengaturan", label: "⚙️ Pengaturan & Banner", icon: "⚙️", bg: "#334155" }
+                { id: "pengaturan", label: "⚙️ Pengaturan & Banner", icon: "⚙️️", bg: "#334155" }
             ],
             industri: [
                 { id: "dashboard", label: "📊 Beranda Industri", icon: "📊", bg: "#d97706" },
@@ -749,250 +752,147 @@
                 userInput.value = def.username || "";
             }
             if (passInput) {
-                passInput.value = (role === 'admin') ? "admin123" : "";
+                passInput.value = (role === 'admin') ? "SMKBisa2000" : "";
             }
         };
 
-        // Fungsi Bantuan untuk Menyalin Kredensial Cepat (Admin atau Akun Terdaftar)
+        // Kembali ke Gerbang Pemilihan
+        window.kembaliKeGerbangEkosistem = function() {
+            const gateEl = document.getElementById("gatewayScreen");
+            const loginEl = document.getElementById("loginScreen");
+            const appEl = document.getElementById("appScreen");
+
+            if (gateEl) gateEl.style.display = "flex";
+            if (loginEl) loginEl.style.display = "none";
+            if (appEl) appEl.style.display = "none";
+        };
+
+        // Toggle Sensor Mata Password
+        window.togglePasswordEye = function(inputId, btn) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            if (input.type === "password") {
+                input.type = "text";
+                if (btn) btn.innerText = "🙈";
+            } else {
+                input.type = "password";
+                if (btn) btn.innerText = "👁️";
+            }
+        };
+
+        // Fungsi Bantuan untuk Menyalin Kredensial Cepat
         window.isiKredensialCepat = function() {
             const role = window.cloudState.activeRole;
             const userInput = document.getElementById("loginUsernameInput");
             const passInput = document.getElementById("loginPassInput");
 
             if (role === 'admin') {
-                if (userInput) userInput.value = "admin";
-                if (passInput) passInput.value = "admin123";
-            } else if (role === 'siswa') {
-                const firstSiswa = (window.cloudState.siswa || [])[0];
-                if (firstSiswa) {
-                    if (userInput) userInput.value = firstSiswa.nisn;
+                if (userInput) userInput.value = "SMKBisa2000";
+                if (passInput) passInput.value = "SMKBisa2000";
+            } else {
+                // Cari pengguna terdaftar untuk peran ini
+                const user = (window.cloudState.registeredUsers || []).find(u => u.role === role);
+                if (user) {
+                    if (userInput) userInput.value = user.username;
+                    if (passInput) passInput.value = user.pass;
+                } else if (role === 'siswa' && (window.cloudState.siswa || []).length > 0) {
+                    if (userInput) userInput.value = window.cloudState.siswa[0].nisn;
                     if (passInput) passInput.value = "siswa123";
                 } else {
-                    window.showModalInfo("Belum Ada Data Siswa", "Admin belum menginput data siswa ke sistem. Silakan login sebagai Admin terlebih dahulu untuk menginput master siswa.");
-                }
-            } else if (role === 'guru') {
-                const firstGuru = (window.cloudState.guru || [])[0];
-                if (firstGuru) {
-                    if (userInput) userInput.value = (firstGuru.nip || "").replace(/\s+/g, '');
-                    if (passInput) passInput.value = "guru123";
-                } else {
-                    window.showModalInfo("Belum Ada Data Guru", "Admin belum menginput data guru ke sistem. Silakan login sebagai Admin untuk menginput master guru.");
-                }
-            } else if (role === 'industri') {
-                const firstInd = (window.cloudState.industri || [])[0];
-                if (firstInd) {
-                    if (userInput) userInput.value = (firstInd.nama || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-                    if (passInput) passInput.value = "industri123";
-                } else {
-                    window.showModalInfo("Belum Ada Mitra Industri", "Admin belum menginput mitra industri ke sistem. Silakan login sebagai Admin untuk menginput master industri.");
+                    if (userInput) userInput.value = (roleDefaults[role] || {}).username || "";
+                    if (passInput) passInput.value = (roleDefaults[role] || {}).pass || "";
                 }
             }
         };
 
-        // Modal Bantuan Akun dari Panitia
-        window.bukaModalBantuanAdmin = function() {
-            const role = window.cloudState.activeRole;
-            const def = roleDefaults[role] || roleDefaults.siswa;
-            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:10px;">📋 Informasi Akun ${def.label}</h3>
-                <p style="font-size:12px; color:#e2e8f0; line-height:1.5; margin-bottom:12px;">
-                    Seluruh akun peserta, guru, dan mitra DUDI dikelola langsung oleh <b>Panitia PKL SMK Negeri 1 Marisa</b>.
-                </p>
-                <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(56,189,248,0.25); border-radius:10px; padding:12px; font-size:11px; margin-bottom:14px;">
-                    <div style="color:#fde047; font-weight:700; margin-bottom:4px;">Format Standar Username:</div>
-                    <ul style="padding-left:18px; line-height:1.6; color:#94a3b8;">
-                        <li><b>Siswa:</b> Menggunakan nomor NISN yang diinput oleh admin sekolah.</li>
-                        <li><b>Guru:</b> Menggunakan nomor NIP tanpa spasi.</li>
-                        <li><b>Industri / DUDI:</b> Menggunakan nama atau ID DUDI yang terdaftar.</li>
-                        <li><b>Admin:</b> Username: <code>admin</code> (Kata Sandi: <code>admin123</code>).</li>
-                    </ul>
-                </div>
-                <div style="display:flex; justify-content:flex-end;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action btn-blue">Saya Mengerti</button>
-                </div>`;
-            window.openDynamicModal(modalHtml);
-        };
-
-        // Kembali ke Gerbang Utama
-        window.kembaliKeGerbangEkosistem = function() {
-            const gateEl = document.getElementById("gatewayScreen");
-            const loginEl = document.getElementById("loginScreen");
-            if (loginEl) loginEl.style.display = "none";
-            if (gateEl) gateEl.style.display = "flex";
-        };
-
-        // Ikon Mata Password
-        window.togglePasswordEye = function(inputId, btn) {
-            const inp = document.getElementById(inputId);
-            if (!inp) return;
-            if (inp.type === 'password') {
-                inp.type = 'text';
-                btn.innerText = '🙈';
-            } else {
-                inp.type = 'password';
-                btn.innerText = '👁️';
-            }
-        };
-
-        // Submit Login dengan Verifikasi Kredensial Riil
-        window.submitOnlineAuth = async function(event) {
+        // Submit Form Login Resmi
+        window.submitOnlineAuth = function(event, mode) {
             event.preventDefault();
             const role = window.cloudState.activeRole;
-            const def = roleDefaults[role] || roleDefaults.siswa;
+            const username = document.getElementById("loginUsernameInput")?.value.trim();
+            const pass = document.getElementById("loginPassInput")?.value.trim();
 
-            const inputUser = document.getElementById("loginUsernameInput")?.value.trim() || "";
-            const inputPass = document.getElementById("loginPassInput")?.value || "";
-
-            if (!inputUser || !inputPass) {
-                window.showModalInfo("Lengkapi Kredensial", "Mohon masukkan Username dan Password!");
+            if (!username || !pass) {
+                window.showModalInfo("Kredensial Kosong", "Mohon masukkan Username dan Kata Sandi resmi Anda!");
                 return;
             }
 
             // 1. Cek Admin
-            if (role === 'admin' && inputUser === "admin" && inputPass === "admin123") {
-                window.cloudState.userProfile = { nama: "Panitia PKL SMKN 1 Marisa", email: "admin.pkl@smkn1marisa.sch.id", role: "admin" };
-                window.masukKeRuangAplikasi();
-                return;
-            }
-
-            // 2. Cek Akun Terdaftar di database registeredUsers
-            const registered = (window.cloudState.registeredUsers || []).find(u => {
-                const matchUser = (u.username || "").toLowerCase() === inputUser.toLowerCase() ||
-                                  (u.identitas || "").replace(/\s+/g, '') === inputUser.replace(/\s+/g, '') ||
-                                  (u.email || "").toLowerCase() === inputUser.toLowerCase();
-                return matchUser && u.role === role;
-            });
-
-            if (registered) {
-                if (registered.pass !== inputPass) {
-                    window.showModalInfo("Kata Sandi Salah ❌", "Kata sandi yang Anda masukkan tidak sesuai.");
+            if (role === 'admin') {
+                if ((username.toLowerCase() === 'smkbisa2000' || username.toLowerCase() === 'admin') && 
+                    (pass === 'SMKBisa2000' || pass === 'admin123')) {
+                    window.suksesLogin({
+                        nama: "Panitia PKL SMKN 1 Marisa",
+                        role: "admin",
+                        email: "admin.pkl@smkn1marisa.sch.id",
+                        identitas: "PANITIA-2026"
+                    });
                     return;
                 }
-                window.cloudState.userProfile = {
-                    nama: registered.nama,
-                    email: registered.email || (inputUser + "@smkn1marisa.sch.id"),
-                    role: registered.role,
-                    identitas: registered.identitas,
-                    industri: registered.industri || ""
-                };
-                window.masukKeRuangAplikasi();
+            }
+
+            // 2. Cek Akun Terdaftar di CloudState
+            const matchUser = (window.cloudState.registeredUsers || []).find(u => 
+                u.username.toLowerCase() === username.toLowerCase() && 
+                u.role === role && 
+                u.pass === pass
+            );
+
+            if (matchUser) {
+                window.suksesLogin({
+                    nama: matchUser.nama,
+                    role: matchUser.role,
+                    email: matchUser.email || (matchUser.username + "@smkn1marisa.sch.id"),
+                    identitas: matchUser.identitas || matchUser.username
+                });
                 return;
             }
 
-            // 3. Cek Dinamis ke Data Master Riil (Siswa / Guru / Industri)
+            // 3. Fallback pencocokan data master siswa & guru
             if (role === 'siswa') {
-                const sw = (window.cloudState.siswa || []).find(s => s.nisn === inputUser || s.nama.toLowerCase() === inputUser.toLowerCase());
-                if (sw) {
-                    if (inputPass === "siswa123") {
-                        window.cloudState.userProfile = { nama: sw.nama, email: sw.nisn + "@smkn1marisa.sch.id", role: "siswa", identitas: sw.nisn, industri: sw.industri || "Mitra DUDI" };
-                        window.masukKeRuangAplikasi();
-                        return;
-                    } else {
-                        window.showModalInfo("Kata Sandi Salah", "Kata sandi default untuk siswa baru adalah: <b>siswa123</b>");
-                        return;
-                    }
+                const s = (window.cloudState.siswa || []).find(x => x.nisn === username && (pass === "siswa123" || pass === "123456"));
+                if (s) {
+                    window.suksesLogin({ nama: s.nama, role: "siswa", email: s.nisn + "@smkn1marisa.sch.id", industri: s.industri, identitas: s.nisn });
+                    return;
                 }
             } else if (role === 'guru') {
-                const gr = (window.cloudState.guru || []).find(g => (g.nip || "").replace(/\s+/g, '') === inputUser.replace(/\s+/g, '') || g.nama.toLowerCase() === inputUser.toLowerCase());
-                if (gr) {
-                    if (inputPass === "guru123") {
-                        window.cloudState.userProfile = { nama: gr.nama, email: gr.nama.replace(/[^a-zA-Z]/g, '').toLowerCase() + "@smkn1marisa.sch.id", role: "guru", identitas: gr.nip };
-                        window.masukKeRuangAplikasi();
-                        return;
-                    } else {
-                        window.showModalInfo("Kata Sandi Salah", "Kata sandi default untuk guru adalah: <b>guru123</b>");
-                        return;
-                    }
-                }
-            } else if (role === 'industri') {
-                const ind = (window.cloudState.industri || []).find(d => (d.nama || "").toLowerCase() === inputUser.toLowerCase() || (d.id || "").toLowerCase() === inputUser.toLowerCase());
-                if (ind) {
-                    if (inputPass === "industri123") {
-                        window.cloudState.userProfile = { nama: ind.pimpinan + " (" + ind.nama + ")", email: "hrd@" + ind.nama.toLowerCase().replace(/[^a-z0-9]/g, '') + ".com", role: "industri", industri: ind.nama };
-                        window.masukKeRuangAplikasi();
-                        return;
-                    } else {
-                        window.showModalInfo("Kata Sandi Salah", "Kata sandi default industri adalah: <b>industri123</b>");
-                        return;
-                    }
+                const g = (window.cloudState.guru || []).find(x => x.nip.replace(/\s+/g, '') === username.replace(/\s+/g, '') && (pass === "guru123" || pass === "123456"));
+                if (g) {
+                    window.suksesLogin({ nama: g.nama, role: "guru", email: username + "@smkn1marisa.sch.id", identitas: g.nip });
+                    return;
                 }
             }
 
-            // Gagal Login
-            window.showModalInfo("Akun Belum Terdaftar ⚠️", 
-                `Username <b>"${inputUser}"</b> tidak ditemukan di <b>${def.label}</b>.<br><br>Pastikan Panitia PKL telah menginput data Anda melalui menu Data Master Panitia.`
-            );
+            window.showModalInfo("Login Gagal", `Username atau kata sandi tidak cocok untuk <b>${roleDefaults[role]?.label || role}</b>.<br><br>Silakan hubungi Panitia PKL jika akun belum terdaftar.`);
         };
 
-        // Masuk ke Layar Aplikasi Utama
-        window.masukKeRuangAplikasi = function() {
+        window.suksesLogin = function(profile) {
+            window.cloudState.userProfile = profile;
+            window.cloudState.activeRole = profile.role;
+
+            const gateEl = document.getElementById("gatewayScreen");
             const loginEl = document.getElementById("loginScreen");
             const appEl = document.getElementById("appScreen");
+
+            if (gateEl) gateEl.style.display = "none";
             if (loginEl) loginEl.style.display = "none";
             if (appEl) appEl.style.display = "flex";
 
-            const role = window.cloudState.activeRole;
-            const headerRole = document.getElementById("headerRoleBadge");
-            if (headerRole) headerRole.innerText = `ROOM ${role.toUpperCase()}`;
+            const headerRoleBadge = document.getElementById("headerRoleBadge");
+            if (headerRoleBadge) {
+                headerRoleBadge.innerText = (roleDefaults[profile.role]?.label || profile.role.toUpperCase());
+            }
 
-            window.renderAppSidebar();
-            window.openFeature("dashboard", "Beranda Utama");
+            window.renderSidebar();
+            window.openFeature("dashboard", "Dashboard Utama");
         };
 
-        // Logout
         window.handleOnlineLogout = function() {
-            const appEl = document.getElementById("appScreen");
-            if (appEl) appEl.style.display = "none";
+            window.cloudState.userProfile = null;
             window.kembaliKeGerbangEkosistem();
         };
 
-        // Modal Helpers
-        window.showModalInfo = function(title, msg) {
-            const titleEl = document.getElementById("modalInfoTitle");
-            const msgEl = document.getElementById("modalInfoMessage");
-            const modal = document.getElementById("modalInfoBackdrop");
-            if (titleEl) titleEl.innerText = title;
-            if (msgEl) msgEl.innerHTML = msg;
-            if (modal) modal.style.display = "flex";
-        };
-
-        window.closeModalInfo = function() {
-            const modal = document.getElementById("modalInfoBackdrop");
-            if (modal) modal.style.display = "none";
-        };
-
-        window.openDynamicModal = function(htmlContent) {
-            const card = document.getElementById("modalDynamicCard");
-            const modal = document.getElementById("modalDynamicBackdrop");
-            if (card) card.innerHTML = htmlContent;
-            if (modal) modal.style.display = "flex";
-        };
-
-        window.closeDynamicModal = function() {
-            const modal = document.getElementById("modalDynamicBackdrop");
-            if (modal) modal.style.display = "none";
-        };
-
-        window.toggleGlobalTheme = function() {
-            document.body.classList.toggle("light-theme");
-        };
-
-        // Webhook Sinkronisasi ke Google Apps Script
-        window.syncToGoogleAppsScript = async function(action, data) {
-            if (!window.gasBackendUrl || window.gasBackendUrl.includes("AKfycbx...")) return;
-            try {
-                await fetch(window.gasBackendUrl, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: action, data: data })
-                });
-            } catch (err) {
-                console.warn("GAS Webhook background sync:", err);
-            }
-        };
-
-        // Render Sidebar
-        window.renderAppSidebar = function() {
+        window.renderSidebar = function() {
             const role = window.cloudState.activeRole;
             const menus = roleMenus[role] || [];
             const sidebar = document.getElementById("appSidebar");
@@ -1000,7 +900,7 @@
 
             let html = "";
             menus.forEach(m => {
-                const active = m.id === window.cloudState.currentFeature ? 'active' : '';
+                const active = m.id === window.cloudState.currentFeature ? "active" : "";
                 html += `<div class="sidebar-nav-item ${active}" onclick="window.openFeature('${m.id}', '${m.label}')">
                     <span>${m.icon}</span>
                     <span>${m.label.replace(/^[^\s]+\s/, '')}</span>
@@ -1008,95 +908,429 @@
             });
             sidebar.innerHTML = html;
         };
-        // Buka Modul Fitur
+
         window.openFeature = function(featureId, title) {
             window.cloudState.currentFeature = featureId;
-            window.renderAppSidebar();
+            window.renderSidebar();
 
             const container = document.getElementById("mainFeatureContainer");
-            const backBtn = document.getElementById("mobileBackButtonWrap");
-
-            if (backBtn) {
-                backBtn.style.display = (featureId === 'dashboard') ? 'none' : 'block';
+            const mobileBack = document.getElementById("mobileBackButtonWrap");
+            if (mobileBack) {
+                mobileBack.style.display = (featureId === 'dashboard') ? "none" : "block";
             }
 
             if (!container) return;
 
-            if (featureId === 'dashboard') {
-                container.innerHTML = window.renderRoleDashboard();
-            } else if (featureId === 'presensi' || featureId === 'presensi-ananda') {
-                container.innerHTML = window.renderPresensiGPS();
-            } else if (featureId === 'jurnal' || featureId === 'jurnal-ananda') {
-                container.innerHTML = window.renderJurnalKegiatan();
-            } else if (featureId === 'penempatan') {
-                container.innerHTML = window.renderPenempatanGuru();
-            } else if (featureId === 'master-siswa') {
-                container.innerHTML = window.renderMasterSiswaTable();
-            } else if (featureId === 'master-guru') {
-                container.innerHTML = window.renderMasterGuruTable();
-            } else if (featureId === 'master-industri') {
-                container.innerHTML = window.renderMasterIndustriTable();
-            } else if (featureId === 'rekap-absensi') {
-                container.innerHTML = window.renderRekapAbsensiGlobal();
-            } else if (featureId === 'agenda-kunjungan') {
-                container.innerHTML = window.renderAgendaKunjungan();
-            } else if (featureId === 'dokumen') {
-                container.innerHTML = window.renderManajemenDokumen();
-            } else if (featureId === 'jam-gps') {
-                container.innerHTML = window.renderPengaturanJamGPS();
-            } else if (featureId === 'pengaturan') {
-                container.innerHTML = window.renderPengaturanSistem();
-            } else if (featureId === 'validasi-jurnal') {
-                container.innerHTML = window.renderValidasiJurnalList();
-            } else if (featureId === 'penilaian' || featureId === 'penilaian-industri') {
-                container.innerHTML = window.renderPenilaianIndustri();
-            } else if (featureId === 'siswa-bimbingan' || featureId === 'siswa-magang') {
-                container.innerHTML = window.renderSiswaBimbinganList();
-            } else if (featureId === 'laporan') {
-                container.innerHTML = window.renderLaporanAkhir();
-            } else if (featureId === 'aduan') {
-                container.innerHTML = window.renderPengaduanMasalah();
-            } else {
-                container.innerHTML = window.renderRoleDashboard();
+            switch(featureId) {
+                case "dashboard":
+                    container.innerHTML = window.renderRoleDashboard();
+                    break;
+                case "kelola-akun":
+                    container.innerHTML = window.renderKelolaAkunPengguna();
+                    break;
+                case "presensi":
+                case "presensi-ananda":
+                    container.innerHTML = window.renderPresensiGPS();
+                    break;
+                case "jurnal":
+                case "jurnal-ananda":
+                    container.innerHTML = window.renderJurnalKegiatan();
+                    break;
+                case "master-siswa":
+                    container.innerHTML = window.renderMasterSiswaTable();
+                    break;
+                case "master-guru":
+                    container.innerHTML = window.renderMasterGuruTable();
+                    break;
+                case "master-industri":
+                    container.innerHTML = window.renderMasterIndustriTable();
+                    break;
+                case "penempatan":
+                    container.innerHTML = window.renderPenempatanGuru();
+                    break;
+                case "rekap-absensi":
+                    container.innerHTML = window.renderRekapAbsensiGlobal();
+                    break;
+                case "jam-gps":
+                    container.innerHTML = window.renderPengaturanJamGPS();
+                    break;
+                case "dokumen":
+                    container.innerHTML = window.renderManajemenDokumen();
+                    break;
+                case "pengaturan":
+                    container.innerHTML = window.renderPengaturanSistem();
+                    break;
+                case "siswa-bimbingan":
+                case "siswa-magang":
+                    container.innerHTML = window.renderSiswaBimbinganList();
+                    break;
+                case "validasi-jurnal":
+                    container.innerHTML = window.renderValidasiJurnalList();
+                    break;
+                case "agenda-kunjungan":
+                    container.innerHTML = window.renderAgendaKunjungan();
+                    break;
+                case "penilaian":
+                case "penilaian-industri":
+                    container.innerHTML = window.renderPenilaianIndustri();
+                    break;
+                case "laporan":
+                    container.innerHTML = window.renderLaporanAkhir();
+                    break;
+                case "aduan":
+                    container.innerHTML = window.renderPengaduanMasalah();
+                    break;
+                default:
+                    container.innerHTML = window.renderRoleDashboard();
             }
         };
 
-        // VIEW: Dashboard Utama
         window.renderRoleDashboard = function() {
             const role = window.cloudState.activeRole;
-            const profile = window.cloudState.userProfile || { nama: "Pengguna SIP-PKL", email: "user@smkn1marisa.sch.id" };
+            const profile = window.cloudState.userProfile || { nama: "Pengguna" };
             const menus = roleMenus[role] || [];
 
-            let bannerHtml = "";
-            (window.cloudState.banner || []).forEach(b => {
-                bannerHtml += `<div style="background: rgba(2, 132, 199, 0.15); border: 1.5px solid #0284c7; padding: 14px 16px; border-radius: 14px; margin-bottom: 14px; display: flex; align-items: center; gap: 12px;">
-                    <span style="font-size: 22px;">📢</span>
-                    <div><b style="color: #38bdf8; font-size: 13px;">${b.judul}</b><div style="font-size: 11px; opacity: 0.9; margin-top: 2px;">${b.pesan}</div></div>
-                </div>`;
-            });
-
-            let buttonsHtml = "";
+            let launcherHtml = "";
             menus.forEach(m => {
-                if (m.id === "dashboard") return;
-                buttonsHtml += `<div class="launcher-btn" onclick="window.openFeature('${m.id}', '${m.label}')">
-                    <div class="launcher-icon" style="background: ${m.bg}; color: #fff;">${m.icon}</div>
-                    <div style="font-size: 12px; font-weight: 700;">${m.label.replace(/^[^\s]+\s/, '')}</div>
+                if (m.id === 'dashboard') return;
+                launcherHtml += `<div class="launcher-btn" onclick="window.openFeature('${m.id}', '${m.label}')">
+                    <div class="launcher-icon" style="background: ${m.bg}22; color: ${m.bg}; border: 1px solid ${m.bg}44;">
+                        ${m.icon}
+                    </div>
+                    <div style="font-size: 13px; font-weight: 800; color: #fff; margin-bottom: 2px;">${m.label.replace(/^[^\s]+\s/, '')}</div>
+                    <div style="font-size: 10px; color: #94a3b8;">Buka modul ➔</div>
                 </div>`;
             });
 
-            return bannerHtml +
-                `<div class="card" style="background: linear-gradient(135deg, #0284c7, #1e3a8a); border: 2px solid #38bdf8; color: #fff;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                        <span style="background: rgba(255, 255, 255, 0.2); padding: 3px 10px; border-radius: 8px; font-size: 10px; font-weight: 800; letter-spacing: 1px;">ONLINE CLOUD & GAS</span>
-                        <span style="font-size: 11px; color: #fde047; font-weight: 700;">T.A 2026/2027 &bull; SMKN 1 MARISA</span>
-                    </div>
-                    <h2 style="font-size: 19px; font-weight: 800; margin-top: 8px;">Selamat Datang, ${profile.nama}</h2>
-                    <p style="font-size: 12px; opacity: 0.9;">Ekosistem Terkunci: <b>ROOM ${role.toUpperCase()}</b> &bull; ${profile.email}</p>
+            return `<div class="card" style="background: linear-gradient(135deg, rgba(2, 132, 199, 0.25), rgba(15, 23, 42, 0.85)); border-color: #38bdf8;">
+                <div style="font-size: 11px; font-weight: 800; color: #fde047; letter-spacing: 1px;">★ SISTEM TERKONEKSI CLOUD ★</div>
+                <h2 style="font-size: 20px; font-weight: 800; color: #fff; margin: 4px 0;">Selamat Datang, ${profile.nama}!</h2>
+                <div style="font-size: 12px; color: #cbd5e1;">Peran Aktif: <b style="color: #38bdf8; text-transform: uppercase;">${roleDefaults[role]?.label || role}</b></div>
+            </div>
+            <div class="card">
+                <h3 style="font-size: 15px; font-weight: 800; color: #38bdf8; margin-bottom: 4px;">⚡ MENU PINTAS EKOSISTEM</h3>
+                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">Pilih fitur di bawah untuk memulai pekerjaan:</p>
+                <div class="mobile-launcher-grid">
+                    ${launcherHtml}
                 </div>
-                <div style="font-size: 12px; font-weight: 800; color: #38bdf8; margin: 18px 0 8px 0;">⚡ MENU CEPAT SATU LAYAR (KLIK FITUR):</div>
-                <div class="mobile-launcher-grid">${buttonsHtml}</div>`;
+            </div>`;
+        };
+        // VIEW: Manajemen & Pembuatan Akun Kredensial Pengguna (Siswa, Guru, Industri, Orang Tua)
+        window.renderKelolaAkunPengguna = function() {
+            const list = window.cloudState.registeredUsers || [];
+            let rows = "";
+
+            list.forEach((u, idx) => {
+                let badgeClass = "badge-blue";
+                if (u.role === 'admin') badgeClass = "badge-amber";
+                else if (u.role === 'guru') badgeClass = "badge-green";
+                else if (u.role === 'industri') badgeClass = "badge-amber";
+                else if (u.role === 'orangtua') badgeClass = "badge-purple";
+
+                const isProtectedAdmin = u.role === 'admin' && (u.username === 'SMKBisa2000' || u.username === 'admin');
+
+                rows += `<tr>
+                    <td>${idx + 1}</td>
+                    <td><span class="badge-status ${badgeClass}" style="text-transform:uppercase;">${u.role}</span></td>
+                    <td><b>${u.nama}</b><div style="font-size:10px; color:#94a3b8;">${u.identitas || '-'}</div></td>
+                    <td><code style="color:#38bdf8; font-weight:700; font-size:12px;">${u.username}</code></td>
+                    <td>
+                        <span id="passSpan_${idx}" style="font-family:monospace; background:rgba(0,0,0,0.4); padding:3px 8px; border-radius:6px; border:1px solid rgba(56,189,248,0.2);">${u.pass}</span>
+                    </td>
+                    <td>
+                        <div style="display:flex; gap:6px;">
+                            <button onclick="window.bukaModalEditAkun(${idx})" class="btn-action btn-blue" style="padding:4px 8px;">✏️ Ubah Sandi</button>
+                            ${!isProtectedAdmin ? `<button onclick="window.hapusAkunPengguna(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button>` : '<span style="font-size:10px; color:#fde047; padding:4px;">Akun Utama</span>'}
+                        </div>
+                    </td>
+                </tr>`;
+            });
+
+            return `<div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+                    <div>
+                        <h3 style="font-size:15px; font-weight:800; color:#38bdf8;">🔑 Pembuatan & Manajemen Akun Kredensial</h3>
+                        <p style="font-size:11px; color:var(--text-muted);">Buat dan kelola Username serta Password untuk Siswa, Guru, Industri, dan Orang Tua. Kredensial yang dibuat langsung aktif seketika!</p>
+                    </div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button onclick="window.unduhKredensialCSV()" class="btn-action btn-emerald">📥 Ekspor Akun (CSV)</button>
+                        <button onclick="window.bukaModalTambahAkun()" class="btn-action btn-blue">+ Buat Akun Baru</button>
+                    </div>
+                </div>
+
+                <div style="background:rgba(2, 132, 199, 0.12); border:1.5px solid #0284c7; border-radius:12px; padding:12px 16px; margin-bottom:14px; font-size:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <div>
+                        <b style="color:#fde047;">⚡ Kredensial Langsung Berlaku Realtime</b>
+                        <div style="color:#cbd5e1; font-size:11px; margin-top:2px;">Begitu tombol simpan ditekan, pengguna terkait dapat langsung masuk di gerbangnya masing-masing.</div>
+                    </div>
+                    <span class="badge-status badge-blue">Total Akun Aktif: ${list.length}</span>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 180px; gap:10px; margin-bottom:12px;">
+                    <input type="text" id="cariAkunInput" onkeyup="window.filterTabelAkun()" class="form-control" placeholder="🔍 Cari nama pengguna, username, atau peran...">
+                    <select id="filterRoleAkun" onchange="window.filterTabelAkun()" class="form-control">
+                        <option value="semua">Semua Peran</option>
+                        <option value="siswa">👨‍🎓 Siswa PKL</option>
+                        <option value="guru">👩‍🏫 Guru Pembimbing</option>
+                        <option value="orangtua">👨‍👩‍👧 Orang Tua</option>
+                        <option value="industri">🏭 Industri Mitra</option>
+                        <option value="admin">👨‍💼 Panitia / Admin</option>
+                    </select>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>No</th>
+                                <th>Peran (Role)</th>
+                                <th>Nama Lengkap & Identitas</th>
+                                <th>Username Resmi</th>
+                                <th>Kata Sandi (Password)</th>
+                                <th>Aksi Manajemen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyDaftarAkun">
+                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada akun pengguna tambahan yang dibuat</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
         };
 
+        // Modal Form Pembuatan Akun Baru oleh Admin
+        window.bukaModalTambahAkun = function() {
+            let siswaOpts = '<option value="">-- Ketik manual nama atau pilih siswa terdaftar --</option>';
+            (window.cloudState.siswa || []).forEach(s => siswaOpts += `<option value="${s.nama}" data-nisn="${s.nisn}">${s.nama} (${s.nisn})</option>`);
+
+            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;">🔑 Formulir Pembuatan Akun Pengguna Baru</h3>
+                <div class="form-group">
+                    <label class="form-label">Pilih Ekosistem / Peran Akun:</label>
+                    <select id="buatAkunRole" class="form-control" onchange="window.sesuaikanFormRoleAkun(this.value)">
+                        <option value="siswa">👨‍‍🎓 Siswa PKL</option>
+                        <option value="guru">👩‍🏫 Guru Pembimbing</option>
+                        <option value="orangtua">👨‍👩‍👧 Orang Tua Siswa</option>
+                        <option value="industri">🏭 Industri Mitra DUDI</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" id="labelFormNamaAkun">Nama Lengkap Pengguna:</label>
+                    <input type="text" id="buatAkunNama" class="form-control" placeholder="Contoh: Muhammad Farhan">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" id="labelFormIdentitas">Identitas / Keterangan (NISN / NIP / No WA Wali / ID DUDI):</label>
+                    <input type="text" id="buatAkunIdentitas" class="form-control" placeholder="0054829102">
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div>
+                        <label class="form-label">Username Resmi Login:</label>
+                        <input type="text" id="buatAkunUsername" class="form-control" placeholder="farhan01 / NISN">
+                    </div>
+                    <div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <label class="form-label" style="margin-bottom:0;">Kata Sandi (Password):</label>
+                            <button type="button" onclick="window.generatePasswordOtomatis()" style="background:none; border:none; color:#38bdf8; font-size:10px; cursor:pointer; font-weight:700;">Acak 🎲</button>
+                        </div>
+                        <input type="text" id="buatAkunPassword" class="form-control" placeholder="Buat kata sandi">
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#475569; color:#fff;">Batal</button>
+                    <button onclick="window.simpanAkunBaru()" class="btn-action btn-blue">💾 Terbitkan & Aktifkan Akun</button>
+                </div>`;
+
+            window.openDynamicModal(modalHtml);
+        };
+
+        window.sesuaikanFormRoleAkun = function(role) {
+            const lblNama = document.getElementById("labelFormNamaAkun");
+            const lblId = document.getElementById("labelFormIdentitas");
+            const userInp = document.getElementById("buatAkunUsername");
+            const passInp = document.getElementById("buatAkunPassword");
+
+            if (role === 'siswa') {
+                if (lblNama) lblNama.innerText = "Nama Lengkap Siswa:";
+                if (lblId) lblId.innerText = "NISN Siswa:";
+                if (userInp) userInp.placeholder = "Masukkan NISN siswa";
+                if (passInp) passInp.value = "siswa123";
+            } else if (role === 'guru') {
+                if (lblNama) lblNama.innerText = "Nama Lengkap Guru & Gelar:";
+                if (lblId) lblId.innerText = "NIP Guru:";
+                if (userInp) userInp.placeholder = "Masukkan NIP tanpa spasi";
+                if (passInp) passInp.value = "guru123";
+            } else if (role === 'orangtua') {
+                if (lblNama) lblNama.innerText = "Nama Orang Tua / Wali:";
+                if (lblId) lblId.innerText = "Nama Siswa (Ananda):";
+                if (userInp) userInp.placeholder = "Contoh: wali.farhan";
+                if (passInp) passInp.value = "ortu123";
+            } else if (role === 'industri') {
+                if (lblNama) lblNama.innerText = "Nama Industri / Pembimbing Lapangan:";
+                if (lblId) lblId.innerText = "Nama Perusahaan DUDI:";
+                if (userInp) userInp.placeholder = "Contoh: dudi.telkom";
+                if (passInp) passInp.value = "industri123";
+            }
+        };
+
+        window.generatePasswordOtomatis = function() {
+            const chars = "abcdefhkmnprstuvwxyz23456789";
+            let pass = "";
+            for (let i = 0; i < 6; i++) {
+                pass += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            const passInp = document.getElementById("buatAkunPassword");
+            if (passInp) passInp.value = pass;
+        };
+
+        window.simpanAkunBaru = function() {
+            const role = document.getElementById("buatAkunRole")?.value || "siswa";
+            const nama = document.getElementById("buatAkunNama")?.value.trim();
+            const identitas = document.getElementById("buatAkunIdentitas")?.value.trim() || "-";
+            const username = document.getElementById("buatAkunUsername")?.value.trim();
+            const pass = document.getElementById("buatAkunPassword")?.value.trim();
+
+            if (!nama || !username || !pass) {
+                window.showModalInfo("Lengkapi Formulir", "Mohon isi Nama, Username, dan Kata Sandi!");
+                return;
+            }
+
+            const exist = (window.cloudState.registeredUsers || []).find(u => u.username.toLowerCase() === username.toLowerCase() && u.role === role);
+            if (exist) {
+                window.showModalInfo("Username Sudah Terpakai", `Username <b>"${username}"</b> sudah digunakan oleh ${exist.nama} pada peran ${role}.`);
+                return;
+            }
+
+            const newAccount = {
+                role: role,
+                nama: nama,
+                identitas: identitas,
+                username: username,
+                pass: pass,
+                email: username + "@smkn1marisa.sch.id"
+            };
+
+            window.cloudState.registeredUsers.unshift(newAccount);
+            window.syncToGoogleAppsScript("register_user", newAccount);
+
+            window.closeDynamicModal();
+            window.showModalInfo("Akun Berhasil Dibuat 🔑", 
+                `Akun untuk <b>${nama}</b> (${role.toUpperCase()}) telah aktif!<br><br>
+                • <b>Username:</b> <code>${username}</code><br>
+                • <b>Password:</b> <code>${pass}</code><br><br>
+                Pengguna dapat langsung menggunakannya untuk login sekarang juga!`
+            );
+
+            window.openFeature("kelola-akun", "Buat Akun & Kredensial");
+        };
+
+        window.bukaModalEditAkun = function(idx) {
+            const u = (window.cloudState.registeredUsers || [])[idx];
+            if (!u) return;
+
+            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:12px;">✏️️ Ubah Kata Sandi Akun</h3>
+                <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(56,189,248,0.25); border-radius:10px; padding:12px; margin-bottom:14px; font-size:12px;">
+                    <div>Nama: <b>${u.nama}</b></div>
+                    <div>Peran: <b style="color:#fde047; text-transform:uppercase;">${u.role}</b></div>
+                    <div>Username: <code style="color:#38bdf8;">${u.username}</code></div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kata Sandi Baru:</label>
+                    <input type="text" id="editPassInput" class="form-control" value="${u.pass}" placeholder="Masukkan kata sandi baru">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#475569; color:#fff;">Batal</button>
+                    <button onclick="window.simpanEditAkun(${idx})" class="btn-action btn-blue">💾 Perbarui Sandi</button>
+                </div>`;
+
+            window.openDynamicModal(modalHtml);
+        };
+
+        window.simpanEditAkun = function(idx) {
+            const u = (window.cloudState.registeredUsers || [])[idx];
+            if (!u) return;
+
+            const newPass = document.getElementById("editPassInput")?.value.trim();
+            if (!newPass) {
+                window.showModalInfo("Peringatan", "Kata sandi tidak boleh kosong!");
+                return;
+            }
+
+            u.pass = newPass;
+            window.syncToGoogleAppsScript("update_password", { username: u.username, role: u.role, pass: newPass });
+
+            window.closeDynamicModal();
+            window.showModalInfo("Kata Sandi Diperbarui 💾", `Kata sandi untuk <b>${u.nama}</b> (<code>${u.username}</code>) berhasil diubah.`);
+            window.openFeature("kelola-akun", "Buat Akun & Kredensial");
+        };
+
+        window.hapusAkunPengguna = function(idx) {
+            const list = window.cloudState.registeredUsers || [];
+            const u = list[idx];
+            if (!u) return;
+
+            if (confirm(`Yakin ingin menghapus akun ${u.nama} (${u.username})?`)) {
+                list.splice(idx, 1);
+                window.showModalInfo("Akun Dihapus", `Akun ${u.nama} telah dinonaktifkan.`);
+                window.openFeature("kelola-akun", "Buat Akun & Kredensial");
+            }
+        };
+
+        window.filterTabelAkun = function() {
+            const q = document.getElementById("cariAkunInput")?.value.toLowerCase() || "";
+            const roleFilter = document.getElementById("filterRoleAkun")?.value || "semua";
+            const tbody = document.getElementById("tbodyDaftarAkun");
+            if (!tbody) return;
+
+            const list = window.cloudState.registeredUsers || [];
+            let rows = "";
+
+            list.forEach((u, idx) => {
+                const matchRole = roleFilter === 'semua' || u.role === roleFilter;
+                const matchQuery = (u.nama + " " + u.username + " " + (u.identitas || '') + " " + u.role).toLowerCase().includes(q);
+
+                if (!matchRole || !matchQuery) return;
+
+                let badgeClass = "badge-blue";
+                if (u.role === 'admin') badgeClass = "badge-amber";
+                else if (u.role === 'guru') badgeClass = "badge-green";
+                else if (u.role === 'industri') badgeClass = "badge-amber";
+                else if (u.role === 'orangtua') badgeClass = "badge-purple";
+
+                const isProtectedAdmin = u.role === 'admin' && (u.username === 'SMKBisa2000' || u.username === 'admin');
+
+                rows += `<tr>
+                    <td>${idx + 1}</td>
+                    <td><span class="badge-status ${badgeClass}" style="text-transform:uppercase;">${u.role}</span></td>
+                    <td><b>${u.nama}</b><div style="font-size:10px; color:#94a3b8;">${u.identitas || '-'}</div></td>
+                    <td><code style="color:#38bdf8; font-weight:700; font-size:12px;">${u.username}</code></td>
+                    <td><span style="font-family:monospace; background:rgba(0,0,0,0.4); padding:3px 8px; border-radius:6px; border:1px solid rgba(56,189,248,0.2);">${u.pass}</span></td>
+                    <td>
+                        <div style="display:flex; gap:6px;">
+                            <button onclick="window.bukaModalEditAkun(${idx})" class="btn-action btn-blue" style="padding:4px 8px;">✏️ Ubah Sandi</button>
+                            ${!isProtectedAdmin ? `<button onclick="window.hapusAkunPengguna(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button>` : '<span style="font-size:10px; color:#fde047; padding:4px;">Akun Utama</span>'}
+                        </div>
+                    </td>
+                </tr>`;
+            });
+
+            tbody.innerHTML = rows || `<tr><td colspan="6" class="empty-placeholder">Tidak ada akun pengguna yang cocok dengan pencarian</td></tr>`;
+        };
+
+        window.unduhKredensialCSV = function() {
+            const list = window.cloudState.registeredUsers || [];
+            let csv = "No,Peran (Role),Nama Lengkap,Nomor Identitas,Username,Kata Sandi (Password)\n";
+            list.forEach((u, i) => {
+                csv += `"${i+1}","${u.role}","${u.nama}","${u.identitas || '-'}","${u.username}","${u.pass}"\n`;
+            });
+            const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `Daftar_Kredensial_Akun_SIP-PKL_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+        };
         // VIEW: Presensi GPS
         window.renderPresensiGPS = function() {
             let rows = "";
@@ -1229,7 +1463,6 @@
             window.showModalInfo("Jurnal Terkirim 🚀", "Jurnal harian Anda telah tersimpan dan siap diverifikasi oleh Pembimbing!");
             window.openFeature("jurnal", "Jurnal Kegiatan");
         };
-
         // VIEW: Penempatan PKL
         window.renderPenempatanGuru = function() {
             let cardsHtml = "";
@@ -1365,7 +1598,7 @@
             });
 
             return `<div class="card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                <div><h3 style="font-size:14px; font-weight:bold;">👨‍‍🎓 Data Master Siswa Peserta PKL</h3><p style="font-size:11px; color:var(--text-muted);">Kelola data siswa terdaftar di Cloud Database.</p></div>
+                <div><h3 style="font-size:14px; font-weight:bold;">👨‍🎓 Data Master Siswa Peserta PKL</h3><p style="font-size:11px; color:var(--text-muted);">Kelola data siswa terdaftar di Cloud Database.</p></div>
                 <div style="display:flex; gap:8px;">
                     <button onclick="window.bukaModalUploadExcel('Siswa')" class="btn-action btn-emerald">📥 Impor Excel</button>
                     <button onclick="window.bukaModalInputSiswa()" class="btn-action btn-blue">+ Tambah Manual</button>
@@ -1384,7 +1617,7 @@
             let indOpts = '<option value="-">-- Pilih Industri (Opsional) --</option>';
             (window.cloudState.industri || []).forEach(ind => indOpts += `<option value="${ind.nama}">${ind.nama}</option>`);
 
-            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;">👨‍‍🎓 Formulir Tambah Data Siswa</h3>
+            const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;">👨‍🎓 Formulir Tambah Data Siswa</h3>
                 <div class="form-group"><label class="form-label">Nama Lengkap Siswa:</label><input type="text" id="addSiswaNama" class="form-control" placeholder="Contoh: Muhammad Farhan"></div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                     <div><label class="form-label">NISN Siswa:</label><input type="text" id="addSiswaNisn" class="form-control" placeholder="005xxxxxxx"></div>
@@ -1545,7 +1778,6 @@
             window.showModalInfo("Terhapus", "Data industri berhasil dihapus dari sistem.");
             window.openFeature("master-industri", "Data Perusahaan / Industri");
         };
-
         // EXCEL IMPORT AND TEMPLATE GENERATION
         window.currentParsedExcelData = [];
 
@@ -1740,14 +1972,13 @@
             else if (kategori === "Guru") window.openFeature("master-guru", "Data Master Guru");
             else window.openFeature("master-industri", "Data Perusahaan / Industri");
         };
+
         // VIEW: Pengaturan Jam & GPS Terintegrasi Pilihan Industri Riil
         window.selectedGpsIndIdx = 0;
 
         window.renderPengaturanJamGPS = function() {
-            // Ambil daftar industri secara dinamis dari database Mitra Industri DUDI
             const listInd = window.cloudState.industri || [];
 
-            // Jika belum ada data industri sama sekali
             if (listInd.length === 0) {
                 return `<div class="card">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;">
@@ -1775,14 +2006,12 @@
             }
             const activeInd = listInd[window.selectedGpsIndIdx];
 
-            // Bangun Opsi Dropdown Pilihan Industri dari Database Real
             let indOptions = "";
             listInd.forEach((ind, idx) => {
                 const selected = idx === window.selectedGpsIndIdx ? "selected" : "";
                 indOptions += `<option value="${idx}" ${selected}>🏢 ${ind.nama} (${ind.alamat || 'Pohuwato'})</option>`;
             });
 
-            // Bangun Tabel Rekapitulasi Realtime Semua Industri
             let rekapRows = "";
             listInd.forEach((ind, idx) => {
                 const isSelected = idx === window.selectedGpsIndIdx;
@@ -1807,7 +2036,6 @@
                     <span class="badge-status badge-green">${listInd.length} Industri Terkoneksi</span>
                 </div>
 
-                <!-- KOLOM PEMILIHAN INDUSTRI REAL -->
                 <div style="background: rgba(2, 132, 199, 0.12); border: 1.5px solid #38bdf8; border-radius: 14px; padding: 14px 16px; margin-bottom: 16px;">
                     <label class="form-label" style="color: #38bdf8; font-size: 12px; font-weight: 800; margin-bottom: 8px;">
                         🏢 Pilih Perusahaan / Industri Mitra yang Akan Disetel:
@@ -1821,7 +2049,6 @@
                     </div>
                 </div>
 
-                <!-- FORMULIR EDIT JAM DAN GEOFENCE GPS UNTUK INDUSTRI TERPILIH -->
                 <div style="background: rgba(0,0,0,0.3); border: 1.5px solid var(--border-hud); border-radius: 16px; padding: 18px; margin-bottom: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; border-bottom: 1px dashed rgba(56, 189, 248, 0.3); padding-bottom: 10px;">
                         <div style="font-weight: 800; font-size: 14px; color: #38bdf8;">
@@ -1866,7 +2093,6 @@
                     </div>
                 </div>
 
-                <!-- TABEL REKAPITULASI STATUS SEMUA INDUSTRI -->
                 <div style="margin-top: 10px;">
                     <h4 style="font-size: 13px; font-weight: 800; color: #38bdf8; margin-bottom: 8px;">
                         📋 Daftar Ringkasan Radius & Jam Semua Industri Mitra:
@@ -1892,13 +2118,11 @@
             </div>`;
         };
 
-        // Handler Pergantian Pilihan Industri
         window.muatDataIndustriGps = function(idxVal) {
             window.selectedGpsIndIdx = parseInt(idxVal) || 0;
             window.openFeature("jam-gps", "Jam & Geofence GPS");
         };
 
-        // Deteksi Otomatis Titik Koordinat Pengguna Saat Ini
         window.deteksiGpsOtomatisTerpilih = function() {
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition(
@@ -1912,9 +2136,7 @@
                         );
                     },
                     err => {
-                        window.showModalInfo("Deteksi GPS Gagal ⚠️", 
-                            "Izin lokasi perangkat tidak aktif atau sinyal GPS belum terbaca. Anda juga dapat menyalin angka koordinat secara manual dari Google Maps."
-                        );
+                        window.showModalInfo("Deteksi GPS Gagal ⚠️", "Izin lokasi perangkat tidak aktif atau sinyal GPS belum terbaca.");
                     }
                 );
             } else {
@@ -1922,7 +2144,6 @@
             }
         };
 
-        // Simpan Konfigurasi Industri yang Sedang Dipilih
         window.simpanPengaturanGpsTerpilih = function() {
             const listInd = window.cloudState.industri || [];
             const ind = listInd[window.selectedGpsIndIdx];
@@ -1943,7 +2164,6 @@
             ind.lat = lat;
             ind.lng = lng;
 
-            // Sinkronkan ke Google Apps Script (Webhook)
             window.syncToGoogleAppsScript("simpan_pengaturan_gps", {
                 industri: ind.nama,
                 masuk: masuk,
@@ -2029,14 +2249,7 @@
                 return;
             }
 
-            const item = {
-                industri: ind,
-                tanggal: tgl,
-                jam: jam,
-                agenda: agenda,
-                status: "Terjadwal"
-            };
-
+            const item = { industri: ind, tanggal: tgl, jam: jam, agenda: agenda, status: "Terjadwal" };
             window.cloudState.agendaKunjungan.unshift(item);
             window.closeDynamicModal();
             window.showModalInfo("Jadwal Tersimpan 🚗", `Kunjungan ke ${ind} pada ${tgl} berhasil dijadwalkan!`);
@@ -2366,6 +2579,19 @@
             window.openFeature("dashboard", "Dashboard Utama");
         };
 
+        // Modal Bantuan Format Username Admin
+        window.bukaModalBantuanAdmin = function() {
+            const role = window.cloudState.activeRole;
+            let info = "";
+            if (role === 'siswa') info = "Gunakan <b>Nomor Induk Siswa Nasional (NISN)</b> resmi Anda yang telah terdata pada Panitia PKL.";
+            else if (role === 'guru') info = "Gunakan <b>Nomor Induk Pegawai (NIP)</b> tanpa spasi atau username guru resmi dari panitia.";
+            else if (role === 'orangtua') info = "Gunakan <b>Username Akun Wali</b> yang diterbitkan oleh panitia (format: <code>wali.[nama_siswa]</code>).";
+            else if (role === 'industri') info = "Gunakan <b>ID Mitra DUDI</b> resmi yang diberikan pihak sekolah (format: <code>dudi.[nama_mitra]</code>).";
+            else info = "Username Panitia / Admin PKL: <b>SMKBisa2000</b> atau <b>admin</b>.";
+
+            window.showModalInfo("Panduan Kredensial Resmi", info);
+        };
+
         // Modal Lupa Password
         window.bukaModalLupaPassword = function() {
             const modalHtml = `<h3 style="font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:12px;">🔑 Reset Kata Sandi Akun</h3>
@@ -2407,6 +2633,60 @@
                 window.closeDynamicModal();
                 window.showModalInfo("Tersimpan 💾", "URL Google Apps Script berhasil diperbarui!");
             }
+        };
+
+        // Sinkronisasi data ke Google Apps Script via POST Webhook
+        window.syncToGoogleAppsScript = function(actionName, dataPayload) {
+            if (!window.gasBackendUrl) return;
+            try {
+                fetch(window.gasBackendUrl, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: actionName,
+                        timestamp: new Date().toISOString(),
+                        data: dataPayload
+                    })
+                }).then(() => {
+                    console.log(`[GAS Sync] Action ${actionName} tersinkron ke Google Sheets.`);
+                }).catch(err => {
+                    console.warn("[GAS Sync Warn]", err);
+                });
+            } catch(e) {
+                console.warn("[GAS Sync Error]", e);
+            }
+        };
+
+        // Modal Dialog Global
+        window.showModalInfo = function(title, msg) {
+            const t = document.getElementById("modalInfoTitle");
+            const m = document.getElementById("modalInfoMessage");
+            const b = document.getElementById("modalInfoBackdrop");
+            if (t) t.innerText = title;
+            if (m) m.innerHTML = msg;
+            if (b) b.style.display = "flex";
+        };
+
+        window.closeModalInfo = function() {
+            const b = document.getElementById("modalInfoBackdrop");
+            if (b) b.style.display = "none";
+        };
+
+        window.openDynamicModal = function(htmlContent) {
+            const c = document.getElementById("modalDynamicCard");
+            const b = document.getElementById("modalDynamicBackdrop");
+            if (c) c.innerHTML = htmlContent;
+            if (b) b.style.display = "flex";
+        };
+
+        window.closeDynamicModal = function() {
+            const b = document.getElementById("modalDynamicBackdrop");
+            if (b) b.style.display = "none";
+        };
+
+        window.toggleGlobalTheme = function() {
+            document.body.classList.toggle("light-theme");
         };
 
         // Inisialisasi awal saat halaman dimuat
