@@ -1638,7 +1638,7 @@
                 rows += `<tr>
                     <td>${idx + 1}</td>
                     <td><span class="badge-status ${badgeClass}" style="text-transform:uppercase;">${u.role}</span></td>
-                    <td><b>${u.nama}</b><div style="font-size:10px; color:#64748b;">${u.identitas || '-'}</div></td>
+                    <td><b>${u.nama}</b></td>
                     <td><code style="color:#0284c7; font-weight:700;">${u.username}</code></td>
                     <td><span style="font-family:monospace; background:#f1f5f9; padding:3px 8px; border-radius:6px; border:1px solid #cbd5e1;">${u.pass}</span></td>
                     <td>
@@ -1654,7 +1654,7 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
                     <div>
                         <h3 style="font-size:16px; font-weight:900; color:#0284c7;">🔑 Pembuatan & Manajemen Akun Kredensial</h3>
-                        <p style="font-size:11px; color:var(--text-muted);">Kelola Username dan Kata Sandi resmi untuk Siswa, Guru, dan Industri.</p>
+                        <p style="font-size:11px; color:var(--text-muted);">Kelola Nama Lengkap, Username, dan Kata Sandi resmi untuk Siswa, Guru, dan Industri.</p>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button onclick="window.unduhTemplateExcelAkun()" class="btn-action btn-emerald" style="display:flex; align-items:center; gap:4px;">📄 Unduh Template Excel</button>
@@ -1690,17 +1690,17 @@
         // 1. UNDUH TEMPLATE EXCEL AKUN (XLSX)
         window.unduhTemplateExcelAkun = function() {
             const dataTemplate = [
-                ["Peran (siswa/guru/industri)", "Nama Lengkap", "Username", "Password", "Identitas (NISN/NIP/ID)"],
-                ["siswa", "Ahmad Fauzan", "0051234567", "siswa123", "0051234567"],
-                ["siswa", "Nur Aini", "0059876543", "siswa123", "0059876543"],
-                ["guru", "Bpk. Rahmat Danial, S.T.", "198501012010011002", "guru123", "198501012010011002"],
-                ["industri", "PT. Telkom Indonesia", "telkom.marisa", "dudi123", "DUDI-001"]
+                ["Peran (siswa/guru/industri)", "Nama Lengkap", "Username", "Password"],
+                ["siswa", "Ahmad Fauzan", "0051234567", "siswa123"],
+                ["siswa", "Nur Aini", "0059876543", "siswa123"],
+                ["guru", "Bpk. Rahmat Danial, S.T.", "198501012010011002", "guru123"],
+                ["industri", "PT. Telkom Indonesia", "telkom.marisa", "dudi123"]
             ];
             const ws = XLSX.utils.aoa_to_sheet(dataTemplate);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "TemplateAkun");
             XLSX.writeFile(wb, "Template_Akun_Kredensial_SMKN1Marisa.xlsx");
-            window.showModalInfo("Template Terunduh 📄", "Template Excel akun kredensial berhasil diunduh. Silakan isi datanya lalu impor kembali!");
+            window.showModalInfo("Template Terunduh 📄", "Template Excel akun kredensial (Nama Lengkap, Username, Password) berhasil diunduh. Silakan isi datanya lalu impor kembali!");
         };
 
         // 2. MODAL UPLOAD EXCEL AKUN
@@ -1745,7 +1745,6 @@
                         const nama = String(r[1] || '').trim();
                         const username = String(r[2] || '').trim();
                         const pass = String(r[3] || '123456').trim();
-                        const identitas = String(r[4] || username).trim();
 
                         if (nama && username) {
                             parsed.push({
@@ -1753,7 +1752,6 @@
                                 nama,
                                 username,
                                 pass,
-                                identitas,
                                 email: username + "@smkn1marisa.sch.id"
                             });
                         }
@@ -1863,10 +1861,6 @@
                     <label class="form-label">Nama Lengkap Pengguna:</label>
                     <input type="text" id="buatAkunNama" class="form-control" placeholder="Contoh: Muhammad Farhan">
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Identitas (NISN / NIP / ID DUDI):</label>
-                    <input type="text" id="buatAkunIdentitas" class="form-control" placeholder="0054829102">
-                </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                     <div>
                         <label class="form-label">Username Login:</label>
@@ -1887,7 +1881,6 @@
         window.simpanAkunBaru = function() {
             const role = document.getElementById("buatAkunRole")?.value || "siswa";
             const nama = document.getElementById("buatAkunNama")?.value.trim();
-            const identitas = document.getElementById("buatAkunIdentitas")?.value.trim() || "-";
             const username = document.getElementById("buatAkunUsername")?.value.trim();
             const pass = document.getElementById("buatAkunPassword")?.value.trim();
 
@@ -1902,7 +1895,7 @@
                 return;
             }
 
-            const newAccount = { role, nama, identitas, username, pass, email: username + "@smkn1marisa.sch.id" };
+            const newAccount = { role, nama, username, pass, email: username + "@smkn1marisa.sch.id" };
             window.cloudState.registeredUsers.unshift(newAccount);
             window.simpanDatabasePersisten();
             window.syncToGoogleAppsScript("register_user", newAccount);
@@ -2075,16 +2068,64 @@
         window.renderMasterSiswaTable = function() {
             let rows = "";
             (window.cloudState.siswa || []).forEach((s, idx) => {
-                rows += `<tr><td>${idx+1}</td><td><b>${s.nama}</b></td><td><code>${s.nisn}</code></td><td>${s.kelas || '-'}</td><td>${s.industri || '-'}</td><td><button onclick="window.konfirmasiHapusSiswa(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td></tr>`;
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${s.nama}</b></td>
+                    <td><code>${s.nis || s.nisn || '-'}</code></td>
+                    <td><span class="badge-status ${s.jk === 'P' ? 'badge-amber' : 'badge-blue'}">${s.jk || '-'}</span></td>
+                    <td>${s.kelas || '-'}</td>
+                    <td>${s.jurusan || '-'}</td>
+                    <td>${s.noHp || '-'}</td>
+                    <td><b>${s.industri || s.tempatPkl || '-'}</b></td>
+                    <td><button onclick="window.konfirmasiHapusSiswa(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td>
+                </tr>`;
             });
 
             return `<div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-                    <div><h3 style="font-size:16px; font-weight:900; color:#0284c7;">👨‍🎓 Data Master Siswa Peserta PKL</h3><p style="font-size:11px; color:var(--text-muted);">Kelola data siswa peserta PKL SMKN 1 Marisa.</p></div>
-                    <div style="display:flex; gap:8px;"><button onclick="window.bukaModalUploadExcel('Siswa')" class="btn-action btn-emerald">📥 Impor Excel</button><button onclick="window.bukaModalInputSiswa()" class="btn-action btn-blue">+ Tambah Siswa</button></div>
+                    <div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0284c7;">👨‍🎓 Data Master Siswa Peserta PKL</h3>
+                        <p style="font-size:11px; color:var(--text-muted);">Kelola data siswa lengkap: Nama, NIS, JK, Kelas, Jurusan, No HP, dan Tempat PKL.</p>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.unduhTemplateExcelSiswa()" class="btn-action btn-emerald" style="display:flex; align-items:center; gap:4px;">📄 Unduh Template Excel</button>
+                        <button onclick="window.bukaModalUploadExcel('Siswa')" class="btn-action btn-blue" style="display:flex; align-items:center; gap:4px;">📥 Impor Excel</button>
+                        <button onclick="window.bukaModalInputSiswa()" class="btn-action btn-blue">+ Tambah Siswa</button>
+                    </div>
                 </div>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Siswa</th><th>NISN</th><th>Kelas</th><th>DUDI</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada data siswa terdaftar</td></tr>'}</tbody></table></div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>No</th>
+                                <th>Nama Siswa</th>
+                                <th>NIS</th>
+                                <th>JK</th>
+                                <th>Kelas</th>
+                                <th>Jurusan</th>
+                                <th>No HP</th>
+                                <th>Tempat PKL</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows || '<tr><td colspan="9" class="empty-placeholder">Belum ada data siswa terdaftar</td></tr>'}</tbody>
+                    </table>
+                </div>
             </div>`;
+        };
+
+        // UNDUH TEMPLATE EXCEL MASTER SISWA LENGKAP
+        window.unduhTemplateExcelSiswa = function() {
+            const dataTemplate = [
+                ["No", "Nama Siswa", "NIS", "JK", "Kelas", "Jurusan", "No HP", "Tempat PKL"],
+                [1, "Muhammad Rizky", "10234", "L", "XI TKJ 1", "Teknik Komputer & Jaringan", "081234567891", "PT. Inovasi Teknologi Sejahtera"],
+                [2, "Siti Rahmawati", "10235", "P", "XI RPL 1", "Rekayasa Perangkat Lunak", "081234567892", "PT. Telkom Indonesia"]
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(dataTemplate);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "MasterSiswa");
+            XLSX.writeFile(wb, "Template_Data_Master_Siswa_SMKN1Marisa.xlsx");
+            window.showModalInfo("Template Siswa Terunduh 📄", "Template Excel data siswa (No, Nama Siswa, NIS, JK, Kelas, Jurusan, No HP, Tempat PKL) berhasil diunduh!");
         };
 
         window.konfirmasiHapusSiswa = function(idx) {
@@ -2098,25 +2139,86 @@
         };
 
         window.bukaModalInputSiswa = function() {
-            const modalHtml = `<h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">👨‍🎓 Tambah Siswa Manual</h3>
-                <div class="form-group"><label class="form-label">Nama Lengkap Siswa:</label><input type="text" id="addSiswaNama" class="form-control" placeholder="Ahmad Fauzan"></div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;"><div class="form-group"><label class="form-label">NISN:</label><input type="text" id="addSiswaNisn" class="form-control" placeholder="0054829102"></div><div class="form-group"><label class="form-label">Kelas:</label><input type="text" id="addSiswaKelas" class="form-control" placeholder="XI TKJ 1"></div></div>
-                <div class="form-group"><label class="form-label">DUDI Penempatan:</label><input type="text" id="addSiswaIndustri" class="form-control" placeholder="PT Telkom Indonesia"></div>
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;"><button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button><button onclick="window.simpanSiswaManual()" class="btn-action btn-blue">💾 Simpan Siswa</button></div>`;
+            let listDudiOptions = "";
+            (window.cloudState.industri || []).forEach(i => {
+                listDudiOptions += `<option value="${i.nama}">`;
+            });
+
+            const modalHtml = `<h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">👨‍🎓 Formulir Input Data Siswa PKL</h3>
+                <div class="form-group">
+                    <label class="form-label">Nama Siswa Lengkap:</label>
+                    <input type="text" id="addSiswaNama" class="form-control" placeholder="Contoh: Muhammad Rizky">
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div class="form-group">
+                        <label class="form-label">NIS (Nomor Induk Siswa):</label>
+                        <input type="text" id="addSiswaNis" class="form-control" placeholder="Contoh: 10234">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Jenis Kelamin (JK):</label>
+                        <select id="addSiswaJk" class="form-control">
+                            <option value="L">Laki-laki (L)</option>
+                            <option value="P">Perempuan (P)</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div class="form-group">
+                        <label class="form-label">Kelas:</label>
+                        <input type="text" id="addSiswaKelas" class="form-control" placeholder="Contoh: XI TKJ 1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Jurusan / Kompetensi:</label>
+                        <input type="text" id="addSiswaJurusan" class="form-control" placeholder="Contoh: Teknik Komputer & Jaringan">
+                    </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div class="form-group">
+                        <label class="form-label">No. HP / WhatsApp Siswa:</label>
+                        <input type="tel" id="addSiswaNoHp" class="form-control" placeholder="Contoh: 081234567890">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Tempat PKL (Mitra DUDI):</label>
+                        <input type="text" id="addSiswaIndustri" list="dataListDudiSiswa" class="form-control" placeholder="Pilih atau ketik tempat PKL">
+                        <datalist id="dataListDudiSiswa">${listDudiOptions}</datalist>
+                    </div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanSiswaManual()" class="btn-action btn-blue">💾 Simpan Siswa</button>
+                </div>`;
             window.openDynamicModal(modalHtml);
         };
 
         window.simpanSiswaManual = function() {
             const nama = document.getElementById("addSiswaNama")?.value.trim();
-            const nisn = document.getElementById("addSiswaNisn")?.value.trim();
+            const nis = document.getElementById("addSiswaNis")?.value.trim();
+            const jk = document.getElementById("addSiswaJk")?.value || "L";
             const kelas = document.getElementById("addSiswaKelas")?.value.trim();
+            const jurusan = document.getElementById("addSiswaJurusan")?.value.trim();
+            const noHp = document.getElementById("addSiswaNoHp")?.value.trim();
             const ind = document.getElementById("addSiswaIndustri")?.value.trim();
-            if (!nama || !nisn) return;
-            const item = { nama, nisn, kelas: kelas || "XI PKL", industri: ind || "Mitra Industri", hadir: 100 };
+
+            if (!nama || !nis) {
+                window.showModalInfo("Lengkapi Formulir", "Nama Siswa dan NIS wajib diisi!");
+                return;
+            }
+
+            const item = { 
+                nama, 
+                nis, 
+                nisn: nis, 
+                jk, 
+                kelas: kelas || "XI PKL", 
+                jurusan: jurusan || "Teknik Komputer & Jaringan", 
+                noHp: noHp || "-", 
+                industri: ind || "Mitra Industri", 
+                hadir: 100 
+            };
             window.cloudState.siswa.unshift(item);
             window.simpanDatabasePersisten();
             window.closeDynamicModal();
-            window.showModalInfo("Siswa Tersimpan", `Data siswa <b>${nama}</b> berhasil disimpan.`);
+            window.showModalInfo("Siswa Tersimpan 👨‍🎓", `Data siswa <b>${nama}</b> (NIS: ${nis}) berhasil ditambahkan.`);
             window.openFeature("master-siswa", "Data Master Siswa");
         };
 
@@ -2201,7 +2303,38 @@
                     rows.forEach(r => {
                         if (!r || r.length === 0 || !r[0]) return;
                         if (kat === "Siswa") {
-                            parsedList.push({ nama: String(r[0] || '').trim(), nisn: String(r[1] || '').trim(), kelas: String(r[2] || 'XI PKL').trim(), industri: String(r[3] || 'PT. Inovasi').trim(), hadir: 100 });
+                            let nama = "", nis = "", jk = "L", kelas = "XI PKL", jurusan = "-", noHp = "-", ind = "-";
+                            // Mendukung format jika kolom pertama berupa Nomor urut (1, 2, 3...)
+                            if (typeof r[0] === 'number' || (!isNaN(parseInt(r[0])) && r[1])) {
+                                nama = String(r[1] || '').trim();
+                                nis = String(r[2] || '').trim();
+                                jk = String(r[3] || 'L').trim().toUpperCase();
+                                kelas = String(r[4] || 'XI PKL').trim();
+                                jurusan = String(r[5] || '-').trim();
+                                noHp = String(r[6] || '-').trim();
+                                ind = String(r[7] || 'Mitra Industri').trim();
+                            } else {
+                                nama = String(r[0] || '').trim();
+                                nis = String(r[1] || '').trim();
+                                jk = String(r[2] || 'L').trim().toUpperCase();
+                                kelas = String(r[3] || 'XI PKL').trim();
+                                jurusan = String(r[4] || '-').trim();
+                                noHp = String(r[5] || '-').trim();
+                                ind = String(r[6] || 'Mitra Industri').trim();
+                            }
+                            if (nama) {
+                                parsedList.push({ 
+                                    nama, 
+                                    nis, 
+                                    nisn: nis, 
+                                    jk: (jk.startsWith('P') ? 'P' : 'L'), 
+                                    kelas, 
+                                    jurusan, 
+                                    noHp, 
+                                    industri: ind, 
+                                    hadir: 100 
+                                });
+                            }
                         } else if (kat === "Guru") {
                             parsedList.push({ nama: String(r[0] || '').trim(), nip: String(r[1] || '').trim(), mapel: String(r[2] || 'Pembimbing').trim() });
                         } else if (kat === "Industri") {
