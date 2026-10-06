@@ -533,6 +533,36 @@
         .btn-amber { background: #f59e0b; color: #fff; }
         .btn-red { background: #ef4444; color: #fff; }
 
+        /* Status Sinkronisasi Cloud Banner */
+        .cloud-sync-bar {
+            background: #f0f9ff;
+            border-bottom: 1px solid #bae6fd;
+            padding: 6px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: #0369a1;
+        }
+        .cloud-sync-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .cloud-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 6px #10b981;
+            animation: pulse-dot 2s infinite ease-in-out;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.85); }
+        }
+
         /* --- MODAL DIALOGS --- */
         .custom-modal-backdrop {
             position: fixed;
@@ -728,6 +758,17 @@
             </div>
         </header>
 
+        <!-- Indikator Cloud Database Realtime -->
+        <div class="cloud-sync-bar">
+            <div class="cloud-sync-status">
+                <div class="cloud-dot" id="cloudStatusDot"></div>
+                <span id="cloudStatusText">Cloud Database Terhubung (500+ Perangkat)</span>
+            </div>
+            <button onclick="window.tarikDataDariCloud(false)" style="background: none; border: none; color: #0284c7; cursor: pointer; font-weight: 800; font-size: 11px; display: flex; align-items: center; gap: 4px;">
+                🔄 Refresh Cloud
+            </button>
+        </div>
+
         <div class="app-sidebar-backdrop" id="sidebarBackdrop" onclick="window.closeDrawerSidebar()"></div>
         <aside class="app-sidebar" id="appSidebar">
             <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid #bfdbfe; margin-bottom: 10px;">
@@ -867,7 +908,7 @@
             userProfile: null,
             ...dbAwal
         };
-        window.gasBackendUrl = "https://script.google.com/macros/s/AKfycbxoKWB-X6cMeFgJE43hzG-zmDtifENZ0W8z0wuS-_WdcIpO2V8LHiKo1KUjmG-LrC7wZg/exec";
+        window.gasBackendUrl = "https://script.google.com/macros/s/AKfycbzB2bgDyX3CYB_X85xf48pgeQ-2n2IYJdp0wyYngZiiAxa3P3q_dCdI2_Vbkzk0y1M7wA/exec";
 
         window.simpanDatabasePersisten = function() {
             try {
@@ -886,9 +927,86 @@
                     registeredUsers: window.cloudState.registeredUsers
                 };
                 localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(dbCopy));
+
+                // Otomatis sinkronkan snapshot ke Google Sheets agar terbaca oleh 500 HP/device lain
+                window.kirimSnapshotKeGoogleSheets(dbCopy);
             } catch(e) {
                 console.warn("Gagal simpan ke localStorage:", e);
             }
+        };
+
+        // Mengirimkan snapshot database master ke Google Sheets
+        window.kirimSnapshotKeGoogleSheets = function(payload) {
+            if (!window.gasBackendUrl) return;
+            const dot = document.getElementById("cloudStatusDot");
+            const txt = document.getElementById("cloudStatusText");
+            if (dot) dot.style.background = "#f59e0b";
+            if (txt) txt.innerText = "Menyimpan ke Cloud Google Sheets...";
+
+            fetch(window.gasBackendUrl, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "save_cloud_db",
+                    timestamp: new Date().toISOString(),
+                    data: payload
+                })
+            }).then(() => {
+                if (dot) dot.style.background = "#10b981";
+                if (txt) txt.innerText = "Tersinkron ke Cloud (Semua HP)";
+            }).catch(err => {
+                if (dot) dot.style.background = "#ef4444";
+                if (txt) txt.innerText = "Gagal simpan cloud";
+            });
+        };
+
+        // Menarik data master terbaru dari Google Sheets saat aplikasi dibuka di perangkat manapun
+        window.tarikDataDariCloud = function(silent = true) {
+            if (!window.gasBackendUrl) return;
+            const dot = document.getElementById("cloudStatusDot");
+            const txt = document.getElementById("cloudStatusText");
+            if (!silent && txt) txt.innerText = "Menghubungkan ke Cloud...";
+
+            fetch(window.gasBackendUrl + "?type=load_db")
+                .then(res => res.json())
+                .then(res => {
+                    if (res && res.success && res.data) {
+                        const cloudData = res.data;
+                        // Timpa state memori dengan data cloud terpusat
+                        window.cloudState.bannerSliderImages = cloudData.bannerSliderImages || window.cloudState.bannerSliderImages;
+                        window.cloudState.pklConfig = cloudData.pklConfig || window.cloudState.pklConfig;
+                        window.cloudState.siswa = cloudData.siswa || window.cloudState.siswa;
+                        window.cloudState.guru = cloudData.guru || window.cloudState.guru;
+                        window.cloudState.industri = cloudData.industri || window.cloudState.industri;
+                        window.cloudState.penempatan = cloudData.penempatan || window.cloudState.penempatan;
+                        window.cloudState.absensi = cloudData.absensi || window.cloudState.absensi;
+                        window.cloudState.jurnal = cloudData.jurnal || window.cloudState.jurnal;
+                        window.cloudState.registeredUsers = cloudData.registeredUsers || window.cloudState.registeredUsers;
+
+                        // Simpan juga ke cache lokal perangkat untuk akses super cepat tanpa lelet
+                        try {
+                            localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cloudData));
+                        } catch(e) {}
+
+                        if (dot) dot.style.background = "#10b981";
+                        if (txt) txt.innerText = "Data Cloud Terkini (Siap untuk 500 HP)";
+
+                        if (!silent) {
+                            window.showModalInfo("Cloud Terhubung ☁️", "Seluruh data siswa, guru, industri, dan akun berhasil diperbarui dari Google Sheets!");
+                            // Segarkan tampilan fitur aktif
+                            if (window.cloudState.currentFeature) {
+                                window.openFeature(window.cloudState.currentFeature, "Perbarui");
+                            }
+                        }
+                    } else {
+                        if (!silent) window.showModalInfo("Info Cloud", "Data di Google Sheets masih kosong atau belum diisi oleh Admin.");
+                    }
+                })
+                .catch(err => {
+                    console.warn("Gagal memuat dari cloud:", err);
+                    if (!silent) window.showModalInfo("Offline", "Tidak dapat terhubung ke Google Sheets. Menggunakan data cache perangkat.");
+                });
         };
 
         const roleDefaults = {
@@ -1666,10 +1784,12 @@
                 <!-- Baris Cadangan & Pulihkan Database Persisten -->
                 <div style="background:#f0f9ff; border:1px solid #bfdbfe; border-radius:12px; padding:10px 14px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                     <div>
-                        <span style="font-size:12px; font-weight:800; color:#0369a1;">🛡️ Keamanan Database Anti Reset Deploy:</span>
-                        <div style="font-size:10px; color:#64748b;">Simpan cadangan ke berkas JSON atau pulihkan data saat pindah domain Vercel.</div>
+                        <span style="font-size:12px; font-weight:800; color:#0369a1;">🌐 Sinkronisasi Cloud Antar 500 Perangkat:</span>
+                        <div style="font-size:10px; color:#64748b;">Kirim semua data dari PC ini ke Google Sheets agar langsung tampil di semua HP siswa & guru.</div>
                     </div>
-                    <div style="display:flex; gap:6px;">
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.kirimSnapshotKeGoogleSheets(window.cloudState)" class="btn-action btn-blue" style="padding:5px 10px; font-size:11px;">☁️ Unggah ke Cloud</button>
+                        <button onclick="window.tarikDataDariCloud(false)" class="btn-action btn-emerald" style="padding:5px 10px; font-size:11px;">🔄 Tarik dari Cloud</button>
                         <button onclick="window.eksporCadanganDatabase()" class="btn-action btn-emerald" style="padding:5px 10px; font-size:11px;">💾 Backup JSON</button>
                         <button onclick="window.pemicuImporCadanganDatabase()" class="btn-action btn-blue" style="padding:5px 10px; font-size:11px;">📤 Pulihkan JSON</button>
                         <input type="file" id="inputPulihkanJson" accept=".json" style="display:none;" onchange="window.prosesImporCadanganDatabase(this)">
@@ -1941,40 +2061,61 @@
                 window.openFeature("kelola-akun", "Buat Akun & Kredensial");
             });
         };
-        // MODUL MASTER INDUSTRI DENGAN KOLOM ALAMAT LENGKAP
+        // MODUL MASTER INDUSTRI DENGAN KOLOM ALAMAT LENGKAP & NOMOR WA INDUSTRI
         window.renderMasterIndustriTable = function() {
             let rows = "";
             (window.cloudState.industri || []).forEach((ind, idx) => {
+                const waLink = ind.noWa && ind.noWa !== '-' ? `https://wa.me/${ind.noWa.replace(/[^0-9]/g, '')}` : null;
                 rows += `<tr>
                     <td>${idx+1}</td>
                     <td><b>${ind.nama}</b><div style="font-size:10px; color:#64748b;">📍 ${ind.alamat || 'Alamat belum diisi'}</div></td>
                     <td>${ind.pimpinan || '-'}</td>
-                    <td><span class="badge-status badge-blue">Radius ${ind.radius || 50}M</span></td>
+                    <td>
+                        ${waLink ? `<a href="${waLink}" target="_blank" style="color:#059669; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; gap:4px; background:#dcfce7; padding:3px 8px; border-radius:6px; border:1px solid #86efac;">📱 ${ind.noWa}</a>` : `<span style="color:#64748b; font-weight:700;">${ind.noWa || '-'}</span>`}
+                    </td>
                     <td><button onclick="window.konfirmasiHapusIndustri(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td>
                 </tr>`;
             });
             return `<div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-                    <div><h3 style="font-size:16px; font-weight:900; color:#0284c7;">🏭 Mitra Industri DUDI</h3><p style="font-size:11px; color:var(--text-muted);">Kelola data mitra kerja sama tempat PKL dan alamat operasional.</p></div>
-                    <div style="display:flex; gap:8px;">
-                        <button onclick="window.bukaModalUploadExcel('Industri')" class="btn-action btn-emerald">📥 Impor Excel</button>
+                    <div><h3 style="font-size:16px; font-weight:900; color:#0284c7;">🏭 Mitra Industri DUDI</h3><p style="font-size:11px; color:var(--text-muted);">Kelola data mitra kerja sama tempat PKL, alamat operasional, dan kontak WhatsApp.</p></div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.unduhTemplateExcelIndustri()" class="btn-action btn-emerald" style="display:flex; align-items:center; gap:4px;">📄 Unduh Template Excel</button>
+                        <button onclick="window.bukaModalUploadExcel('Industri')" class="btn-action btn-blue" style="display:flex; align-items:center; gap:4px;">📥 Impor Excel</button>
                         <button onclick="window.bukaModalInputIndustri()" class="btn-action btn-blue">+ Tambah Industri</button>
                     </div>
                 </div>
                 <div class="table-wrap">
                     <table>
-                        <thead><tr><th>No</th><th>Nama & Alamat Perusahaan</th><th>Pimpinan / HRD</th><th>Radius Geofence</th><th>Aksi</th></tr></thead>
+                        <thead><tr><th>No</th><th>Nama & Alamat Perusahaan</th><th>Pimpinan / HRD</th><th>Nomor WA Industri</th><th>Aksi</th></tr></thead>
                         <tbody>${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada industri terdaftar</td></tr>'}</tbody>
                     </table>
                 </div>
             </div>`;
         };
 
+        // UNDUH TEMPLATE EXCEL MASTER INDUSTRI
+        window.unduhTemplateExcelIndustri = function() {
+            const dataTemplate = [
+                ["No", "Nama Perusahaan / DUDI", "Alamat Lengkap", "Pimpinan / HRD", "Nomor WA Industri"],
+                [1, "PT. Inovasi Teknologi Sejahtera", "Jl. Trans Sulawesi No. 12, Marisa, Gorontalo", "Ir. Hendra Pratama", "081234567890"],
+                [2, "PT. Telkom Indonesia Witel Gorontalo", "Jl. Jenderal Sudirman No. 45, Marisa", "Bpk. Bambang Sutrisno", "082198765432"]
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(dataTemplate);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "MasterIndustri");
+            XLSX.writeFile(wb, "Template_Data_Master_Industri_SMKN1Marisa.xlsx");
+            window.showModalInfo("Template Industri Terunduh 📄", "Template Excel data industri (Nama Perusahaan, Alamat, Pimpinan, Nomor WA Industri) berhasil diunduh!");
+        };
+
         window.bukaModalInputIndustri = function() {
             const modalHtml = `<h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">🏭 Tambah Industri Manual</h3>
                 <div class="form-group"><label class="form-label">Nama Perusahaan / DUDI:</label><input type="text" id="addIndNama" class="form-control" placeholder="PT. Inovasi Teknologi Sejahtera"></div>
                 <div class="form-group"><label class="form-label">Alamat Lengkap Industri / DUDI:</label><textarea id="addIndAlamat" class="form-control" style="height:60px;" placeholder="Jl. Trans Sulawesi, No. 12, Marisa, Gorontalo"></textarea></div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;"><div class="form-group"><label class="form-label">Pimpinan / HRD:</label><input type="text" id="addIndPimpinan" class="form-control" placeholder="Ir. Hendra"></div><div class="form-group"><label class="form-label">Radius Geofence (Meter):</label><input type="number" id="addIndRadius" class="form-control" value="50"></div></div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div class="form-group"><label class="form-label">Pimpinan / HRD:</label><input type="text" id="addIndPimpinan" class="form-control" placeholder="Ir. Hendra"></div>
+                    <div class="form-group"><label class="form-label">Nomor WA Industri:</label><input type="tel" id="addIndNoWa" class="form-control" placeholder="Contoh: 081234567890"></div>
+                </div>
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;"><button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button><button onclick="window.simpanIndustriManual()" class="btn-action btn-blue">💾 Simpan Industri</button></div>`;
             window.openDynamicModal(modalHtml);
         };
@@ -1982,14 +2123,17 @@
         window.simpanIndustriManual = function() {
             const nama = document.getElementById("addIndNama")?.value.trim();
             const alamat = document.getElementById("addIndAlamat")?.value.trim() || "-";
-            const pimpinan = document.getElementById("addIndPimpinan")?.value.trim();
-            const radius = parseInt(document.getElementById("addIndRadius")?.value) || 50;
-            if (!nama) return;
-            const item = { id: "ind_" + Date.now(), nama, alamat, pimpinan: pimpinan || "HRD", radius, masuk: "08:00", pulang: "16:00", lat: "0.45612", lng: "121.94210" };
+            const pimpinan = document.getElementById("addIndPimpinan")?.value.trim() || "HRD";
+            const noWa = document.getElementById("addIndNoWa")?.value.trim() || "-";
+            if (!nama) {
+                window.showModalInfo("Lengkapi Formulir", "Nama Perusahaan / DUDI wajib diisi!");
+                return;
+            }
+            const item = { id: "ind_" + Date.now(), nama, alamat, pimpinan, noWa, radius: 50, masuk: "08:00", pulang: "16:00", lat: "0.45612", lng: "121.94210" };
             window.cloudState.industri.unshift(item);
             window.simpanDatabasePersisten();
             window.closeDynamicModal();
-            window.showModalInfo("Industri Tersimpan", `Data industri <b>${nama}</b> beserta alamat berhasil disimpan.`);
+            window.showModalInfo("Industri Tersimpan 🏭", `Data industri <b>${nama}</b> beserta nomor WA berhasil disimpan.`);
             window.openFeature("master-industri", "Mitra Industri DUDI");
         };
 
@@ -2338,7 +2482,21 @@
                         } else if (kat === "Guru") {
                             parsedList.push({ nama: String(r[0] || '').trim(), nip: String(r[1] || '').trim(), mapel: String(r[2] || 'Pembimbing').trim() });
                         } else if (kat === "Industri") {
-                            parsedList.push({ id: "ind_" + Date.now(), nama: String(r[0] || '').trim(), alamat: String(r[1] || '-').trim(), pimpinan: String(r[2] || 'HRD').trim(), radius: parseInt(r[3]) || 50, masuk: "08:00", pulang: "16:00" });
+                            let nama = "", alamat = "-", pimpinan = "HRD", noWa = "-";
+                            if (typeof r[0] === 'number' || (!isNaN(parseInt(r[0])) && r[1])) {
+                                nama = String(r[1] || '').trim();
+                                alamat = String(r[2] || '-').trim();
+                                pimpinan = String(r[3] || 'HRD').trim();
+                                noWa = String(r[4] || '-').trim();
+                            } else {
+                                nama = String(r[0] || '').trim();
+                                alamat = String(r[1] || '-').trim();
+                                pimpinan = String(r[2] || 'HRD').trim();
+                                noWa = String(r[3] || '-').trim();
+                            }
+                            if (nama) {
+                                parsedList.push({ id: "ind_" + Date.now(), nama, alamat, pimpinan, noWa, radius: 50, masuk: "08:00", pulang: "16:00", lat: "0.45612", lng: "121.94210" });
+                            }
                         }
                     });
 
@@ -2815,9 +2973,8 @@
         };
 
         window.addEventListener("DOMContentLoaded", () => {
-            if (typeof window.sinkronDariGoogleSheets === "function") {
-                window.sinkronDariGoogleSheets(true);
-            }
+            // Tarik otomatis data master dari Google Sheets saat dibuka di HP/PC manapun
+            window.tarikDataDariCloud(true);
 
             try {
                 const savedSession = localStorage.getItem(STORAGE_KEY_SESSION);
@@ -2834,4 +2991,3 @@
     </script>
 </body>
 </html>
-```
