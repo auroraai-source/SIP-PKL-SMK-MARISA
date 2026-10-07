@@ -897,7 +897,7 @@
         };
         window.gasBackendUrl = "https://script.google.com/macros/s/AKfycbzB2bgDyX3CYB_X85xf48pgeQ-2n2IYJdp0wyYngZiiAxa3P3q_dCdI2_Vbkzk0y1M7wA/exec";
 
-        window.simpanDatabasePersisten = function() {
+        window.simpanDatabasePersisten = function(triggerCloud = true) {
             try {
                 const dbCopy = {
                     bannerSliderImages: window.cloudState.bannerSliderImages,
@@ -914,34 +914,68 @@
                     registeredUsers: window.cloudState.registeredUsers
                 };
                 localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(dbCopy));
-                window.kirimSnapshotKeGoogleSheets(dbCopy);
+                if (triggerCloud) {
+                    window.kirimSnapshotKeGoogleSheets(dbCopy, true);
+                }
             } catch(e) {
                 console.warn("Gagal simpan ke localStorage:", e);
             }
         };
 
-        window.kirimSnapshotKeGoogleSheets = function(payload) {
-            if (!window.gasBackendUrl) return;
+        window.kirimSnapshotKeGoogleSheets = function(payload, silent = false) {
+            if (!window.gasBackendUrl) {
+                if (!silent) window.showModalInfo("URL Belum Diatur", "URL Google Apps Script belum terpasang.");
+                return Promise.reject("URL kosong");
+            }
             const dot = document.getElementById("cloudStatusDot");
             const txt = document.getElementById("cloudStatusText");
             if (dot) dot.style.background = "#f59e0b";
-            if (txt) txt.innerText = "Menyimpan ke Cloud...";
+            if (txt) txt.innerText = "Mengunggah ke Cloud...";
 
-            fetch(window.gasBackendUrl, {
+            const requestBody = JSON.stringify({
+                action: "save_cloud_db",
+                timestamp: new Date().toISOString(),
+                data: payload
+            });
+
+            // Gunakan text/plain agar tidak memicu preflight OPTIONS dan respon JSON dapat dibaca
+            return fetch(window.gasBackendUrl, {
                 method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "save_cloud_db",
-                    timestamp: new Date().toISOString(),
-                    data: payload
-                })
-            }).then(() => {
-                if (dot) dot.style.background = "#10b981";
-                if (txt) txt.innerText = "Tersinkron Cloud (Semua HP)";
-            }).catch(err => {
-                if (dot) dot.style.background = "#10b981";
-                if (txt) txt.innerText = "Tersimpan Lokal";
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: requestBody
+            })
+            .then(res => res.json())
+            .then(result => {
+                if (result && result.success) {
+                    if (dot) dot.style.background = "#10b981";
+                    if (txt) txt.innerText = "Tersinkron Cloud (Semua HP Terhubung)";
+                    if (!silent) {
+                        window.showModalInfo("Berhasil Disimpan ke Cloud ☁️", 
+                            `Database berhasil diperbarui di Google Sheets!<br><br>` +
+                            `• <b>Total Siswa:</b> ${result.totalSiswa || 0}<br>` +
+                            `• <b>Total Akun Aktif:</b> ${result.totalAkun || 0}<br>` +
+                            `• <b>Partisi:</b> ${result.chunks} (${result.bytes} bytes)<br><br>` +
+                            `<span style="color:#059669; font-weight:800;">Data ini langsung dapat dibuka di seluruh HP siswa & guru sekarang juga!</span>`
+                        );
+                    }
+                    return result;
+                } else {
+                    throw new Error(result ? result.message : "Gagal memproses data di server");
+                }
+            })
+            .catch(err => {
+                console.warn("Kirim ke Cloud via POST gagal:", err);
+                if (dot) dot.style.background = "#ef4444";
+                if (txt) txt.innerText = "Gagal Sinkron Cloud (Cek Izin GAS)";
+                if (!silent) {
+                    window.showModalInfo("Kendala Sinkronisasi Cloud", 
+                        `Gagal mengirim data ke Google Sheets: <b>${err.message || err}</b><br><br>` +
+                        `<b>Solusi:</b> Pastikan penerapan (deployment) Apps Script disetel ke:<br>` +
+                        `1. <i>Execute as: Me</i><br>` +
+                        `2. <i>Who has access: Anyone (Siapa saja)</i>`
+                    );
+                }
+                throw err;
             });
         };
 
@@ -949,34 +983,44 @@
             if (!window.gasBackendUrl) return;
             const dot = document.getElementById("cloudStatusDot");
             const txt = document.getElementById("cloudStatusText");
-            if (!silent && txt) txt.innerText = "Menghubungkan ke Cloud...";
+            if (dot) dot.style.background = "#f59e0b";
+            if (txt) txt.innerText = "Menghubungkan ke Cloud...";
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 6000); // 6 detik batas waktu agar tidak hang
+            // Berikan waktu hingga 15 detik agar koneksi HP tidak terputus saat GAS cold-start
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
 
             fetch(window.gasBackendUrl + "?type=load_db&_t=" + Date.now(), { signal: controller.signal })
-                .then(res => res.json())
                 .then(res => {
                     clearTimeout(timeoutId);
+                    return res.json();
+                })
+                .then(res => {
                     if (res && res.success && res.data) {
                         const cloudData = res.data;
                         window.cloudState.bannerSliderImages = cloudData.bannerSliderImages || window.cloudState.bannerSliderImages;
                         window.cloudState.pklConfig = cloudData.pklConfig || window.cloudState.pklConfig;
-                        window.cloudState.siswa = cloudData.siswa || window.cloudState.siswa;
-                        window.cloudState.guru = cloudData.guru || window.cloudState.guru;
-                        window.cloudState.industri = cloudData.industri || window.cloudState.industri;
-                        window.cloudState.penempatan = cloudData.penempatan || window.cloudState.penempatan;
-                        window.cloudState.absensi = cloudData.absensi || window.cloudState.absensi;
-                        window.cloudState.jurnal = cloudData.jurnal || window.cloudState.jurnal;
-                        window.cloudState.registeredUsers = cloudData.registeredUsers || window.cloudState.registeredUsers;
+                        window.cloudState.siswa = cloudData.siswa || [];
+                        window.cloudState.guru = cloudData.guru || [];
+                        window.cloudState.industri = cloudData.industri || [];
+                        window.cloudState.penempatan = cloudData.penempatan || [];
+                        window.cloudState.absensi = cloudData.absensi || [];
+                        window.cloudState.jurnal = cloudData.jurnal || [];
+                        window.cloudState.registeredUsers = cloudData.registeredUsers || [];
 
                         try { localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cloudData)); } catch(e) {}
 
                         if (dot) dot.style.background = "#10b981";
-                        if (txt) txt.innerText = "Cloud Online (500 HP Terhubung)";
+                        if (txt) txt.innerText = `Online (${window.cloudState.siswa.length} Siswa, ${window.cloudState.registeredUsers.length} Akun)`;
 
                         if (!silent) {
-                            window.showModalInfo("Cloud Terhubung ☁️", "Seluruh data siswa, guru, industri, dan akun berhasil diperbarui dari server Google Sheets!");
+                            window.showModalInfo("Cloud Terhubung ☁️", 
+                                `Data berhasil dimuat dari Google Sheets!<br><br>` +
+                                `• <b>Siswa:</b> ${window.cloudState.siswa.length} orang<br>` +
+                                `• <b>Guru:</b> ${window.cloudState.guru.length} orang<br>` +
+                                `• <b>Mitra Industri:</b> ${window.cloudState.industri.length} perusahaan<br>` +
+                                `• <b>Akun Terdaftar:</b> ${window.cloudState.registeredUsers.length} akun`
+                            );
                         }
                         if (window.cloudState.currentFeature) {
                             window.openFeature(window.cloudState.currentFeature, "Perbarui");
@@ -984,13 +1028,18 @@
                     } else {
                         if (dot) dot.style.background = "#10b981";
                         if (txt) txt.innerText = "Database Terhubung";
+                        if (!silent) {
+                            window.showModalInfo("Informasi Server", res.message || "Database online di Google Sheets masih kosong.");
+                        }
                     }
                 })
                 .catch(err => {
                     clearTimeout(timeoutId);
                     if (dot) dot.style.background = "#10b981";
                     if (txt) txt.innerText = "Mode Cepat (Lokal)";
-                    if (!silent) window.showModalInfo("Mode Lokal Aktif", "Menggunakan data lokal perangkat. Tetap dapat bekerja normal.");
+                    if (!silent) {
+                        window.showModalInfo("Pemberitahuan Jaringan", "Tidak dapat terhubung ke server cloud dalam 15 detik. Menggunakan data tersimpan di perangkat.");
+                    }
                 });
         };
 
@@ -2031,6 +2080,8 @@
             let rows = "";
             (window.cloudState.industri || []).forEach((ind, idx) => {
                 const waLink = ind.noWa && ind.noWa !== '-' ? `https://wa.me/${ind.noWa.replace(/[^0-9]/g, '')}` : null;
+                const uname = ind.username || (ind.nama ? ind.nama.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12) : `dudi${idx+1}`);
+                const pwd = ind.pass || "dudi123";
                 rows += `<tr>
                     <td>${idx+1}</td>
                     <td><b>${ind.nama}</b><div style="font-size:10px; color:#64748b;">📍 ${ind.alamat || 'Alamat belum diisi'}</div></td>
@@ -2038,12 +2089,14 @@
                     <td>
                         ${waLink ? `<a href="${waLink}" target="_blank" style="color:#059669; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; gap:4px; background:#dcfce7; padding:3px 8px; border-radius:6px; border:1px solid #86efac;">📱 ${ind.noWa}</a>` : `<span style="color:#64748b; font-weight:700;">${ind.noWa || '-'}</span>`}
                     </td>
+                    <td><code style="color:#0284c7; font-weight:700;">${uname}</code></td>
+                    <td><span style="font-family:monospace; background:#f1f5f9; padding:2px 6px; border-radius:4px; border:1px solid #cbd5e1; font-weight:700;">${pwd}</span></td>
                     <td><button onclick="window.konfirmasiHapusIndustri(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td>
                 </tr>`;
             });
             return `<div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-                    <div><h3 style="font-size:16px; font-weight:900; color:#0284c7;">🏭 Mitra Industri DUDI</h3><p style="font-size:11px; color:var(--text-muted);">Kelola data mitra kerja sama tempat PKL, alamat operasional, dan kontak WhatsApp.</p></div>
+                    <div><h3 style="font-size:16px; font-weight:900; color:#0284c7;">🏭 Mitra Industri DUDI & Kredensial</h3><p style="font-size:11px; color:var(--text-muted);">Kelola data mitra kerja sama tempat PKL, kontak WhatsApp, serta Akun Login Industri.</p></div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button onclick="window.unduhTemplateExcelIndustri()" class="btn-action btn-emerald" style="display:flex; align-items:center; gap:4px;">📄 Unduh Template Excel</button>
                         <button onclick="window.bukaModalUploadExcel('Industri')" class="btn-action btn-blue" style="display:flex; align-items:center; gap:4px;">📥 Impor Excel</button>
@@ -2052,8 +2105,8 @@
                 </div>
                 <div class="table-wrap">
                     <table>
-                        <thead><tr><th>No</th><th>Nama & Alamat Perusahaan</th><th>Pimpinan / HRD</th><th>Nomor WA Industri</th><th>Aksi</th></tr></thead>
-                        <tbody>${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada industri terdaftar</td></tr>'}</tbody>
+                        <thead><tr><th>No</th><th>Nama & Alamat Perusahaan</th><th>Pimpinan / HRD</th><th>Nomor WA Industri</th><th>Username Login</th><th>Kata Sandi</th><th>Aksi</th></tr></thead>
+                        <tbody>${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada industri terdaftar</td></tr>'}</tbody>
                     </table>
                 </div>
             </div>`;
@@ -2061,27 +2114,38 @@
 
         window.unduhTemplateExcelIndustri = function() {
             const dataTemplate = [
-                ["No", "Nama Perusahaan / DUDI", "Alamat Lengkap", "Pimpinan / HRD", "Nomor WA Industri"],
-                [1, "PT. Inovasi Teknologi Sejahtera", "Jl. Trans Sulawesi No. 12, Marisa, Gorontalo", "Ir. Hendra Pratama", "081234567890"],
-                [2, "PT. Telkom Indonesia Witel Gorontalo", "Jl. Jenderal Sudirman No. 45, Marisa", "Bpk. Bambang Sutrisno", "082198765432"]
+                ["No", "Nama Perusahaan / DUDI", "Alamat Lengkap", "Pimpinan / HRD", "Nomor WA Industri", "Username Login", "Kata Sandi"],
+                [1, "PT. Inovasi Teknologi Sejahtera", "Jl. Trans Sulawesi No. 12, Marisa, Gorontalo", "Ir. Hendra Pratama", "081234567890", "ptinovasi", "dudi123"],
+                [2, "PT. Telkom Indonesia Witel Gorontalo", "Jl. Jenderal Sudirman No. 45, Marisa", "Bpk. Bambang Sutrisno", "082198765432", "telkom.marisa", "dudi123"]
             ];
             const ws = XLSX.utils.aoa_to_sheet(dataTemplate);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "MasterIndustri");
             XLSX.writeFile(wb, "Template_Data_Master_Industri_SMKN1Marisa.xlsx");
-            window.showModalInfo("Template Industri Terunduh 📄", "Template Excel data industri berhasil diunduh!");
+            window.showModalInfo("Template Industri Terunduh 📄", "Template Excel data industri lengkap dengan kolom Akun (Username & Kata Sandi) berhasil diunduh!");
         };
 
         window.bukaModalInputIndustri = function() {
-            const modalHtml = `<h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">🏭 Tambah Industri Manual</h3>
-                <div class="form-group"><label class="form-label">Nama Perusahaan / DUDI:</label><input type="text" id="addIndNama" class="form-control" placeholder="PT. Inovasi Teknologi Sejahtera"></div>
+            const modalHtml = `<h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">🏭 Tambah Industri & Kredensial Akun</h3>
+                <div class="form-group"><label class="form-label">Nama Perusahaan / DUDI:</label><input type="text" id="addIndNama" class="form-control" placeholder="PT. Inovasi Teknologi Sejahtera" oninput="window.autofillIndUsername(this.value)"></div>
                 <div class="form-group"><label class="form-label">Alamat Lengkap Industri / DUDI:</label><textarea id="addIndAlamat" class="form-control" style="height:60px;" placeholder="Jl. Trans Sulawesi, No. 12, Marisa, Gorontalo"></textarea></div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                     <div class="form-group"><label class="form-label">Pimpinan / HRD:</label><input type="text" id="addIndPimpinan" class="form-control" placeholder="Ir. Hendra"></div>
                     <div class="form-group"><label class="form-label">Nomor WA Industri:</label><input type="tel" id="addIndNoWa" class="form-control" placeholder="Contoh: 081234567890"></div>
                 </div>
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;"><button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button><button onclick="window.simpanIndustriManual()" class="btn-action btn-blue">💾 Simpan Industri</button></div>`;
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; background:#f0f9ff; border:1px solid #bfdbfe; border-radius:12px; padding:10px; margin-bottom:12px;">
+                    <div class="form-group" style="margin-bottom:0;"><label class="form-label" style="color:#0369a1;">🔑 Username Login Industri:</label><input type="text" id="addIndUsername" class="form-control" placeholder="ptinovasi"></div>
+                    <div class="form-group" style="margin-bottom:0;"><label class="form-label" style="color:#0369a1;">🔒 Kata Sandi Login:</label><input type="text" id="addIndPassword" class="form-control" value="dudi123"></div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;"><button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button><button onclick="window.simpanIndustriManual()" class="btn-action btn-blue">💾 Simpan Industri & Terbitkan Akun</button></div>`;
             window.openDynamicModal(modalHtml);
+        };
+
+        window.autofillIndUsername = function(val) {
+            const inp = document.getElementById("addIndUsername");
+            if (inp && !inp.dataset.customized) {
+                inp.value = String(val || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 14);
+            }
         };
 
         window.simpanIndustriManual = function() {
@@ -2089,22 +2153,53 @@
             const alamat = document.getElementById("addIndAlamat")?.value.trim() || "-";
             const pimpinan = document.getElementById("addIndPimpinan")?.value.trim() || "HRD";
             const noWa = document.getElementById("addIndNoWa")?.value.trim() || "-";
+            const uname = document.getElementById("addIndUsername")?.value.trim() || String(nama).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 14);
+            const pwd = document.getElementById("addIndPassword")?.value.trim() || "dudi123";
+
             if (!nama) {
                 window.showModalInfo("Lengkapi Formulir", "Nama Perusahaan / DUDI wajib diisi!");
                 return;
             }
-            const item = { id: "ind_" + Date.now(), nama, alamat, pimpinan, noWa, radius: 50, masuk: "08:00", pulang: "16:00", lat: "0.45612", lng: "121.94210" };
+            const item = { 
+                id: "ind_" + Date.now(), 
+                nama, 
+                alamat, 
+                pimpinan, 
+                noWa, 
+                radius: 50, 
+                masuk: "08:00", 
+                pulang: "16:00", 
+                lat: "0.45612", 
+                lng: "121.94210",
+                username: uname,
+                pass: pwd
+            };
             window.cloudState.industri.unshift(item);
+
+            // Daftarkan langsung ke akun resmi agar bisa login seketika
+            if (uname) {
+                const uIdx = (window.cloudState.registeredUsers || []).findIndex(u => u.username === uname && u.role === "industri");
+                const userObj = { role: "industri", nama: nama, username: uname, pass: pwd, email: uname + "@smkn1marisa.sch.id", identitas: uname };
+                if (uIdx >= 0) {
+                    window.cloudState.registeredUsers[uIdx] = userObj;
+                } else {
+                    window.cloudState.registeredUsers.unshift(userObj);
+                }
+            }
+
             window.simpanDatabasePersisten();
             window.closeDynamicModal();
-            window.showModalInfo("Industri Tersimpan 🏭", `Data industri <b>${nama}</b> berhasil disimpan.`);
+            window.showModalInfo("Industri & Akun Tersimpan 🏭", `Data industri <b>${nama}</b> berhasil disimpan.<br>Akun login aktif: <b>${uname}</b> | Sandi: <b>${pwd}</b>`);
             window.openFeature("master-industri", "Mitra Industri DUDI");
         };
 
         window.konfirmasiHapusIndustri = function(idx) {
             const ind = (window.cloudState.industri || [])[idx];
             if (!ind) return;
-            window.showConfirmDialog("Hapus Mitra Industri", `Yakin ingin menghapus industri <b>${ind.nama}</b>?`, () => {
+            window.showConfirmDialog("Hapus Mitra Industri", `Yakin ingin menghapus industri <b>${ind.nama}</b> beserta akunnya?`, () => {
+                if (ind.username) {
+                    window.cloudState.registeredUsers = (window.cloudState.registeredUsers || []).filter(u => !(u.username === ind.username && u.role === 'industri'));
+                }
                 window.cloudState.industri.splice(idx, 1);
                 window.simpanDatabasePersisten();
                 window.openFeature("master-industri", "Mitra Industri DUDI");
@@ -2174,6 +2269,8 @@
         window.renderMasterSiswaTable = function() {
             let rows = "";
             (window.cloudState.siswa || []).forEach((s, idx) => {
+                const uname = s.username || s.nis || s.nisn || "-";
+                const pwd = s.pass || "siswa123";
                 rows += `<tr>
                     <td>${idx+1}</td>
                     <td><b>${s.nama}</b></td>
@@ -2183,6 +2280,8 @@
                     <td>${s.jurusan || '-'}</td>
                     <td>${s.noHp || '-'}</td>
                     <td><b>${s.industri || s.tempatPkl || '-'}</b></td>
+                    <td><code style="color:#0284c7; font-weight:700;">${uname}</code></td>
+                    <td><span style="font-family:monospace; background:#f1f5f9; padding:2px 6px; border-radius:4px; border:1px solid #cbd5e1; font-weight:700;">${pwd}</span></td>
                     <td><button onclick="window.konfirmasiHapusSiswa(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td>
                 </tr>`;
             });
@@ -2190,8 +2289,8 @@
             return `<div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
-                        <h3 style="font-size:16px; font-weight:900; color:#0284c7;">👨‍🎓 Data Master Siswa Peserta PKL</h3>
-                        <p style="font-size:11px; color:var(--text-muted);">Kelola data siswa lengkap: Nama, NIS, JK, Kelas, Jurusan, No HP, dan Tempat PKL.</p>
+                        <h3 style="font-size:16px; font-weight:900; color:#0284c7;">👨‍🎓 Data Master Siswa & Kredensial Akun</h3>
+                        <p style="font-size:11px; color:var(--text-muted);">Kelola data siswa lengkap: NIS, Kelas, Jurusan, Tempat PKL, serta Akun Login Siswa.</p>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button onclick="window.unduhTemplateExcelSiswa()" class="btn-action btn-emerald" style="display:flex; align-items:center; gap:4px;">📄 Unduh Template Excel</button>
@@ -2211,10 +2310,12 @@
                                 <th>Jurusan</th>
                                 <th>No HP</th>
                                 <th>Tempat PKL</th>
+                                <th>Username Login</th>
+                                <th>Kata Sandi</th>
                                 <th>Aksi</th>
                             </tr>
                         </thead>
-                        <tbody>${rows || '<tr><td colspan="9" class="empty-placeholder">Belum ada data siswa terdaftar</td></tr>'}</tbody>
+                        <tbody>${rows || '<tr><td colspan="11" class="empty-placeholder">Belum ada data siswa terdaftar</td></tr>'}</tbody>
                     </table>
                 </div>
             </div>`;
@@ -2222,21 +2323,25 @@
 
         window.unduhTemplateExcelSiswa = function() {
             const dataTemplate = [
-                ["No", "Nama Siswa", "NIS", "JK", "Kelas", "Jurusan", "No HP", "Tempat PKL"],
-                [1, "Muhammad Rizky", "10234", "L", "XI TKJ 1", "Teknik Komputer & Jaringan", "081234567891", "PT. Inovasi Teknologi Sejahtera"],
-                [2, "Siti Rahmawati", "10235", "P", "XI RPL 1", "Rekayasa Perangkat Lunak", "081234567892", "PT. Telkom Indonesia"]
+                ["No", "Nama Siswa", "NIS", "JK", "Kelas", "Jurusan", "No HP", "Tempat PKL", "Username Login", "Kata Sandi"],
+                [1, "Muhammad Rizky", "10234", "L", "XI TKJ 1", "Teknik Komputer & Jaringan", "081234567891", "PT. Inovasi Teknologi Sejahtera", "10234", "siswa123"],
+                [2, "Siti Rahmawati", "10235", "P", "XI RPL 1", "Rekayasa Perangkat Lunak", "081234567892", "PT. Telkom Indonesia", "10235", "siswa123"]
             ];
             const ws = XLSX.utils.aoa_to_sheet(dataTemplate);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "MasterSiswa");
             XLSX.writeFile(wb, "Template_Data_Master_Siswa_SMKN1Marisa.xlsx");
-            window.showModalInfo("Template Siswa Terunduh 📄", "Template Excel data siswa berhasil diunduh!");
+            window.showModalInfo("Template Siswa Terunduh 📄", "Template Excel data siswa lengkap dengan kolom Username & Kata Sandi berhasil diunduh!");
         };
 
         window.konfirmasiHapusSiswa = function(idx) {
             const s = (window.cloudState.siswa || [])[idx];
             if (!s) return;
-            window.showConfirmDialog("Hapus Data Siswa", `Yakin ingin menghapus siswa <b>${s.nama}</b>?`, () => {
+            window.showConfirmDialog("Hapus Data Siswa", `Yakin ingin menghapus siswa <b>${s.nama}</b> beserta akun loginnya?`, () => {
+                const uname = s.username || s.nis || s.nisn;
+                if (uname) {
+                    window.cloudState.registeredUsers = (window.cloudState.registeredUsers || []).filter(u => !(u.username === uname && u.role === 'siswa'));
+                }
                 window.cloudState.siswa.splice(idx, 1);
                 window.simpanDatabasePersisten();
                 window.openFeature("master-siswa", "Data Master Siswa");
@@ -2249,7 +2354,7 @@
                 listDudiOptions += `<option value="${i.nama}">`;
             });
 
-            const modalHtml = `<h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">👨‍🎓 Formulir Input Data Siswa PKL</h3>
+            const modalHtml = `<h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">👨‍🎓 Input Siswa & Pembuatan Akun Login</h3>
                 <div class="form-group">
                     <label class="form-label">Nama Siswa Lengkap:</label>
                     <input type="text" id="addSiswaNama" class="form-control" placeholder="Contoh: Muhammad Rizky">
@@ -2257,7 +2362,7 @@
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                     <div class="form-group">
                         <label class="form-label">NIS (Nomor Induk Siswa):</label>
-                        <input type="text" id="addSiswaNis" class="form-control" placeholder="Contoh: 10234">
+                        <input type="text" id="addSiswaNis" class="form-control" placeholder="Contoh: 10234" oninput="window.autofillSiswaUsername(this.value)">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Jenis Kelamin (JK):</label>
@@ -2288,11 +2393,28 @@
                         <datalist id="dataListDudiSiswa">${listDudiOptions}</datalist>
                     </div>
                 </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; background:#f0f9ff; border:1px solid #bfdbfe; border-radius:12px; padding:10px; margin-bottom:12px;">
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label" style="color:#0369a1;">🔑 Username Login Siswa:</label>
+                        <input type="text" id="addSiswaUsername" class="form-control" placeholder="10234">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label" style="color:#0369a1;">🔒 Kata Sandi Login:</label>
+                        <input type="text" id="addSiswaPassword" class="form-control" value="siswa123">
+                    </div>
+                </div>
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
                     <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanSiswaManual()" class="btn-action btn-blue">💾 Simpan Siswa</button>
+                    <button onclick="window.simpanSiswaManual()" class="btn-action btn-blue">💾 Simpan Siswa & Terbitkan Akun</button>
                 </div>`;
             window.openDynamicModal(modalHtml);
+        };
+
+        window.autofillSiswaUsername = function(val) {
+            const inp = document.getElementById("addSiswaUsername");
+            if (inp && !inp.dataset.customized) {
+                inp.value = val;
+            }
         };
 
         window.simpanSiswaManual = function() {
@@ -2303,6 +2425,8 @@
             const jurusan = document.getElementById("addSiswaJurusan")?.value.trim();
             const noHp = document.getElementById("addSiswaNoHp")?.value.trim();
             const ind = document.getElementById("addSiswaIndustri")?.value.trim();
+            const uname = document.getElementById("addSiswaUsername")?.value.trim() || nis;
+            const pwd = document.getElementById("addSiswaPassword")?.value.trim() || "siswa123";
 
             if (!nama || !nis) {
                 window.showModalInfo("Lengkapi Formulir", "Nama Siswa dan NIS wajib diisi!");
@@ -2318,46 +2442,79 @@
                 jurusan: jurusan || "Teknik Komputer & Jaringan", 
                 noHp: noHp || "-", 
                 industri: ind || "Mitra Industri", 
-                hadir: 100 
+                hadir: 100,
+                username: uname,
+                pass: pwd
             };
             window.cloudState.siswa.unshift(item);
 
-            const existUser = (window.cloudState.registeredUsers || []).find(u => u.username === nis);
-            if (!existUser) {
-                window.cloudState.registeredUsers.unshift({
-                    role: "siswa",
-                    nama: nama,
-                    username: nis,
-                    pass: "siswa123",
-                    email: nis + "@smkn1marisa.sch.id",
-                    identitas: nis
-                });
+            // Terbitkan akun langsung ke daftar pengguna resmi
+            const existIdx = (window.cloudState.registeredUsers || []).findIndex(u => u.username === uname && u.role === "siswa");
+            const userObj = {
+                role: "siswa",
+                nama: nama,
+                username: uname,
+                pass: pwd,
+                email: uname + "@smkn1marisa.sch.id",
+                identitas: nis
+            };
+            if (existIdx >= 0) {
+                window.cloudState.registeredUsers[existIdx] = userObj;
+            } else {
+                window.cloudState.registeredUsers.unshift(userObj);
             }
 
             window.simpanDatabasePersisten();
             window.closeDynamicModal();
-            window.showModalInfo("Siswa Tersimpan 👨‍🎓", `Data siswa <b>${nama}</b> (NIS: ${nis}) berhasil ditambahkan dan otomatis diterbitkan akun loginnya (Username: <code>${nis}</code>, Password: <code>siswa123</code> atau NIS)!`);
+            window.showModalInfo("Siswa & Akun Tersimpan 👨‍🎓", `Data siswa <b>${nama}</b> berhasil ditambahkan.<br>Akun login aktif: <b>${uname}</b> | Sandi: <b>${pwd}</b>`);
             window.openFeature("master-siswa", "Data Master Siswa");
         };
 
         window.renderMasterGuruTable = function() {
             let rows = "";
             (window.cloudState.guru || []).forEach((g, idx) => {
-                rows += `<tr><td>${idx+1}</td><td><b>${g.nama}</b></td><td><code>${g.nip}</code></td><td>${g.mapel || '-'}</td><td><button onclick="window.konfirmasiHapusGuru(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td></tr>`;
+                const uname = g.username || g.nip || "-";
+                const pwd = g.pass || "guru123";
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${g.nama}</b></td>
+                    <td><code>${g.nip}</code></td>
+                    <td>${g.mapel || '-'}</td>
+                    <td><code style="color:#0284c7; font-weight:700;">${uname}</code></td>
+                    <td><span style="font-family:monospace; background:#f1f5f9; padding:2px 6px; border-radius:4px; border:1px solid #cbd5e1; font-weight:700;">${pwd}</span></td>
+                    <td><button onclick="window.konfirmasiHapusGuru(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td>
+                </tr>`;
             });
             return `<div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-                    <div><h3 style="font-size:16px; font-weight:900; color:#0284c7;">👩‍🏫 Data Master Guru Pembimbing</h3><p style="font-size:11px; color:var(--text-muted);">Kelola guru pembimbing PKL SMKN 1 Marisa.</p></div>
-                    <div style="display:flex; gap:8px;"><button onclick="window.bukaModalUploadExcel('Guru')" class="btn-action btn-emerald">📥 Impor Excel</button><button onclick="window.bukaModalInputGuru()" class="btn-action btn-blue">+ Tambah Guru</button></div>
+                    <div><h3 style="font-size:16px; font-weight:900; color:#0284c7;">👩‍🏫 Data Master Guru & Kredensial Akun</h3><p style="font-size:11px; color:var(--text-muted);">Kelola guru pembimbing PKL SMKN 1 Marisa serta Akun Login Guru.</p></div>
+                    <div style="display:flex; gap:8px;"><button onclick="window.unduhTemplateExcelGuru()" class="btn-action btn-emerald">📄 Unduh Template Excel</button><button onclick="window.bukaModalUploadExcel('Guru')" class="btn-action btn-blue">📥 Impor Excel</button><button onclick="window.bukaModalInputGuru()" class="btn-action btn-blue">+ Tambah Guru</button></div>
                 </div>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Guru</th><th>NIP</th><th>Bidang / Mapel</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada data guru terdaftar</td></tr>'}</tbody></table></div>
+                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama Guru</th><th>NIP</th><th>Bidang / Mapel</th><th>Username Login</th><th>Kata Sandi</th><th>Aksi</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada data guru terdaftar</td></tr>'}</tbody></table></div>
             </div>`;
+        };
+
+        window.unduhTemplateExcelGuru = function() {
+            const dataTemplate = [
+                ["No", "Nama Guru", "NIP", "Bidang / Mapel", "Username Login", "Kata Sandi"],
+                [1, "Ibu Siti Rahayu, S.Pd.", "198001012005012001", "Produktif TKJ", "198001012005012001", "guru123"],
+                [2, "Bpk. Rahmat Danial, S.T.", "198502022010011002", "Produktif RPL", "198502022010011002", "guru123"]
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(dataTemplate);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "MasterGuru");
+            XLSX.writeFile(wb, "Template_Data_Master_Guru_SMKN1Marisa.xlsx");
+            window.showModalInfo("Template Guru Terunduh 📄", "Template Excel data guru lengkap dengan kolom Username & Kata Sandi berhasil diunduh!");
         };
 
         window.konfirmasiHapusGuru = function(idx) {
             const g = (window.cloudState.guru || [])[idx];
             if (!g) return;
-            window.showConfirmDialog("Hapus Data Guru", `Yakin ingin menghapus guru <b>${g.nama}</b>?`, () => {
+            window.showConfirmDialog("Hapus Data Guru", `Yakin ingin menghapus guru <b>${g.nama}</b> beserta akun loginnya?`, () => {
+                const uname = g.username || g.nip;
+                if (uname) {
+                    window.cloudState.registeredUsers = (window.cloudState.registeredUsers || []).filter(u => !(u.username === uname && u.role === 'guru'));
+                }
                 window.cloudState.guru.splice(idx, 1);
                 window.simpanDatabasePersisten();
                 window.openFeature("master-guru", "Data Master Guru");
@@ -2365,23 +2522,52 @@
         };
 
         window.bukaModalInputGuru = function() {
-            const modalHtml = `<h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">👩‍🏫 Tambah Guru Manual</h3>
+            const modalHtml = `<h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">👩‍🏫 Tambah Guru & Kredensial Akun</h3>
                 <div class="form-group"><label class="form-label">Nama Lengkap & Gelar:</label><input type="text" id="addGuruNama" class="form-control" placeholder="Ibu Siti Rahayu, S.Pd."></div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;"><div class="form-group"><label class="form-label">NIP:</label><input type="text" id="addGuruNip" class="form-control" placeholder="198001012005011001"></div><div class="form-group"><label class="form-label">Bidang Mapel:</label><input type="text" id="addGuruMapel" class="form-control" placeholder="Produktif TKJ"></div></div>
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;"><button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button><button onclick="window.simpanGuruManual()" class="btn-action btn-blue">💾 Simpan Guru</button></div>`;
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div class="form-group"><label class="form-label">NIP:</label><input type="text" id="addGuruNip" class="form-control" placeholder="198001012005011001" oninput="window.autofillGuruUsername(this.value)"></div>
+                    <div class="form-group"><label class="form-label">Bidang Mapel:</label><input type="text" id="addGuruMapel" class="form-control" placeholder="Produktif TKJ"></div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; background:#f0f9ff; border:1px solid #bfdbfe; border-radius:12px; padding:10px; margin-bottom:12px;">
+                    <div class="form-group" style="margin-bottom:0;"><label class="form-label" style="color:#0369a1;">🔑 Username Login Guru:</label><input type="text" id="addGuruUsername" class="form-control" placeholder="198001012005011001"></div>
+                    <div class="form-group" style="margin-bottom:0;"><label class="form-label" style="color:#0369a1;">🔒 Kata Sandi Login:</label><input type="text" id="addGuruPassword" class="form-control" value="guru123"></div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;"><button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button><button onclick="window.simpanGuruManual()" class="btn-action btn-blue">💾 Simpan Guru & Terbitkan Akun</button></div>`;
             window.openDynamicModal(modalHtml);
+        };
+
+        window.autofillGuruUsername = function(val) {
+            const inp = document.getElementById("addGuruUsername");
+            if (inp && !inp.dataset.customized) {
+                inp.value = val;
+            }
         };
 
         window.simpanGuruManual = function() {
             const nama = document.getElementById("addGuruNama")?.value.trim();
             const nip = document.getElementById("addGuruNip")?.value.trim();
             const mapel = document.getElementById("addGuruMapel")?.value.trim();
-            if (!nama || !nip) return;
-            const item = { nama, nip, mapel: mapel || "Guru Pembimbing" };
+            const uname = document.getElementById("addGuruUsername")?.value.trim() || nip;
+            const pwd = document.getElementById("addGuruPassword")?.value.trim() || "guru123";
+
+            if (!nama || !nip) {
+                window.showModalInfo("Lengkapi Formulir", "Nama Guru dan NIP wajib diisi!");
+                return;
+            }
+            const item = { nama, nip, mapel: mapel || "Guru Pembimbing", username: uname, pass: pwd };
             window.cloudState.guru.unshift(item);
+
+            const existIdx = (window.cloudState.registeredUsers || []).findIndex(u => u.username === uname && u.role === "guru");
+            const userObj = { role: "guru", nama: nama, username: uname, pass: pwd, email: uname + "@smkn1marisa.sch.id", identitas: nip };
+            if (existIdx >= 0) {
+                window.cloudState.registeredUsers[existIdx] = userObj;
+            } else {
+                window.cloudState.registeredUsers.unshift(userObj);
+            }
+
             window.simpanDatabasePersisten();
             window.closeDynamicModal();
-            window.showModalInfo("Guru Tersimpan", `Data guru <b>${nama}</b> berhasil disimpan.`);
+            window.showModalInfo("Guru & Akun Tersimpan 👩‍🏫", `Data guru <b>${nama}</b> berhasil disimpan.<br>Akun login aktif: <b>${uname}</b> | Sandi: <b>${pwd}</b>`);
             window.openFeature("master-guru", "Data Master Guru");
         };
 
@@ -2389,8 +2575,8 @@
             window.currentExcelKategori = kategori;
             window.currentParsedExcelData = [];
 
-            const modalHtml = `<h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:8px;">📥 Impor Data Master ${kategori} via Excel</h3>
-                <p style="font-size:11px; color:#475569; margin-bottom:12px;">Format berkas yang didukung: <b>.xlsx, .xls, .csv</b>.</p>
+            const modalHtml = `<h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:8px;">📥 Impor Data Master & Akun ${kategori} via Excel</h3>
+                <p style="font-size:11px; color:#475569; margin-bottom:12px;">Format berkas yang didukung: <b>.xlsx, .xls, .csv</b>. Sistem otomatis mendaftarkan data profil sekaligus menerbitkan akun loginnya.</p>
                 <div class="form-group"><label class="form-label">Pilih Berkas Excel / CSV:</label><input type="file" id="inputBerkasExcel" accept=".xlsx, .xls, .csv" class="form-control" onchange="window.prosesBacaBerkasExcel(this)"></div>
                 <div id="previewExcelContainer" style="display:none; margin-top:12px;">
                     <div style="font-size:11px; font-weight:700; color:#10b981; margin-bottom:6px;">Pratinjau Data Terbaca:</div>
@@ -2419,7 +2605,7 @@
                     rows.forEach(r => {
                         if (!r || r.length === 0 || !r[0]) return;
                         if (kat === "Siswa") {
-                            let nama = "", nis = "", jk = "L", kelas = "XI PKL", jurusan = "-", noHp = "-", ind = "-";
+                            let nama = "", nis = "", jk = "L", kelas = "XI PKL", jurusan = "-", noHp = "-", ind = "-", uname = "", pwd = "";
                             if (typeof r[0] === 'number' || (!isNaN(parseInt(r[0])) && r[1])) {
                                 nama = String(r[1] || '').trim();
                                 nis = String(r[2] || '').trim();
@@ -2428,6 +2614,8 @@
                                 jurusan = String(r[5] || '-').trim();
                                 noHp = String(r[6] || '-').trim();
                                 ind = String(r[7] || 'Mitra Industri').trim();
+                                uname = String(r[8] || nis).trim();
+                                pwd = String(r[9] || 'siswa123').trim();
                             } else {
                                 nama = String(r[0] || '').trim();
                                 nis = String(r[1] || '').trim();
@@ -2436,6 +2624,8 @@
                                 jurusan = String(r[4] || '-').trim();
                                 noHp = String(r[5] || '-').trim();
                                 ind = String(r[6] || 'Mitra Industri').trim();
+                                uname = String(r[7] || nis).trim();
+                                pwd = String(r[8] || 'siswa123').trim();
                             }
                             if (nama) {
                                 parsedList.push({ 
@@ -2447,26 +2637,68 @@
                                     jurusan, 
                                     noHp, 
                                     industri: ind, 
-                                    hadir: 100 
+                                    hadir: 100,
+                                    username: uname || nis,
+                                    pass: pwd || "siswa123"
                                 });
                             }
                         } else if (kat === "Guru") {
-                            parsedList.push({ nama: String(r[0] || '').trim(), nip: String(r[1] || '').trim(), mapel: String(r[2] || 'Pembimbing').trim() });
+                            let nama = "", nip = "", mapel = "Pembimbing", uname = "", pwd = "";
+                            if (typeof r[0] === 'number' || (!isNaN(parseInt(r[0])) && r[1])) {
+                                nama = String(r[1] || '').trim();
+                                nip = String(r[2] || '').trim();
+                                mapel = String(r[3] || 'Pembimbing').trim();
+                                uname = String(r[4] || nip).trim();
+                                pwd = String(r[5] || 'guru123').trim();
+                            } else {
+                                nama = String(r[0] || '').trim();
+                                nip = String(r[1] || '').trim();
+                                mapel = String(r[2] || 'Pembimbing').trim();
+                                uname = String(r[3] || nip).trim();
+                                pwd = String(r[4] || 'guru123').trim();
+                            }
+                            if (nama) {
+                                parsedList.push({ 
+                                    nama, 
+                                    nip, 
+                                    mapel, 
+                                    username: uname || nip, 
+                                    pass: pwd || "guru123" 
+                                });
+                            }
                         } else if (kat === "Industri") {
-                            let nama = "", alamat = "-", pimpinan = "HRD", noWa = "-";
+                            let nama = "", alamat = "-", pimpinan = "HRD", noWa = "-", uname = "", pwd = "";
                             if (typeof r[0] === 'number' || (!isNaN(parseInt(r[0])) && r[1])) {
                                 nama = String(r[1] || '').trim();
                                 alamat = String(r[2] || '-').trim();
                                 pimpinan = String(r[3] || 'HRD').trim();
                                 noWa = String(r[4] || '-').trim();
+                                uname = String(r[5] || '').trim();
+                                pwd = String(r[6] || 'dudi123').trim();
                             } else {
                                 nama = String(r[0] || '').trim();
                                 alamat = String(r[1] || '-').trim();
                                 pimpinan = String(r[2] || 'HRD').trim();
                                 noWa = String(r[3] || '-').trim();
+                                uname = String(r[4] || '').trim();
+                                pwd = String(r[5] || 'dudi123').trim();
                             }
                             if (nama) {
-                                parsedList.push({ id: "ind_" + Date.now(), nama, alamat, pimpinan, noWa, radius: 50, masuk: "08:00", pulang: "16:00", lat: "0.45612", lng: "121.94210" });
+                                const finalUname = uname || String(nama).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 14);
+                                parsedList.push({ 
+                                    id: "ind_" + Date.now() + Math.random().toString(36).substring(7), 
+                                    nama, 
+                                    alamat, 
+                                    pimpinan, 
+                                    noWa, 
+                                    radius: 50, 
+                                    masuk: "08:00", 
+                                    pulang: "16:00", 
+                                    lat: "0.45612", 
+                                    lng: "121.94210",
+                                    username: finalUname,
+                                    pass: pwd || "dudi123"
+                                });
                             }
                         }
                     });
@@ -2476,9 +2708,9 @@
                     const previewContainer = document.getElementById("previewExcelContainer");
                     const btnSimpan = document.getElementById("btnEksekusiImporExcel");
 
-                    if (previewWrap) previewWrap.innerHTML = `<div style="padding:10px; color:#0284c7; font-weight:700;">Berhasil membaca ${parsedList.length} data baris!</div>`;
+                    if (previewWrap) previewWrap.innerHTML = `<div style="padding:10px; color:#0284c7; font-weight:700;">Berhasil membaca ${parsedList.length} data & kredensial valid dari berkas!</div>`;
                     if (previewContainer) previewContainer.style.display = "block";
-                    if (btnSimpan) { btnSimpan.disabled = false; btnSimpan.innerText = `Simpan ${parsedList.length} Data 💾`; }
+                    if (btnSimpan) { btnSimpan.disabled = false; btnSimpan.innerText = `Simpan ${parsedList.length} Data & Akun 💾`; }
                 } catch(err) {
                     console.error("Gagal baca Excel:", err);
                 }
@@ -2492,25 +2724,32 @@
             const targetKey = kategori.toLowerCase();
             window.cloudState[targetKey] = [...list, ...window.cloudState[targetKey]];
 
-            if (kategori === "Siswa") {
-                list.forEach(item => {
-                    const existUser = (window.cloudState.registeredUsers || []).find(u => u.username === item.nis);
-                    if (!existUser && item.nis) {
-                        window.cloudState.registeredUsers.unshift({
-                            role: "siswa",
-                            nama: item.nama,
-                            username: item.nis,
-                            pass: "siswa123",
-                            email: item.nis + "@smkn1marisa.sch.id",
-                            identitas: item.nis
-                        });
+            // Daftarkan langsung ke registeredUsers agar langsung bisa login
+            list.forEach(item => {
+                const roleName = kategori.toLowerCase();
+                const uname = item.username || item.nis || item.nip;
+                const pwd = item.pass || (roleName === 'siswa' ? 'siswa123' : (roleName === 'guru' ? 'guru123' : 'dudi123'));
+                if (uname) {
+                    const existIdx = (window.cloudState.registeredUsers || []).findIndex(u => u.username === uname && u.role === roleName);
+                    const userObj = {
+                        role: roleName,
+                        nama: item.nama,
+                        username: uname,
+                        pass: pwd,
+                        email: uname + "@smkn1marisa.sch.id",
+                        identitas: item.nis || item.nip || uname
+                    };
+                    if (existIdx >= 0) {
+                        window.cloudState.registeredUsers[existIdx] = userObj;
+                    } else {
+                        window.cloudState.registeredUsers.unshift(userObj);
                     }
-                });
-            }
+                }
+            });
 
             window.simpanDatabasePersisten();
             window.closeDynamicModal();
-            window.showModalInfo("Impor Berhasil", `${list.length} data ${kategori} berhasil diimpor!`);
+            window.showModalInfo("Impor & Akun Berhasil 🚀", `${list.length} data ${kategori} beserta akun kredensialnya berhasil diaktifkan ke sistem!`);
             if (kategori === "Siswa") window.openFeature("master-siswa", "Data Master Siswa");
             else if (kategori === "Guru") window.openFeature("master-guru", "Data Master Guru");
             else window.openFeature("master-industri", "Mitra Industri DUDI");
@@ -2869,23 +3108,72 @@
 
         window.bukaModalPengaturanCloud = function() {
             const modalHtml = `
-            <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:10px;">☁️ Status & Pengaturan Cloud Database</h3>
-            <p style="font-size:11px; color:#475569; margin-bottom:14px;">Terhubung dengan backend Google Apps Script & Google Sheets untuk menyinkronkan 500 pengguna secara langsung.</p>
+            <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:8px;">☁️ Status & Uji Koneksi Cloud Database</h3>
+            <p style="font-size:11px; color:#475569; margin-bottom:12px;">Sistem terhubung dengan Google Sheets untuk sinkronisasi otomatis antara PC Admin dan 500+ ponsel siswa/guru.</p>
+            
             <div class="form-group">
                 <label class="form-label">URL Web App Google Apps Script:</label>
-                <input type="text" id="cfgGasUrlInput" class="form-control" value="${window.gasBackendUrl || ''}">
+                <input type="text" id="cfgGasUrlInput" class="form-control" value="${window.gasBackendUrl || ''}" placeholder="https://script.google.com/macros/s/.../exec">
             </div>
-            <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:12px; padding:12px; font-size:11px; color:#0369a1; margin-bottom:14px;">
-                <b>Total Data Aktif di Memori:</b><br>
+
+            <div style="background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:12px; padding:12px; font-size:11px; color:#0369a1; margin-bottom:14px;">
+                <b>📊 Data Aktif Saat Ini di Perangkat:</b><br>
                 • Siswa: <b>${window.cloudState.siswa.length}</b> orang<br>
                 • Akun Terdaftar: <b>${window.cloudState.registeredUsers.length}</b> akun<br>
-                • Mitra Industri: <b>${window.cloudState.industri.length}</b> perusahaan
+                • Mitra Industri: <b>${window.cloudState.industri.length}</b> perusahaan<br>
+                • Guru: <b>${window.cloudState.guru.length}</b> orang
             </div>
+
+            <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+                <button onclick="window.ujiPingGoogleSheets()" class="btn-action btn-emerald" style="padding:10px; font-weight:800;">
+                    🧪 Uji Koneksi Google Sheets (Ping)
+                </button>
+                <button onclick="window.kirimSnapshotKeGoogleSheets(window.cloudState, false)" class="btn-action btn-blue" style="padding:10px; font-weight:800;">
+                    ☁️ UNGGAH SEMUA DATA PC KE GOOGLE SHEETS
+                </button>
+                <button onclick="window.tarikDataDariCloud(false)" class="btn-action" style="background:#0284c7; color:#fff; padding:10px; font-weight:800;">
+                    🔄 Tarik Data Terbaru dari Google Sheets
+                </button>
+            </div>
+
             <div style="display:flex; justify-content:flex-end; gap:8px;">
                 <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Tutup</button>
-                <button onclick="window.simpanUrlCloudBaru()" class="btn-action btn-blue">Simpan URL & Tes</button>
+                <button onclick="window.simpanUrlCloudBaru()" class="btn-action btn-blue">Simpan URL</button>
             </div>`;
             window.openDynamicModal(modalHtml);
+        };
+
+        window.ujiPingGoogleSheets = function() {
+            const url = document.getElementById("cfgGasUrlInput")?.value.trim() || window.gasBackendUrl;
+            if (!url) {
+                window.showModalInfo("URL Kosong", "Masukkan URL Web App Apps Script terlebih dahulu.");
+                return;
+            }
+            window.showModalInfo("Menguji Koneksi ⏳", "Menghubungi Google Sheets server...");
+
+            fetch(url + "?type=ping&_t=" + Date.now())
+                .then(res => res.json())
+                .then(res => {
+                    if (res && res.success) {
+                        window.showModalInfo("Koneksi Berhasil! ✅", 
+                            `Google Apps Script berhasil merespon!<br><br>` +
+                            `• <b>Spreadsheet:</b> ${res.spreadsheetName || '-'}<br>` +
+                            `• <b>Status:</b> ${res.status}<br>` +
+                            `• <b>Waktu Server:</b> ${res.timestamp}<br><br>` +
+                            `<span style="color:#059669; font-weight:800;">Server siap menerima & mengirimkan data ke semua HP!</span>`
+                        );
+                    } else {
+                        window.showModalInfo("Respon Gagal ⚠️", res.message || "Server tidak memberikan respon sukses.");
+                    }
+                })
+                .catch(err => {
+                    window.showModalInfo("Koneksi Gagal ❌", 
+                        `Tidak dapat mengakses Google Apps Script: <b>${err.message || err}</b><br><br>` +
+                        `<b>Penyebab Umum:</b><br>` +
+                        `1. Penerapan Web App belum disetel ke <i>Who has access: Anyone</i>.<br>` +
+                        `2. Belum melakukan <i>Authorize access</i> saat deployment.`
+                    );
+                });
         };
 
         window.simpanUrlCloudBaru = function() {
@@ -2947,6 +3235,7 @@
             if (b) b.style.display = "none";
         };
 
+        // Otomatisasi sinkronisasi saat aplikasi pertama kali dibuka di HP & saat tab browser HP aktif kembali
         window.addEventListener("DOMContentLoaded", () => {
             try {
                 const savedSession = localStorage.getItem(STORAGE_KEY_SESSION);
@@ -2954,13 +3243,21 @@
                     const profile = JSON.parse(savedSession);
                     if (profile && profile.role) {
                         window.suksesLogin(profile);
-                        // Jalankan sinkronisasi cloud di latar belakang tanpa mengunci tampilan
-                        window.tarikDataDariCloud(true);
-                        return;
                     }
                 }
             } catch(e) {}
-            window.kembaliKeGerbangEkosistem();
+
+            // Selalu tarik data cloud terbaru di latar belakang secara otomatis
+            window.tarikDataDariCloud(true);
+
+            // Auto-refresh senyap setiap 35 detik agar 500 HP selalu menerima data terbaru tanpa reload
+            setInterval(() => {
+                window.tarikDataDariCloud(true);
+            }, 35000);
+        });
+
+        // Saat HP dinyalakan kembali atau tab dibuka, langsung auto-sync seketika
+        window.addEventListener("focus", () => {
             window.tarikDataDariCloud(true);
         });
     </script>
