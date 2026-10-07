@@ -4232,24 +4232,178 @@
             );
         };
 
-        window.renderValidasiJurnalList = function() {
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">📋 Validasi Jurnal Siswa</h3><div class="empty-placeholder">Semua jurnal yang diajukan siswa siap diverifikasi di sini.</div></div>`;
-        };
-
-        window.renderAgendaKunjungan = function() {
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">🚗 Agenda Kunjungan DUDI</h3><div class="empty-placeholder">Jadwal monitoring guru ke industri mitra siap dijadwalkan.</div></div>`;
-        };
-
-        window.renderPenilaianIndustri = function() {
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">🏆 Lembar Penilaian PKL</h3><div class="empty-placeholder">Formulir evaluasi kompetensi siswa magang dan lembar nilai berstempel.</div></div>`;
-        };
-
+        // =========================================================================
+        // MODUL INTERAKTIF LAPORAN AKHIR & PENGADUAN KENDALA (TERINTEGRASI 5 EKOSISTEM)
+        // =========================================================================
         window.renderLaporanAkhir = function() {
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">📄 Laporan Akhir PKL</h3><div class="empty-placeholder">Formulir unggah pengajuan laporan akhir siswa format PDF.</div></div>`;
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const role = window.cloudState.activeRole;
+            const listLaporan = window.cloudState.laporanAkhir || [];
+
+            let myLaporanList = listLaporan;
+            if (role === 'siswa') {
+                myLaporanList = listLaporan.filter(l => (l.siswa || '').toLowerCase() === (profile.nama || '').toLowerCase());
+            }
+
+            let rows = "";
+            myLaporanList.forEach((l, idx) => {
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${l.siswa}</b><div style="font-size:10px; color:#64748b;">${l.judul || 'Laporan PKL'}</div></td>
+                    <td>${l.tanggal}</td>
+                    <td><span class="badge-status ${l.status.includes('Disetujui') ? 'badge-green' : 'badge-amber'}">${l.status}</span></td>
+                    <td>
+                        <a href="${l.fileUrl || '#'}" target="_blank" class="btn-action btn-blue" style="padding:4px 8px; text-decoration:none; display:inline-block;">📥 Unduh</a>
+                        ${(role === 'guru' || role === 'admin') && !l.status.includes('Disetujui') ? `<button onclick="window.setujuiLaporanAkhir(${idx})" class="btn-action btn-emerald" style="padding:4px 8px; margin-left:4px;">✓ Setujui</button>` : ''}
+                    </td>
+                </tr>`;
+            });
+
+            return `<div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0284c7;">📄 Manajemen Laporan Akhir PKL</h3>
+                        <p style="font-size:11px; color:var(--text-muted);">Pengumpulan dan pengesahan naskah laporan PKL resmi format PDF.</p>
+                    </div>
+                </div>
+
+                ${role === 'siswa' ? `
+                <div style="background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:14px; padding:14px; margin-bottom:16px;">
+                    <div style="font-size:12px; font-weight:900; color:#0369a1; margin-bottom:10px;">📤 Formulir Unggah Laporan Akhir</div>
+                    <div class="form-group">
+                        <label class="form-label">Judul Laporan PKL:</label>
+                        <input type="text" id="lapJudul" class="form-control" placeholder="Contoh: Implementasi Jaringan VLAN di PT. Telkom">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Tautan / Link Google Drive Berkas PDF:</label>
+                        <input type="url" id="lapLink" class="form-control" placeholder="https://drive.google.com/file/d/...">
+                        <small style="font-size:10px; color:#64748b;">Pastikan akses link berkas di-setting publik (Siapa saja yang memiliki link).</small>
+                    </div>
+                    <button onclick="window.kirimLaporanAkhirSiswa()" class="btn-action-primary" style="padding:10px; font-weight:800;">
+                        🚀 Kirim Laporan ke Guru Pembimbing
+                    </button>
+                </div>` : ''}
+
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>No</th><th>Siswa & Judul</th><th>Tanggal</th><th>Status</th><th>Aksi</th></tr></thead>
+                        <tbody>${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada berkas laporan akhir yang dikirim</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.kirimLaporanAkhirSiswa = function() {
+            const judul = document.getElementById("lapJudul")?.value.trim();
+            const link = document.getElementById("lapLink")?.value.trim();
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+
+            if (!judul || !link) {
+                window.showModalInfo("Lengkapi Formulir", "Judul laporan dan link berkas wajib diisi!");
+                return;
+            }
+
+            if (!window.cloudState.laporanAkhir) window.cloudState.laporanAkhir = [];
+            window.cloudState.laporanAkhir.unshift({
+                id: "lap_" + Date.now(),
+                siswa: profile.nama,
+                judul: judul,
+                fileUrl: link,
+                tanggal: new Date().toISOString().split('T')[0],
+                status: "Menunggu Pengesahan"
+            });
+
+            window.simpanDatabasePersisten(true);
+            window.showModalInfo("Laporan Terkirim 📄", "Naskah laporan akhir Anda telah diteruskan ke Guru Pembimbing untuk verifikasi!");
+            window.openFeature("laporan", "Laporan Akhir");
+        };
+
+        window.setujuiLaporanAkhir = function(idx) {
+            const list = window.cloudState.laporanAkhir || [];
+            if (!list[idx]) return;
+            const profile = window.cloudState.userProfile || { nama: "Pembimbing" };
+            list[idx].status = `Disetujui (${profile.nama})`;
+            window.simpanDatabasePersisten(true);
+            window.showModalInfo("Laporan Disahkan ✓", `Laporan siswa <b>${list[idx].siswa}</b> telah resmi disetujui!`);
+            window.openFeature("laporan", "Laporan Akhir");
         };
 
         window.renderPengaduanMasalah = function() {
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">⚠️ Layanan Pengaduan & Kendala</h3><div class="empty-placeholder">Kirim laporan kendala di tempat PKL langsung ke Panitia PKL.</div></div>`;
+            const profile = window.cloudState.userProfile || { nama: "Pengguna", role: "siswa" };
+            const role = window.cloudState.activeRole;
+            const allPengaduan = window.cloudState.pengaduan || [];
+
+            let rows = "";
+            allPengaduan.forEach((ad, idx) => {
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${ad.pelapor}</b><div style="font-size:10px; color:#64748b;">Peran: ${ad.role.toUpperCase()}</div></td>
+                    <td>${ad.tanggal}</td>
+                    <td>${ad.isi}</td>
+                    <td><span class="badge-status ${ad.status.includes('Selesai') ? 'badge-green' : 'badge-amber'}">${ad.status}</span></td>
+                    ${role === 'admin' ? `<td><button onclick="window.tindakLanjutiPengaduan(${idx})" class="btn-action btn-blue" style="padding:4px 8px; font-size:10px;">Selesaikan</button></td>` : ''}
+                </tr>`;
+            });
+
+            return `<div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0284c7;">⚠️ Layanan Pengaduan & Bantuan PKL</h3>
+                        <p style="font-size:11px; color:var(--text-muted);">Sampaikan kendala teknis, operasional, atau keamanan selama kegiatan PKL berlangsung.</p>
+                    </div>
+                </div>
+
+                <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:14px; padding:14px; margin-bottom:16px;">
+                    <div style="font-size:12px; font-weight:900; color:#b45309; margin-bottom:8px;">📝 Kirim Laporan Pengaduan Baru</div>
+                    <div class="form-group">
+                        <label class="form-label">Uraian Masalah / Kendala di Lapangan:</label>
+                        <textarea id="aduanIsi" class="form-control" style="height:70px;" placeholder="Tuliskan kendala Anda secara rinci..."></textarea>
+                    </div>
+                    <button onclick="window.kirimPengaduanKendala()" class="btn-action btn-amber" style="width:100%; padding:10px; font-weight:800;">
+                        ⚠️ Kirim Aduan ke Panitia PKL
+                    </button>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>No</th><th>Pelapor</th><th>Tanggal</th><th>Rincian Kendala</th><th>Status</th>${role === 'admin' ? '<th>Aksi</th>' : ''}</tr></thead>
+                        <tbody>${rows || '<tr><td colspan="' + (role === 'admin' ? 6 : 5) + '" class="empty-placeholder">Belum ada pengaduan tercatat</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.kirimPengaduanKendala = function() {
+            const isi = document.getElementById("aduanIsi")?.value.trim();
+            const profile = window.cloudState.userProfile || { nama: "Pengguna", role: window.cloudState.activeRole };
+
+            if (!isi) {
+                window.showModalInfo("Isi Pengaduan", "Mohon tuliskan kendala yang Anda hadapi!");
+                return;
+            }
+
+            if (!window.cloudState.pengaduan) window.cloudState.pengaduan = [];
+            window.cloudState.pengaduan.unshift({
+                id: "ad_" + Date.now(),
+                pelapor: profile.nama,
+                role: window.cloudState.activeRole,
+                tanggal: new Date().toISOString().split('T')[0],
+                isi: isi,
+                status: "Diproses Panitia"
+            });
+
+            window.simpanDatabasePersisten(true);
+            window.showModalInfo("Aduan Terkirim ⚠️", "Laporan kendala Anda berhasil diterima Panitia PKL SMKN 1 Marisa dan akan segera ditindaklanjuti.");
+            window.openFeature("aduan", "Pengaduan");
+        };
+
+        window.tindakLanjutiPengaduan = function(idx) {
+            const list = window.cloudState.pengaduan || [];
+            if (!list[idx]) return;
+            list[idx].status = "Selesai Ditangani";
+            window.simpanDatabasePersisten(true);
+            window.showModalInfo("Pengaduan Selesai", "Status aduan berhasil diperbarui menjadi Selesai!");
+            window.openFeature("aduan", "Pengaduan");
         };
 
         window.bukaModalBantuanAdmin = function() {
