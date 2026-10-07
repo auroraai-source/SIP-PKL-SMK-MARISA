@@ -1093,15 +1093,42 @@
                         window.cloudState.guru = cloudData.guru || [];
                         window.cloudState.industri = cloudData.industri || [];
                         window.cloudState.penempatan = cloudData.penempatan || [];
-                        window.cloudState.absensi = cloudData.absensi || [];
-                        window.cloudState.jurnal = cloudData.jurnal || [];
-                        window.cloudState.agendaKunjungan = cloudData.agendaKunjungan || [];
-                        window.cloudState.laporanAkhir = cloudData.laporanAkhir || [];
-                        window.cloudState.pengaduan = cloudData.pengaduan || [];
                         window.cloudState.registeredUsers = cloudData.registeredUsers || [];
 
+                        // SMART NON-DESTRUCTIVE MERGE: Jangan pernah hapus jurnal, laporan, aduan, atau absensi yang baru dibuat di lokal
+                        const mergeById = (localList = [], incomingList = []) => {
+                            const map = new Map();
+                            // Masukkan data cloud terlebih dahulu
+                            incomingList.forEach(item => { if (item && item.id) map.set(item.id, item); });
+                            // Masukkan data lokal (jika ada yang baru diinput di HP ini, prioritaskan lokal)
+                            localList.forEach(item => { if (item && item.id) map.set(item.id, item); });
+                            return Array.from(map.values()).sort((a,b) => (b.id > a.id ? 1 : -1));
+                        };
+
+                        window.cloudState.absensi = mergeById(window.cloudState.absensi, cloudData.absensi || []);
+                        window.cloudState.jurnal = mergeById(window.cloudState.jurnal, cloudData.jurnal || []);
+                        window.cloudState.laporanAkhir = mergeById(window.cloudState.laporanAkhir, cloudData.laporanAkhir || []);
+                        window.cloudState.pengaduan = mergeById(window.cloudState.pengaduan, cloudData.pengaduan || []);
+                        window.cloudState.agendaKunjungan = mergeById(window.cloudState.agendaKunjungan, cloudData.agendaKunjungan || []);
+
                         window.sinkronisasiRelasionalEkosistemGlobal();
-                        try { localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cloudData)); } catch(e) {}
+                        try {
+                            localStorage.setItem(STORAGE_KEY_DB, JSON.stringify({
+                                bannerSliderImages: window.cloudState.bannerSliderImages,
+                                pklConfig: window.cloudState.pklConfig,
+                                jamConfig: window.cloudState.jamConfig,
+                                siswa: window.cloudState.siswa,
+                                guru: window.cloudState.guru,
+                                industri: window.cloudState.industri,
+                                penempatan: window.cloudState.penempatan,
+                                absensi: window.cloudState.absensi,
+                                jurnal: window.cloudState.jurnal,
+                                laporanAkhir: window.cloudState.laporanAkhir,
+                                pengaduan: window.cloudState.pengaduan,
+                                agendaKunjungan: window.cloudState.agendaKunjungan,
+                                registeredUsers: window.cloudState.registeredUsers
+                            }));
+                        } catch(e) {}
 
                         if (dot) dot.style.background = "#10b981";
                         if (txt) txt.innerText = `Online (${window.cloudState.siswa.length} Siswa, ${window.cloudState.registeredUsers.length} Akun)`;
@@ -1115,9 +1142,10 @@
                             );
                         }
 
-                        // Re-render layar aktif jika sedang berada di modul tertentu
-                        if (window.cloudState.currentFeature) {
-                            window.openFeature(window.cloudState.currentFeature, "Perbarui");
+                        // JANGAN re-render paksa jika siswa sedang di layar input jurnal/laporan/aduan agar tidak menghapus ketikan siswa
+                        const activeF = window.cloudState.currentFeature;
+                        if (activeF && !['jurnal', 'laporan', 'aduan', 'presensi'].includes(activeF)) {
+                            window.openFeature(activeF, "Perbarui");
                         }
                     } else {
                         if (dot) dot.style.background = "#10b981";
@@ -3957,14 +3985,26 @@
         };
 
         window.renderJurnalKegiatan = function() {
+            const profile = window.cloudState.userProfile || { nama: "Arthur" };
+            const myJurnal = (window.cloudState.jurnal || []).filter(j => 
+                (j.siswa || '').toLowerCase().trim() === (profile.nama || '').toLowerCase().trim()
+            );
+
             let rows = "";
-            (window.cloudState.jurnal || []).forEach((j, idx) => {
-                rows += `<tr><td>${idx+1}</td><td><b>${j.siswa}</b></td><td>${j.tanggal}</td><td>${j.kegiatan}</td><td><span class="badge-status badge-blue">${j.status}</span></td></tr>`;
+            myJurnal.forEach((j, idx) => {
+                const isApproved = (j.status || '').toLowerCase().includes("disetujui");
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${j.tanggal}</b></td>
+                    <td><b>${j.kegiatan}</b><div style="font-size:10px; color:#64748b;">Kendala: ${j.kendala || '-'} | Solusi: ${j.solusi || '-'}</div></td>
+                    <td><span class="badge-status ${isApproved ? 'badge-green' : 'badge-amber'}">${j.status}</span></td>
+                </tr>`;
             });
 
             return `<div class="card">
                 <h3 style="font-size: 16px; font-weight: 900; color: #0284c7; margin-bottom: 4px;">📖 Logbook & Jurnal Kegiatan PKL Harian</h3>
-                <div class="form-group"><label class="form-label">Uraian Aktivitas Pekerjaan:</label><textarea id="jurnalAktivitas" class="form-control" style="height: 80px;" placeholder="Tuliskan aktivitas teknis hari ini..."></textarea></div>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Catat aktivitas harian PKL untuk diverifikasi oleh Guru Pembimbing & DUDI.</p>
+                <div class="form-group"><label class="form-label">Uraian Aktivitas Pekerjaan Hari Ini:</label><textarea id="jurnalAktivitas" class="form-control" style="height: 80px;" placeholder="Tuliskan aktivitas teknis yang dikerjakan hari ini..."></textarea></div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <div><label class="form-label">Kendala Dihadapi:</label><input type="text" id="jurnalKendala" class="form-control" placeholder="Kendala teknis..."></div>
                     <div><label class="form-label">Solusi / Pemecahan:</label><input type="text" id="jurnalSolusi" class="form-control" placeholder="Langkah perbaikan..."></div>
@@ -3972,8 +4012,11 @@
                 <button onclick="window.simpanJurnalCloud()" class="btn-action-primary" style="padding: 12px; margin-top: 14px;">🚀 KIRIM JURNAL KE PEMBIMBING</button>
             </div>
             <div class="card">
-                <h4 style="font-size: 13px; font-weight: 800; margin-bottom: 8px; color: #0284c7;">Riwayat Jurnal Terkirim</h4>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Siswa</th><th>Tanggal</th><th>Aktivitas</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada jurnal harian</td></tr>'}</tbody></table></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <h4 style="font-size: 13px; font-weight: 800; color: #0284c7;">Riwayat Jurnal Terkirim</h4>
+                    <span style="font-size:11px; color:#64748b; font-weight:700;">${myJurnal.length} Aktivitas</span>
+                </div>
+                <div class="table-wrap"><table><thead><tr><th>No</th><th>Tanggal</th><th>Aktivitas Kerja</th><th>Status Verifikasi</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="empty-placeholder">Belum ada jurnal harian yang dikirim</td></tr>'}</tbody></table></div>
             </div>`;
         };
 
@@ -3988,21 +4031,50 @@
                 return;
             }
 
+            const targetSiswaNama = (profile.nama || "").toLowerCase().trim();
+            const foundS = (window.cloudState.siswa || []).find(s => (s.nama || '').toLowerCase().trim() === targetSiswaNama);
+            const indName = foundS ? (foundS.industri || foundS.tempatPkl) : (profile.industri || "Mitra Industri");
+
             const newJurnal = {
-                id: "j_" + Date.now(),
+                id: "j_" + Date.now() + "_" + Math.floor(Math.random()*1000),
                 siswa: profile.nama,
-                industri: profile.industri || "Mitra DUDI",
+                userId: profile.identitas || "-",
+                industri: indName || "Mitra Industri",
                 tanggal: new Date().toISOString().split('T')[0],
                 kegiatan: akt,
                 kendala: ken || "Tidak ada kendala",
-                solusi: sol || "Sesuai SOP",
+                solusi: sol || "Sesuai SOP Industri",
                 status: "Menunggu Verifikasi"
             };
 
+            // Tambahkan ke array lokal di urutan paling atas
+            if (!window.cloudState.jurnal) window.cloudState.jurnal = [];
             window.cloudState.jurnal.unshift(newJurnal);
+
+            // Simpan langsung ke penyimpanan persisten dan unggah snapshot ke cloud
             window.simpanDatabasePersisten(true);
 
-            window.showModalInfo("Jurnal Terkirim 🚀", "Jurnal harian Anda telah tersimpan dan siap diverifikasi oleh Pembimbing!");
+            // Kirim langsung barisnya ke spreadsheet tab Jurnal_Harian secara terpisah
+            if (window.gasBackendUrl) {
+                fetch(window.gasBackendUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({
+                        action: "simpan_jurnal",
+                        data: newJurnal
+                    })
+                }).catch(e => console.warn("Background GAS journal append:", e));
+            }
+
+            window.showModalInfo("Jurnal Berhasil Dikirim 🚀", 
+                `Jurnal harian Anda telah tersimpan permanen!<br><br>` +
+                `• <b>Aktivitas:</b> ${akt}<br>` +
+                `• <b>Tanggal:</b> ${newJurnal.tanggal}<br>` +
+                `• <b>Status:</b> <span style="color:#d97706; font-weight:800;">Menunggu Verifikasi Pembimbing</span><br><br>` +
+                `<span style="color:#059669; font-weight:800;">Jurnal ini langsung terbaca di Dashboard Guru Pembimbing untuk diasistensi dan divalidasi.</span>`
+            );
+
+            // Render ulang tampilan riwayat jurnal
             window.openFeature("jurnal", "Jurnal Kegiatan");
         };
 
@@ -4062,41 +4134,20 @@
             }
 
             if (!window.cloudState.laporanAkhir) window.cloudState.laporanAkhir = [];
-            window.cloudState.laporanAkhir.unshift({
-                id: "lap_" + Date.now(),
+            const newLaporan = {
+                id: "lap_" + Date.now() + "_" + Math.floor(Math.random()*1000),
                 siswa: profile.nama,
+                userId: profile.identitas || "-",
                 judul: judul,
                 fileUrl: link,
                 tanggal: new Date().toISOString().split('T')[0],
                 status: "Menunggu Pengesahan"
-            });
+            };
+            window.cloudState.laporanAkhir.unshift(newLaporan);
 
             window.simpanDatabasePersisten(true);
-            window.showModalInfo("Laporan Terkirim 📄", "Laporan akhir berhasil dikirim ke Guru Pembimbing!");
+            window.showModalInfo("Laporan Terkirim 📄", "Laporan akhir berhasil dikirim dan tersimpan permanen untuk diperiksa Guru Pembimbing!");
             window.openFeature("laporan", "Laporan Akhir");
-        };
-
-        window.renderPengaduanMasalah = function() {
-            const allPengaduan = window.cloudState.pengaduan || [];
-            let rows = "";
-            allPengaduan.forEach((ad, idx) => {
-                rows += `<tr>
-                    <td>${idx+1}</td>
-                    <td><b>${ad.pelapor}</b></td>
-                    <td>${ad.tanggal}</td>
-                    <td>${ad.isi}</td>
-                    <td><span class="badge-status ${ad.status.includes('Selesai') ? 'badge-green' : 'badge-amber'}">${ad.status}</span></td>
-                </tr>`;
-            });
-
-            return `<div class="card">
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">⚠️ Layanan Pengaduan & Bantuan PKL</h3>
-                <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:14px; padding:14px; margin-bottom:16px;">
-                    <div class="form-group"><label class="form-label">Uraian Masalah / Kendala di Lapangan:</label><textarea id="aduanIsi" class="form-control" style="height:70px;" placeholder="Tuliskan kendala Anda..."></textarea></div>
-                    <button onclick="window.kirimPengaduanKendala()" class="btn-action btn-amber" style="width:100%; padding:10px; font-weight:800;">⚠️ Kirim Aduan ke Panitia PKL</button>
-                </div>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Pelapor</th><th>Tanggal</th><th>Rincian Kendala</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada pengaduan tercatat</td></tr>'}</tbody></table></div>
-            </div>`;
         };
 
         window.kirimPengaduanKendala = function() {
@@ -4109,38 +4160,97 @@
             }
 
             if (!window.cloudState.pengaduan) window.cloudState.pengaduan = [];
-            window.cloudState.pengaduan.unshift({
-                id: "ad_" + Date.now(),
+            const newAduan = {
+                id: "ad_" + Date.now() + "_" + Math.floor(Math.random()*1000),
                 pelapor: profile.nama,
+                userId: profile.identitas || "-",
                 role: window.cloudState.activeRole,
                 tanggal: new Date().toISOString().split('T')[0],
                 isi: isi,
                 status: "Diproses Panitia"
-            });
+            };
+            window.cloudState.pengaduan.unshift(newAduan);
 
             window.simpanDatabasePersisten(true);
-            window.showModalInfo("Aduan Terkirim ⚠️", "Laporan kendala berhasil diterima Panitia PKL!");
+            window.showModalInfo("Aduan Terkirim ⚠️", "Laporan kendala berhasil disimpan dan diteruskan ke Panitia PKL!");
             window.openFeature("aduan", "Pengaduan");
         };
+        window.renderValidasiJurnalList = function() {
+            const profile = window.cloudState.userProfile || { nama: "Pembimbing" };
+            const role = window.cloudState.activeRole;
+            const allJurnal = window.cloudState.jurnal || [];
 
-        window.renderOrangTuaDashboard = function() {
-            const profile = window.cloudState.userProfile || { namaAnanda: "Arthur" };
-            const namaAnanda = profile.namaAnanda || "Arthur";
-            const anandaAbsensi = (window.cloudState.absensi || []).filter(a => (a.nama || '').toLowerCase().includes(namaAnanda.toLowerCase()));
-            const anandaJurnal = (window.cloudState.jurnal || []).filter(j => (j.siswa || '').toLowerCase().includes(namaAnanda.toLowerCase()));
+            let filteredJurnal = allJurnal;
+            if (role === 'guru') {
+                const namaGuruLogin = profile.nama || "";
+                const namaSiswaTerpetakan = new Set();
+                (window.cloudState.penempatan || []).forEach(p => {
+                    if (window.isGuruMatch(p.guru, namaGuruLogin)) {
+                        (p.siswa || []).forEach(sName => namaSiswaTerpetakan.add(String(sName).toLowerCase().trim()));
+                    }
+                });
+                (window.cloudState.siswa || []).forEach(s => {
+                    if (window.isGuruMatch(s.guru || s.pembimbing, namaGuruLogin)) {
+                        namaSiswaTerpetakan.add((s.nama || '').toLowerCase().trim());
+                    }
+                });
+                // Jika guru memiliki alokasi siswa, tampilkan jurnal siswa-siswa tersebut
+                if (namaSiswaTerpetakan.size > 0) {
+                    filteredJurnal = allJurnal.filter(j => namaSiswaTerpetakan.has((j.siswa || '').toLowerCase().trim()));
+                }
+            } else if (role === 'industri') {
+                const namaInd = profile.nama || profile.industri || "";
+                filteredJurnal = allJurnal.filter(j => window.isIndustriMatch(j.industri, namaInd));
+            }
+
+            let rows = "";
+            filteredJurnal.forEach((j) => {
+                const isApproved = (j.status || '').toLowerCase().includes("disetujui");
+                rows += `
+                <tr>
+                    <td><b>${j.siswa}</b><div style="font-size:10px; color:#64748b;">${j.tanggal} &bull; ${j.industri || '-'}</div></td>
+                    <td><b>${j.kegiatan}</b><div style="font-size:10px; color:#64748b;">Kendala: ${j.kendala || '-'} | Solusi: ${j.solusi || '-'}</div></td>
+                    <td><span class="badge-status ${isApproved ? 'badge-green' : 'badge-amber'}">${j.status}</span></td>
+                    <td>
+                        ${isApproved 
+                            ? `<span style="color:#15803d; font-weight:800; font-size:11px;">✓ Tervalidasi</span>` 
+                            : `<button onclick="window.setujuiJurnalSiswa('${j.id}')" class="btn-action btn-emerald" style="padding:6px 12px; font-size:11px; font-weight:800;">✓ Setujui Jurnal</button>`}
+                    </td>
+                </tr>`;
+            });
 
             return `
-            <div class="card" style="background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%); border-color: #93c5fd;">
-                <h2 style="font-size: 19px; font-weight: 900; color: #0f172a;">Ananda: ${namaAnanda}</h2>
-                <div style="font-size: 12px; color: #475569; margin-top: 2px;">
-                    DUDI Magang: <b style="color: #0284c7;">${profile.industri || 'Mitra Industri'}</b> &bull; Pembimbing: <b>${profile.pembimbing || 'Ibu Siti Rahayu, S.Pd.'}</b>
-                </div>
-            </div>
             <div class="card">
-                <h3 style="font-size: 14px; font-weight: 900; color: #0284c7; margin-bottom: 8px;">📍 Riwayat Presensi Terkini</h3>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Tanggal</th><th>Jam</th><th>Status</th></tr></thead>
-                <tbody>${anandaAbsensi.slice(0,5).map((a,i)=>`<tr><td>${i+1}</td><td>${a.tanggal}</td><td>${a.jam} WITA</td><td><span class="badge-status badge-green">${a.status}</span></td></tr>`).join('') || '<tr><td colspan="4" class="empty-placeholder">Belum ada riwayat kehadiran</td></tr>'}</tbody></table></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0284c7;">📋 Pengesahan & Validasi Jurnal PKL</h3>
+                        <p style="font-size:11px; color:var(--text-muted);">Verifikasi laporan kompetensi teknis harian siswa bimbingan.</p>
+                    </div>
+                    <span class="badge-status badge-blue" style="font-size:12px; font-weight:800;">${filteredJurnal.length} Jurnal Masuk</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Siswa & Tanggal</th><th>Uraian Kerja & Catatan</th><th>Status</th><th>Aksi Validasi</th></tr></thead>
+                        <tbody>${rows || '<tr><td colspan="4" class="empty-placeholder">Belum ada jurnal bimbingan yang diajukan</td></tr>'}</tbody>
+                    </table>
+                </div>
             </div>`;
+        };
+
+        window.setujuiJurnalSiswa = function(jurnalId) {
+            const j = (window.cloudState.jurnal || []).find(item => item.id === jurnalId);
+            if (!j) return;
+            const profile = window.cloudState.userProfile || { nama: "Pembimbing" };
+            j.status = `Disetujui (${profile.nama})`;
+            
+            // Simpan perubahan status ke persistent database dan sebar ke cloud
+            window.simpanDatabasePersisten(true);
+
+            window.showModalInfo("Jurnal Disahkan ✅", 
+                `Jurnal siswa <b>${j.siswa}</b> tanggal <b>${j.tanggal}</b> berhasil divalidasi!<br><br>` +
+                `Status telah berubah menjadi <b>Disetujui</b> dan langsung terupdate di Dashboard Siswa serta Orang Tua.`
+            );
+            window.openFeature("validasi-jurnal", "Validasi Jurnal");
         };
 
         window.renderRoleDashboard = function() {
