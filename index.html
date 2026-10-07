@@ -1842,6 +1842,38 @@
             });
             window.inisialisasiAutoSlideBanner(bannerList.length);
 
+            // Statistik dinamis berdasarkan peran
+            let statsBarHtml = "";
+            if (role === 'guru') {
+                const mySiswaCount = (window.cloudState.siswa || []).length;
+                const pendingJurnal = (window.cloudState.jurnal || []).filter(j => !(j.status || "").toLowerCase().includes("disetujui")).length;
+                statsBarHtml = `
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+                    <div style="background:#ffffff; border:1px solid #bfdbfe; border-radius:14px; padding:12px; text-align:center;">
+                        <div style="font-size:10px; color:#64748b; font-weight:800;">SISWA BIMBINGAN</div>
+                        <div style="font-size:22px; font-weight:900; color:#0284c7;">${mySiswaCount}</div>
+                    </div>
+                    <div style="background:#ffffff; border:1px solid #bfdbfe; border-radius:14px; padding:12px; text-align:center;">
+                        <div style="font-size:10px; color:#64748b; font-weight:800;">JURNAL MENUNGGU</div>
+                        <div style="font-size:22px; font-weight:900; color:#f59e0b;">${pendingJurnal}</div>
+                    </div>
+                </div>`;
+            } else if (role === 'industri') {
+                const mySiswaInd = (window.cloudState.siswa || []).length;
+                const totalJurnal = (window.cloudState.jurnal || []).length;
+                statsBarHtml = `
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+                    <div style="background:#ffffff; border:1px solid #bfdbfe; border-radius:14px; padding:12px; text-align:center;">
+                        <div style="font-size:10px; color:#64748b; font-weight:800;">SISWA MAGANG</div>
+                        <div style="font-size:22px; font-weight:900; color:#0284c7;">${mySiswaInd}</div>
+                    </div>
+                    <div style="background:#ffffff; border:1px solid #bfdbfe; border-radius:14px; padding:12px; text-align:center;">
+                        <div style="font-size:10px; color:#64748b; font-weight:800;">AKTIVITAS JURNAL</div>
+                        <div style="font-size:22px; font-weight:900; color:#10b981;">${totalJurnal}</div>
+                    </div>
+                </div>`;
+            }
+
             let launcherHtml = "";
             menus.forEach(m => {
                 if (m.id === 'dashboard') return;
@@ -1859,11 +1891,13 @@
                 <div class="banner-dots-wrap">${bannerDotsHtml}</div>
             </div>
 
-            <div class="card" style="background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%); border-color: #bfdbfe;">
+            <div class="card" style="background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%); border-color: #bfdbfe; margin-bottom:14px;">
                 <div style="font-size: 11px; font-weight: 800; color: #0369a1; letter-spacing: 0.5px;">★ SISTEM TERKONEKSI CLOUD ★</div>
                 <h2 style="font-size: 19px; font-weight: 900; color: #0f172a; margin: 4px 0;">Selamat Datang, ${profile.nama}!</h2>
                 <div style="font-size: 12px; color: #334155;">Peran Aktif: <b style="color: #0284c7; text-transform: uppercase;">${roleDefaults[role]?.label || role}</b></div>
             </div>
+
+            ${statsBarHtml}
 
             <div class="card">
                 <h3 style="font-size: 15px; font-weight: 900; color: #0284c7; margin-bottom: 14px;">⚡ MENU PINTAS EKOSISTEM</h3>
