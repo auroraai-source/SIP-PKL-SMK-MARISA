@@ -1764,100 +1764,550 @@
 
         window.renderKelolaAkunPengguna = function() {
             const list = window.cloudState.registeredUsers || [];
-            let rows = "";
+            const adminUser = list.find(u => u.role === 'admin') || {
+                username: "Panitia PKL",
+                pass: "SMKBisa2000",
+                nama: "Panitia PKL SMKN 1 Marisa"
+            };
 
-            list.forEach((u, idx) => {
-                let badgeClass = "badge-blue";
-                if (u.role === 'admin') badgeClass = "badge-amber";
-                else if (u.role === 'guru') badgeClass = "badge-green";
-                else if (u.role === 'industri') badgeClass = "badge-amber";
-                else if (u.role === 'orangtua') badgeClass = "badge-red";
+            return `<div class="card">
+                <div style="margin-bottom:16px;">
+                    <h3 style="font-size:16px; font-weight:900; color:#0284c7;">🔐 Manajemen Akun Panitia / Admin PKL</h3>
+                    <p style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+                        Kelola identitas Username dan Kata Sandi resmi untuk akses Panitia / Admin PKL SMKN 1 Marisa.
+                        <br><small style="color:#0369a1;">💡 Kredensial Siswa, Guru, dan Industri sudah terintegrasi langsung di menu Data Master masing-masing.</small>
+                    </p>
+                </div>
 
-                const isMainAdmin = u.role === 'admin' && (u.username === "Panitia PKL" || u.username === "admin");
-
-                rows += `<tr>
-                    <td>${idx + 1}</td>
-                    <td><span class="badge-status ${badgeClass}" style="text-transform:uppercase;">${u.role}</span></td>
-                    <td><b>${u.nama}</b></td>
-                    <td><code style="color:#0284c7; font-weight:700;">${u.username}</code></td>
-                    <td><span style="font-family:monospace; background:#f1f5f9; padding:3px 8px; border-radius:6px; border:1px solid #cbd5e1;">${u.pass}</span></td>
-                    <td>
-                        <div style="display:flex; gap:6px;">
-                            <button onclick="window.bukaModalEditAkun(${idx})" class="btn-action btn-blue" style="padding:4px 8px;">✏️ Sandi</button>
-                            ${!isMainAdmin ? `<button onclick="window.konfirmasiHapusAkun(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button>` : '<span style="font-size:10px; color:#d97706; padding:4px; font-weight:800;">Utama</span>'}
+                <div style="background:linear-gradient(135deg, #eff6ff 0%, #ffffff 100%); border:1.5px solid #bfdbfe; border-radius:16px; padding:18px; margin-bottom:16px; box-shadow:0 4px 12px rgba(2, 132, 199, 0.08);">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid #bfdbfe;">
+                        <span style="font-size:24px;">👨‍💼</span>
+                        <div>
+                            <div style="font-size:14px; font-weight:900; color:#0f172a;">Akun Panitia / Administrator Utama</div>
+                            <div style="font-size:11px; color:#16a34a; font-weight:700;">● Hak Akses Penuh Sistem SIP-PKL</div>
                         </div>
+                    </div>
+
+                    <form onsubmit="window.simpanAkunAdminUtama(event)">
+                        <div class="form-group">
+                            <label class="form-label">Nama Panitia / Penanggung Jawab:</label>
+                            <input type="text" id="adminNamaInput" class="form-control" value="${adminUser.nama || 'Panitia PKL SMKN 1 Marisa'}" required>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                            <div class="form-group">
+                                <label class="form-label">Username Login Admin:</label>
+                                <input type="text" id="adminUsernameInput" class="form-control" value="${adminUser.username || 'Panitia PKL'}" required style="font-weight:700; color:#0284c7;">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Kata Sandi (Password) Admin:</label>
+                                <div class="form-control-wrap">
+                                    <input type="text" id="adminPasswordInput" class="form-control" value="${adminUser.pass || 'SMKBisa2000'}" required style="font-weight:700;">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                            <button type="submit" class="btn-action-primary" style="padding:12px 20px; font-size:12px; width:auto;">
+                                💾 Simpan & Perbarui Akun Admin
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:14px; padding:14px; font-size:11px; color:#475569; line-height:1.6;">
+                    <b style="color:#0f172a;">ℹ️ Informasi Distribusi Akun:</b><br>
+                    • Akun <b>Siswa</b> dikelola otomatis di menu <b>👨‍🎓 Data Master Siswa</b>.<br>
+                    • Akun <b>Guru Pembimbing</b> dikelola di menu <b>👩‍🏫 Data Master Guru</b>.<br>
+                    • Akun <b>Mitra Industri DUDI</b> dikelola di menu <b>🏭 Mitra Industri DUDI</b>.<br>
+                    • Akun <b>Orang Tua</b> masuk otomatis menggunakan Nama Lengkap Ananda tanpa kata sandi.
+                </div>
+            </div>`;
+        };
+
+        window.simpanAkunAdminUtama = function(event) {
+            if (event) event.preventDefault();
+            const nama = document.getElementById("adminNamaInput")?.value.trim() || "Panitia PKL SMKN 1 Marisa";
+            const username = document.getElementById("adminUsernameInput")?.value.trim();
+            const pass = document.getElementById("adminPasswordInput")?.value.trim();
+
+            if (!username || !pass) {
+                window.showModalInfo("Lengkapi Formulir", "Username dan Kata Sandi Admin wajib diisi!");
+                return;
+            }
+
+            let adminIdx = (window.cloudState.registeredUsers || []).findIndex(u => u.role === 'admin');
+            const adminObj = {
+                role: "admin",
+                nama: nama,
+                username: username,
+                pass: pass,
+                email: "admin.pkl@smkn1marisa.sch.id",
+                identitas: "PANITIA-2026"
+            };
+
+            if (adminIdx >= 0) {
+                window.cloudState.registeredUsers[adminIdx] = adminObj;
+            } else {
+                window.cloudState.registeredUsers.unshift(adminObj);
+            }
+
+            window.simpanDatabasePersisten(true);
+            window.showModalInfo("Akun Admin Diperbarui 🔐", 
+                `Kredensial Panitia / Admin PKL berhasil diperbarui!<br><br>` +
+                `• <b>Username Baru:</b> <code>${username}</code><br>` +
+                `• <b>Kata Sandi Baru:</b> <code>${pass}</code><br><br>` +
+                `Data otomatis tersinkronisasi ke seluruh sistem.`);
+            window.openFeature("kelola-akun", "Akun Admin");
+        };
+        window.activeCameraStream = null;
+        window.capturedSelfieBlob = null;
+        window.currentGpsPosition = null;
+        window.cameraFacingMode = "user"; // Kamera depan secara default
+
+        // Hitung jarak Geodesik menggunakan rumus Haversine (Meter)
+        window.hitungJarakMeter = function(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Radius bumi dalam meter
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δφ = (lat2 - lat1) * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return Math.round(R * c);
+        };
+
+        window.renderPresensiGPS = function() {
+            const profile = window.cloudState.userProfile || { nama: "Muhammad Rizky", identitas: "0054829102" };
+            const myAbsensi = (window.cloudState.absensi || []).filter(a => a.nama === profile.nama || a.userId === profile.identitas);
+
+            // Temukan koordinat target industri siswa
+            let namaIndustriSiswa = profile.industri || "PT. Inovasi Teknologi Sejahtera";
+            const pen = (window.cloudState.penempatan || []).find(p => (p.siswa || []).some(s => s.toLowerCase().includes(profile.nama.toLowerCase())));
+            if (pen && pen.industri) namaIndustriSiswa = pen.industri;
+
+            const targetInd = (window.cloudState.industri || []).find(i => i.nama.toLowerCase() === namaIndustriSiswa.toLowerCase()) || {
+                nama: namaIndustriSiswa,
+                radius: 50,
+                lat: "0.45612",
+                lng: "121.94210",
+                masuk: "08:00",
+                pulang: "16:00"
+            };
+
+            const targetLat = parseFloat(targetInd.lat) || 0.45612;
+            const targetLng = parseFloat(targetInd.lng) || 121.94210;
+            const allowedRadius = parseInt(targetInd.radius) || 50;
+
+            let rows = "";
+            myAbsensi.forEach((a, idx) => {
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${a.tanggal}</b></td>
+                    <td>${a.jam} WITA</td>
+                    <td><span class="badge-status badge-green">${a.status}</span></td>
+                    <td>${a.jarakMeter ? a.jarakMeter + ' Meter' : 'Valid'}</td>
+                    <td>
+                        ${a.fotoSelfie ? `<img src="${a.fotoSelfie}" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid #38bdf8; cursor:pointer;" onclick="window.tampilkanFotoPenuh('${a.fotoSelfie}')">` : '📷 Terekam'}
                     </td>
                 </tr>`;
             });
 
-            return `<div class="card">
-                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+            // Mulai inisialisasi kamera dan GPS secara otomatis setelah elemen terpasang
+            setTimeout(() => {
+                window.inisialisasiKameraSelfieRealtime();
+                window.deteksiLokasiPresensiRealtime(targetLat, targetLng, allowedRadius);
+            }, 100);
+
+            return `
+            <div class="card" style="border: 2px solid #93c5fd; background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                     <div>
-                        <h3 style="font-size:16px; font-weight:900; color:#0284c7;">🔑 Pembuatan & Manajemen Akun Kredensial</h3>
-                        <p style="font-size:11px; color:var(--text-muted);">Kelola Nama Lengkap, Username, dan Kata Sandi resmi untuk Siswa, Guru, dan Industri.</p>
+                        <div style="font-size: 11px; font-weight: 800; color: #0284c7; letter-spacing: 0.5px;">⚡ PRESENSI DIGITAL ANTI-MANIPULASI</div>
+                        <h3 style="font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 2px;">Kamera Selfie & Geofence GPS</h3>
                     </div>
-                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                        <button onclick="window.unduhTemplateExcelAkun()" class="btn-action btn-emerald" style="display:flex; align-items:center; gap:4px;">📄 Unduh Template Excel</button>
-                        <button onclick="window.bukaModalUploadExcelAkun()" class="btn-action btn-blue" style="display:flex; align-items:center; gap:4px;">📥 Impor Akun Excel</button>
-                        <button onclick="window.bukaModalTambahAkun()" class="btn-action btn-blue">+ Buat Akun Manual</button>
+                    <span class="badge-status badge-blue" style="font-size: 11px;">WITA (GMT+8)</span>
+                </div>
+
+                <!-- Info Titik Target Industri -->
+                <div style="background: #ffffff; border: 1.5px solid #bfdbfe; border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; font-size: 12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-weight: 800; color: #0369a1;">🏢 Lokasi Magang:</span>
+                        <span style="font-weight: 900; color: #0f172a;">${targetInd.nama}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+                        <span style="color: #64748b;">Maksimal Radius:</span>
+                        <span style="font-weight: 800; color: #0284c7;">${allowedRadius} Meter</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+                        <span style="color: #64748b;">Jam Kerja Hari Ini:</span>
+                        <span style="font-weight: 800; color: #16a34a;">${targetInd.masuk || '08:00'} - ${targetInd.pulang || '16:00'} WITA</span>
                     </div>
                 </div>
 
-                <div style="background:#f0f9ff; border:1px solid #bfdbfe; border-radius:12px; padding:10px 14px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                    <div>
-                        <span style="font-size:12px; font-weight:800; color:#0369a1;">🌐 Sinkronisasi Cloud Antar 500 Perangkat:</span>
-                        <div style="font-size:10px; color:#64748b;">Kirim semua data dari PC ini ke Google Sheets agar langsung tampil di semua HP siswa & guru.</div>
+                <!-- Live Camera Viewfinder & Selfie Snapshot Container -->
+                <div style="background: #0f172a; border-radius: 18px; padding: 12px; margin-bottom: 14px; text-align: center; color: #ffffff; position: relative; overflow: hidden; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.25);">
+                    <div style="font-size: 11px; font-weight: 800; color: #38bdf8; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; padding: 0 4px;">
+                        <span>📸 KAMERA SELFIE LANGSUNG (REAL-TIME)</span>
+                        <button type="button" onclick="window.putarArahKamera()" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: #fff; border-radius: 6px; padding: 2px 8px; font-size: 10px; cursor: pointer;">
+                            🔄 Putar Kamera
+                        </button>
                     </div>
-                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                        <button onclick="window.kirimSnapshotKeGoogleSheets(window.cloudState)" class="btn-action btn-blue" style="padding:5px 10px; font-size:11px;">☁️ Unggah ke Cloud</button>
-                        <button onclick="window.tarikDataDariCloud(false)" class="btn-action btn-emerald" style="padding:5px 10px; font-size:11px;">🔄 Tarik dari Cloud</button>
-                        <button onclick="window.eksporCadanganDatabase()" class="btn-action btn-emerald" style="padding:5px 10px; font-size:11px;">💾 Backup JSON</button>
-                        <button onclick="window.pemicuImporCadanganDatabase()" class="btn-action btn-blue" style="padding:5px 10px; font-size:11px;">📤 Pulihkan JSON</button>
-                        <input type="file" id="inputPulihkanJson" accept=".json" style="display:none;" onchange="window.prosesImporCadanganDatabase(this)">
+
+                    <div style="position: relative; width: 100%; height: 260px; background: #020617; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                        <!-- Video Stream Langsung -->
+                        <video id="liveSelfieVideo" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);"></video>
+                        
+                        <!-- Pratinjau Foto yang Terjepret -->
+                        <img id="selfiePreviewImg" style="width: 100%; height: 100%; object-fit: cover; display: none; position: absolute; inset: 0;" alt="Hasil Selfie">
+
+                        <!-- Canvas Tersembunyi untuk Capture -->
+                        <canvas id="selfieCanvasHidden" style="display: none;"></canvas>
+
+                        <!-- Garis Pembidik Wajah -->
+                        <div id="cameraFaceGuide" style="position: absolute; width: 160px; height: 210px; border: 2px dashed rgba(56, 189, 248, 0.7); border-radius: 50% / 40%; pointer-events: none; box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);"></div>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; margin-top: 10px;">
+                        <button type="button" id="btnAmbilSelfie" onclick="window.ambilJepretanSelfie()" class="btn-action btn-blue" style="flex: 1; padding: 10px; font-size: 12px; font-weight: 900; border-radius: 10px;">
+                            📸 JEPRET FOTO SELFIE
+                        </button>
+                        <button type="button" id="btnUlangiSelfie" onclick="window.ulangiJepretanSelfie()" class="btn-action" style="display: none; background: #475569; color: #fff; padding: 10px 14px; font-size: 12px; font-weight: 800; border-radius: 10px;">
+                            🔄 Foto Ulang
+                        </button>
                     </div>
                 </div>
 
+                <!-- Status Deteksi Satelit GPS & Radius Geofence -->
+                <div id="gpsStatusCard" style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 14px; padding: 14px; margin-bottom: 14px; transition: all 0.3s ease;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span id="gpsIndicatorIcon" style="font-size: 20px;">📡</span>
+                            <div>
+                                <div id="gpsStatusTitle" style="font-size: 12px; font-weight: 900; color: #166534;">MENDETEKSI LOKASI SATELIT GPS...</div>
+                                <div id="gpsStatusDesc" style="font-size: 11px; color: #15803d; margin-top: 2px;">Sedang menghitung jarak ke ${targetInd.nama}</div>
+                            </div>
+                        </div>
+                        <button type="button" onclick="window.deteksiLokasiPresensiRealtime(${targetLat}, ${targetLng}, ${allowedRadius})" style="background: #ffffff; border: 1px solid #86efac; color: #15803d; border-radius: 8px; padding: 4px 8px; font-size: 10px; font-weight: 800; cursor: pointer;">
+                            🔄 Refresh GPS
+                        </button>
+                    </div>
+
+                    <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed #bbf7d0; display: flex; justify-content: space-between; font-size: 11px;">
+                        <span>Jarak dari Industri: <b id="textJarakMeter">- Meter</b></span>
+                        <span id="textStatusGeofence" style="font-weight: 800; color: #166534;">Menghitung...</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Kondisi / Jenis Kehadiran:</label>
+                    <select id="inputStatusPresensi" class="form-control" style="font-weight: 700; color: #0284c7;">
+                        <option value="Hadir Tepat Waktu">Hadir Tepat Waktu di Industri</option>
+                        <option value="Tugas Lapangan / Dinas Luar">Tugas Lapangan / Dinas Luar</option>
+                        <option value="Sakit / Izin">Sakit / Izin (Ada Keterangan)</option>
+                    </select>
+                </div>
+
+                <button type="button" id="btnKirimPresensiFinal" onclick="window.eksekusiPresensiRealtime('${targetInd.nama}', ${targetLat}, ${targetLng}, ${allowedRadius})" class="btn-action-primary" style="padding: 14px; font-size: 13px; letter-spacing: 0.5px; opacity: 0.5; pointer-events: none;">
+                    🔒 REKAM KEHADIRAN SEKARANG
+                </button>
+                <div id="textPetunjukPresensiLock" style="text-align: center; font-size: 11px; color: #ef4444; margin-top: 8px; font-weight: 700;">
+                    ⚠️ Tombol akan aktif otomatis setelah foto selfie dijepret & lokasi berada di dalam radius industri.
+                </div>
+            </div>
+
+            <!-- Tabel Riwayat Kehadiran Siswa -->
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <h4 style="font-size: 14px; font-weight: 900; color: #0284c7;">📊 Riwayat Presensi Selfie & GPS</h4>
+                    <span style="font-size: 11px; color: #64748b; font-weight: 700;">${myAbsensi.length} Hari</span>
+                </div>
                 <div class="table-wrap">
                     <table>
                         <thead>
-                            <tr><th>No</th><th>Peran</th><th>Nama Lengkap</th><th>Username</th><th>Kata Sandi</th><th>Aksi</th></tr>
+                            <tr>
+                                <th>No</th>
+                                <th>Tanggal</th>
+                                <th>Jam</th>
+                                <th>Status</th>
+                                <th>Jarak</th>
+                                <th>Foto</th>
+                            </tr>
                         </thead>
-                        <tbody>${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada akun tambahan terdaftar</td></tr>'}</tbody>
+                        <tbody>${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada riwayat kehadiran tercatat</td></tr>'}</tbody>
                     </table>
                 </div>
             </div>`;
         };
 
-        window.unduhTemplateExcelAkun = function() {
-            const dataTemplate = [
-                ["Peran (siswa/guru/industri)", "Nama Lengkap", "Username", "Password"],
-                ["siswa", "Ahmad Fauzan", "0051234567", "siswa123"],
-                ["siswa", "Nur Aini", "0059876543", "siswa123"],
-                ["guru", "Bpk. Rahmat Danial, S.T.", "198501012010011002", "guru123"],
-                ["industri", "PT. Telkom Indonesia", "telkom.marisa", "dudi123"]
-            ];
-            const ws = XLSX.utils.aoa_to_sheet(dataTemplate);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "TemplateAkun");
-            XLSX.writeFile(wb, "Template_Akun_Kredensial_SMKN1Marisa.xlsx");
-            window.showModalInfo("Template Terunduh 📄", "Template Excel akun kredensial (Nama Lengkap, Username, Password) berhasil diunduh. Silakan isi datanya lalu impor kembali!");
+        window.inisialisasiKameraSelfieRealtime = function() {
+            const videoEl = document.getElementById("liveSelfieVideo");
+            if (!videoEl) return;
+
+            // Hentikan stream kamera lama jika ada
+            if (window.activeCameraStream) {
+                window.activeCameraStream.getTracks().forEach(track => track.stop());
+                window.activeCameraStream = null;
+            }
+
+            const constraints = {
+                video: {
+                    facingMode: window.cameraFacingMode,
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                },
+                audio: false
+            };
+
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia(constraints)
+                    .then(stream => {
+                        window.activeCameraStream = stream;
+                        videoEl.srcObject = stream;
+                        videoEl.play();
+                    })
+                    .catch(err => {
+                        console.warn("Gagal membuka kamera:", err);
+                        const statusDesc = document.getElementById("gpsStatusDesc");
+                        if (statusDesc) {
+                            statusDesc.innerHTML += `<br><span style="color:#ef4444;">⚠️ Mohon izinkan akses kamera di peramban Anda!</span>`;
+                        }
+                    });
+            } else {
+                console.warn("navigator.mediaDevices.getUserMedia tidak didukung di peramban ini.");
+            }
         };
 
-        window.bukaModalUploadExcelAkun = function() {
+        window.putarArahKamera = function() {
+            window.cameraFacingMode = (window.cameraFacingMode === "user") ? "environment" : "user";
+            const videoEl = document.getElementById("liveSelfieVideo");
+            if (videoEl) {
+                videoEl.style.transform = (window.cameraFacingMode === "user") ? "scaleX(-1)" : "none";
+            }
+            window.inisialisasiKameraSelfieRealtime();
+        };
+
+        window.ambilJepretanSelfie = function() {
+            const videoEl = document.getElementById("liveSelfieVideo");
+            const previewImg = document.getElementById("selfiePreviewImg");
+            const canvasEl = document.getElementById("selfieCanvasHidden");
+            const btnAmbil = document.getElementById("btnAmbilSelfie");
+            const btnUlangi = document.getElementById("btnUlangiSelfie");
+            const faceGuide = document.getElementById("cameraFaceGuide");
+
+            if (!videoEl || !canvasEl || !videoEl.videoWidth) {
+                window.showModalInfo("Kamera Belum Siap", "Mohon tunggu hingga kamera selfie aktif sepenuhnya!");
+                return;
+            }
+
+            canvasEl.width = videoEl.videoWidth;
+            canvasEl.height = videoEl.videoHeight;
+            const ctx = canvasEl.getContext("2d");
+
+            // Jika kamera depan, lakukan flip horizontal agar hasil foto sesuai cermin
+            if (window.cameraFacingMode === "user") {
+                ctx.translate(canvasEl.width, 0);
+                ctx.scale(-1, 1);
+            }
+            ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+
+            // Tambahkan cap waktu & nama pada foto selfie untuk integritas bukti
+            const now = new Date();
+            const timeStampText = `${now.toLocaleDateString('id-ID')} ${now.toLocaleTimeString('id-ID')} WITA`;
+            ctx.restore();
+            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+            ctx.fillRect(0, canvasEl.height - 35, canvasEl.width, 35);
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 14px Inter, sans-serif";
+            ctx.fillText(`📍 ${timeStampText} - SIP-PKL MARISA`, 12, canvasEl.height - 12);
+
+            const dataUrl = canvasEl.toDataURL("image/jpeg", 0.85);
+            window.capturedSelfieBlob = dataUrl;
+
+            // Tampilkan pratinjau foto
+            if (previewImg) {
+                previewImg.src = dataUrl;
+                previewImg.style.display = "block";
+            }
+            if (videoEl) videoEl.style.display = "none";
+            if (faceGuide) faceGuide.style.display = "none";
+            if (btnAmbil) btnAmbil.style.display = "none";
+            if (btnUlangi) btnUlangi.style.display = "inline-block";
+
+            window.evaluasiKesiapanKirimPresensi();
+        };
+
+        window.ulangiJepretanSelfie = function() {
+            window.capturedSelfieBlob = null;
+            const videoEl = document.getElementById("liveSelfieVideo");
+            const previewImg = document.getElementById("selfiePreviewImg");
+            const btnAmbil = document.getElementById("btnAmbilSelfie");
+            const btnUlangi = document.getElementById("btnUlangiSelfie");
+            const faceGuide = document.getElementById("cameraFaceGuide");
+
+            if (previewImg) previewImg.style.display = "none";
+            if (videoEl) videoEl.style.display = "block";
+            if (faceGuide) faceGuide.style.display = "block";
+            if (btnAmbil) btnAmbil.style.display = "inline-block";
+            if (btnUlangi) btnUlangi.style.display = "none";
+
+            window.evaluasiKesiapanKirimPresensi();
+        };
+
+        window.deteksiLokasiPresensiRealtime = function(targetLat, targetLng, allowedRadius) {
+            const cardEl = document.getElementById("gpsStatusCard");
+            const titleEl = document.getElementById("gpsStatusTitle");
+            const descEl = document.getElementById("gpsStatusDesc");
+            const iconEl = document.getElementById("gpsIndicatorIcon");
+            const textJarak = document.getElementById("textJarakMeter");
+            const textStatus = document.getElementById("textStatusGeofence");
+
+            if (!navigator.geolocation) {
+                if (titleEl) titleEl.innerText = "GPS TIDAK DIDUKUNG";
+                if (descEl) descEl.innerText = "Peramban ini tidak mendukung deteksi lokasi satelit.";
+                return;
+            }
+
+            if (titleEl) titleEl.innerText = "MENCARI SINYAL SATELIT GPS...";
+            if (descEl) descEl.innerText = "Mengunci koordinat akurat perangkat...";
+
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const curLat = pos.coords.latitude;
+                    const curLng = pos.coords.longitude;
+                    const accuracy = Math.round(pos.coords.accuracy);
+
+                    const jarak = window.hitungJarakMeter(curLat, curLng, targetLat, targetLng);
+                    window.currentGpsPosition = {
+                        lat: curLat,
+                        lng: curLng,
+                        jarak: jarak,
+                        accuracy: accuracy,
+                        isValid: jarak <= allowedRadius
+                    };
+
+                    if (textJarak) textJarak.innerText = `${jarak} Meter`;
+
+                    if (jarak <= allowedRadius) {
+                        if (cardEl) { cardEl.style.background = "#f0fdf4"; cardEl.style.borderColor = "#86efac"; }
+                        if (iconEl) iconEl.innerText = "✅";
+                        if (titleEl) { titleEl.innerText = "LOKASI VALID DI INDUSTRI"; titleEl.style.color = "#166534"; }
+                        if (descEl) { descEl.innerText = `Akurasi satelit: ±${accuracy}m. Posisi berada di dalam radius resmi.`; descEl.style.color = "#15803d"; }
+                        if (textStatus) { textStatus.innerText = "TERVERIFIKASI DALAM RADIUS"; textStatus.style.color = "#16a34a"; }
+                    } else {
+                        if (cardEl) { cardEl.style.background = "#fef2f2"; cardEl.style.borderColor = "#fca5a5"; }
+                        if (iconEl) iconEl.innerText = "❌";
+                        if (titleEl) { titleEl.innerText = "DI LUAR RADIUS RESMI INDUSTRI"; titleEl.style.color = "#991b1b"; }
+                        if (descEl) { descEl.innerText = `Jarak Anda (${jarak}m) melebihi batas toleransi (${allowedRadius}m).`; descEl.style.color = "#b91c1c"; }
+                        if (textStatus) { textStatus.innerText = "DITOLAK (DILUAR RADIUS)"; textStatus.style.color = "#ef4444"; }
+                    }
+
+                    window.evaluasiKesiapanKirimPresensi();
+                },
+                (err) => {
+                    console.warn("Akses lokasi ditolak:", err);
+                    if (cardEl) { cardEl.style.background = "#fffbeb"; cardEl.style.borderColor = "#fde68a"; }
+                    if (iconEl) iconEl.innerText = "⚠️";
+                    if (titleEl) { titleEl.innerText = "IZIN GPS DIPERLUKAN"; titleEl.style.color = "#92400e"; }
+                    if (descEl) { descEl.innerText = "Mohon aktifkan GPS Lokasi perangkat dan beri izin akses."; descEl.style.color = "#b45309"; }
+                    window.evaluasiKesiapanKirimPresensi();
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        };
+
+        window.evaluasiKesiapanKirimPresensi = function() {
+            const btnKirim = document.getElementById("btnKirimPresensiFinal");
+            const textLock = document.getElementById("textPetunjukPresensiLock");
+            if (!btnKirim) return;
+
+            const hasSelfie = !!window.capturedSelfieBlob;
+            const hasGpsValid = window.currentGpsPosition && window.currentGpsPosition.isValid;
+
+            if (hasSelfie && hasGpsValid) {
+                btnKirim.style.opacity = "1";
+                btnKirim.style.pointerEvents = "auto";
+                btnKirim.innerText = "⚡ REKAM KEHADIRAN RESMI SEKARANG";
+                if (textLock) {
+                    textLock.innerHTML = `<span style="color:#16a34a;">✅ Selfie & Lokasi Terverifikasi! Silakan tekan tombol di atas untuk mencatat kehadiran.</span>`;
+                }
+            } else {
+                btnKirim.style.opacity = "0.5";
+                btnKirim.style.pointerEvents = "none";
+                btnKirim.innerText = "🔒 REKAM KEHADIRAN SEKARANG";
+                if (textLock) {
+                    if (!hasSelfie && !hasGpsValid) {
+                        textLock.innerHTML = `<span style="color:#ef4444;">⚠️ Wajib mengambil foto selfie & berada di dalam radius lokasi industri.</span>`;
+                    } else if (!hasSelfie) {
+                        textLock.innerHTML = `<span style="color:#ef4444;">⚠️ Silakan jepret foto selfie langsung di lokasi terlebih dahulu.</span>`;
+                    } else {
+                        textLock.innerHTML = `<span style="color:#ef4444;">⚠️ Anda berada di luar radius industri (${window.currentGpsPosition?.jarak || 0}m). Presensi hanya dapat dilakukan di titik lokasi resmi.</span>`;
+                    }
+                }
+            }
+        };
+
+        window.eksekusiPresensiRealtime = function(namaIndustri, targetLat, targetLng, allowedRadius) {
+            if (!window.capturedSelfieBlob) {
+                window.showModalInfo("Foto Selfie Diperlukan", "Silakan ambil foto selfie langsung melalui kamera!");
+                return;
+            }
+            if (!window.currentGpsPosition || !window.currentGpsPosition.isValid) {
+                window.showModalInfo("Di Luar Radius", "Presensi ditolak karena posisi GPS perangkat berada di luar batas radius industri!");
+                return;
+            }
+
+            const now = new Date();
+            const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+            const dateStr = now.toISOString().split('T')[0];
+            const ket = document.getElementById("inputStatusPresensi")?.value || "Hadir Tepat Waktu";
+            const profile = window.cloudState.userProfile || { nama: "Muhammad Rizky", identitas: "0054829102" };
+
+            const record = {
+                id: "abs_" + Date.now(),
+                nama: profile.nama,
+                userId: profile.identitas || "-",
+                role: window.cloudState.activeRole,
+                industri: namaIndustri,
+                tanggal: dateStr,
+                jam: timeStr,
+                status: `${ket} (Selfie & GPS Valid)`,
+                jarakMeter: window.currentGpsPosition.jarak,
+                latitude: window.currentGpsPosition.lat,
+                longitude: window.currentGpsPosition.lng,
+                fotoSelfie: window.capturedSelfieBlob
+            };
+
+            window.cloudState.absensi.unshift(record);
+            window.simpanDatabasePersisten(true);
+
+            // Bersihkan stream kamera setelah presensi tersimpan
+            if (window.activeCameraStream) {
+                window.activeCameraStream.getTracks().forEach(track => track.stop());
+                window.activeCameraStream = null;
+            }
+
+            window.showModalInfo("Kehadiran Berhasil Direkam! ⚡", 
+                `Presensi resmi atas nama <b>${profile.nama}</b> berhasil terekam!<br><br>` +
+                `• <b>Industri:</b> ${namaIndustri}<br>` +
+                `• <b>Jarak GPS:</b> ${record.jarakMeter} Meter (Valid)<br>` +
+                `• <b>Waktu:</b> ${dateStr} - ${timeStr} WITA<br>` +
+                `• <b>Foto Selfie:</b> Terekam langsung di database.`
+            );
+            window.openFeature("dashboard", "Beranda Utama");
+        };
+
+        window.tampilkanFotoPenuh = function(imgSrc) {
             const modalHtml = `
-            <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:8px;">📥 Impor Akun Massal via Excel</h3>
-            <p style="font-size:11px; color:#475569; margin-bottom:12px;">Format berkas yang didukung: <b>.xlsx, .xls, .csv</b>.</p>
-            <div class="form-group">
-                <label class="form-label">Pilih Berkas Excel Akun:</label>
-                <input type="file" id="inputExcelAkunFile" accept=".xlsx, .xls, .csv" class="form-control" onchange="window.prosesBacaExcelAkun(this)">
+            <h3 style="font-size:15px; font-weight:900; color:#0284c7; margin-bottom:12px;">📷 Bukti Foto Selfie Presensi</h3>
+            <div style="border-radius:14px; overflow:hidden; border:2px solid #bfdbfe; background:#0f172a; text-align:center;">
+                <img src="${imgSrc}" style="width:100%; max-height:420px; object-fit:contain;">
             </div>
-            <div id="previewAkunExcelWrap" style="display:none; margin-top:10px;">
-                <div style="font-size:11px; font-weight:700; color:#10b981; margin-bottom:6px;">Pratinjau Data:</div>
-                <div id="textPratinjauAkun" style="padding:10px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; font-size:11px; color:#0369a1; font-weight:800;"></div>
-            </div>
-            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
-                <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                <button id="btnEksekusiSimpanAkunExcel" onclick="window.simpanAkunExcelKeDatabase()" class="btn-action btn-blue" disabled>Simpan Akun 💾</button>
+            <div style="text-align:right; margin-top:14px;">
+                <button onclick="window.closeDynamicModal()" class="btn-action btn-blue" style="padding:8px 18px;">Tutup</button>
             </div>`;
             window.openDynamicModal(modalHtml);
         };
