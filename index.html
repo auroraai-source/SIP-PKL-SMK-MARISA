@@ -3402,65 +3402,6 @@
             });
         };
 
-        window.renderPresensiGPS = function() {
-            let rows = "";
-            (window.cloudState.absensi || []).forEach((a, idx) => {
-                rows += `<tr><td>${idx+1}</td><td><b>${a.nama}</b></td><td>${a.tanggal}</td><td>${a.jam} WITA</td><td><span class="badge-status badge-green">${a.status}</span></td></tr>`;
-            });
-
-            return `<div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <div><h3 style="font-size: 16px; font-weight: 900; color: #0284c7;">📍 Presensi GPS & Kamera Selfie</h3><p style="font-size: 11px; color: var(--text-muted);">Satelit GPS mendeteksi koordinat geofence industri mitra Anda.</p></div>
-                </div>
-                <div style="background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%); border: 1.5px dashed #0284c7; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 14px;">
-                    <div style="font-size: 32px; margin-bottom: 4px;">📡</div>
-                    <div style="font-size: 13px; font-weight: 900; color: #0284c7;">RADAR SATELIT GPS AKTIF</div>
-                    <div style="font-size: 11px; color: #15803d; font-weight: 800; margin-top: 2px;">Radius Geofence: 50 Meter (Otomatis Terkunci)</div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Kondisi Kehadiran:</label>
-                    <select id="inputStatusPresensi" class="form-control">
-                        <option value="Hadir Tepat Waktu">Hadir Tepat Waktu di Industri</option>
-                        <option value="Tugas Lapangan / Dinas Luar">Tugas Lapangan / Dinas Luar</option>
-                        <option value="Sakit / Izin">Sakit / Izin (Surat Keterangan)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Ambil Foto Selfie di Lokasi:</label>
-                    <input type="file" id="inputFotoSelfie" class="form-control" accept="image/*">
-                </div>
-                <button onclick="window.catatPresensiRealtime()" class="btn-action-primary" style="padding: 12px; font-size: 13px; margin-top: 8px;">📸 REKAM KEHADIRAN SEKARANG</button>
-            </div>
-            <div class="card">
-                <h4 style="font-size: 13px; font-weight: 800; margin-bottom: 8px; color: #0284c7;">Riwayat Kehadiran</h4>
-                <div class="table-wrap"><table><thead><tr><th>No</th><th>Nama</th><th>Tanggal</th><th>Jam</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada catatan presensi</td></tr>'}</tbody></table></div>
-            </div>`;
-        };
-
-        window.catatPresensiRealtime = function() {
-            const now = new Date();
-            const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-            const dateStr = now.toISOString().split('T')[0];
-            const ket = document.getElementById("inputStatusPresensi")?.value || "Hadir Tepat Waktu";
-            const profile = window.cloudState.userProfile || { nama: "Muhammad Rizky", identitas: "0054829102" };
-
-            const record = {
-                nama: profile.nama,
-                userId: profile.identitas || "-",
-                role: window.cloudState.activeRole,
-                industri: profile.industri || "PT. Inovasi Teknologi Sejahtera",
-                tanggal: dateStr,
-                jam: timeStr,
-                status: `${ket} (Radius Valid)`
-            };
-
-            window.cloudState.absensi.unshift(record);
-            window.simpanDatabasePersisten();
-
-            window.showModalInfo("Kehadiran Tercatat ⚡", `Presensi atas nama <b>${profile.nama}</b> berhasil disimpan ke database!`);
-            window.openFeature("dashboard", "Beranda");
-        };
-
         window.renderJurnalKegiatan = function() {
             let rows = "";
             (window.cloudState.jurnal || []).forEach((j, idx) => {
