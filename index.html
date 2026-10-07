@@ -447,6 +447,14 @@
             flex-shrink: 0;
         }
         .btn-absensi-text { font-size: 12px; font-weight: 900; color: #0369a1; line-height: 1.2; text-align: left; }
+        .btn-absensi-box.done-card {
+            border-color: #86efac;
+            background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+        }
+        .btn-absensi-box.done-card .btn-absensi-icon {
+            background: #dcfce7;
+            color: #15803d;
+        }
 
         .mentor-info-card {
             background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
@@ -1487,28 +1495,67 @@
             const profile = window.cloudState.userProfile || { nama: "Muhammad Rizky", identitas: "0054829102" };
             const myAbsensi = (window.cloudState.absensi || []).filter(a => a.nama === profile.nama || a.userId === profile.identitas);
             const todayStr = new Date().toISOString().split('T')[0];
-            const hasAbsenToday = myAbsensi.some(a => a.tanggal === todayStr);
+            
+            // Cek presensi datang dan pulang hari ini
+            const absenDatangToday = myAbsensi.find(a => a.tanggal === todayStr && (a.tipeAbsen === 'datang' || (a.status || '').toLowerCase().includes('datang') || (!a.tipeAbsen && !a.status?.toLowerCase().includes('pulang'))));
+            const absenPulangToday = myAbsensi.find(a => a.tanggal === todayStr && (a.tipeAbsen === 'pulang' || (a.status || '').toLowerCase().includes('pulang')));
 
-            let persentaseHadir = 96;
+            // Waktu saat ini dalam WITA
+            const now = new Date();
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
+            const currentTimeMinutes = currentHour * 60 + currentMinute;
+            const deadlineDatangMinutes = 15 * 60; // 15.00 WITA
+
+            let statusDatangBadge = "";
+            if (absenDatangToday) {
+                const isTerlambat = (absenDatangToday.kategoriHadir === 'terlambat' || (absenDatangToday.status || '').toLowerCase().includes('terlambat'));
+                statusDatangBadge = isTerlambat 
+                    ? `<span style="color:#d97706; font-weight:900;">● TERLAMBAT (${absenDatangToday.jam} WITA)</span>`
+                    : `<span style="color:#15803d; font-weight:900;">● TEPAT WAKTU (${absenDatangToday.jam} WITA)</span>`;
+            } else if (currentTimeMinutes > deadlineDatangMinutes) {
+                statusDatangBadge = `<span style="color:#dc2626; font-weight:900;">● ALPA / TIDAK HADIR (>15.00 WITA)</span>`;
+            } else {
+                statusDatangBadge = `<span style="color:#475569; font-weight:800;">BELUM ABSEN DATANG</span>`;
+            }
+
+            let statusPulangBadge = absenPulangToday 
+                ? `<span style="color:#15803d; font-weight:900;">● SUDAH PULANG (${absenPulangToday.jam} WITA)</span>`
+                : `<span style="color:#475569; font-weight:800;">BELUM PULANG</span>`;
+
+            let persentaseHadir = 100;
             if (myAbsensi.length > 0) {
-                const hadirCount = myAbsensi.filter(a => (a.status || '').toLowerCase().includes("hadir") || (a.status || '').toLowerCase().includes("tepat")).length;
+                const hadirCount = myAbsensi.filter(a => !(a.status || '').toLowerCase().includes("alpa") && !(a.kategoriHadir === 'alpa')).length;
                 persentaseHadir = Math.min(100, Math.max(0, Math.round((hadirCount / myAbsensi.length) * 100)));
             }
 
-            let tempatIndustri = profile.industri || "PT. Inovasi Teknologi Sejahtera";
+            // Dapatkan Tempat PKL dan Pembimbing secara real-time dari database
+            let tempatIndustri = profile.industri;
             let namaPembimbing = profile.pembimbing || "Ibu Siti Rahayu, S.Pd.";
-            let jumlahSiswaPkl = (window.cloudState.siswa && window.cloudState.siswa.length > 0) ? window.cloudState.siswa.length : 12;
+            let jumlahSiswaPkl = 1;
 
-            const penempatanSiswa = (window.cloudState.penempatan || []).find(p => 
-                (p.siswa || []).some(s => s.toLowerCase().includes(profile.nama.toLowerCase()))
-            );
-            if (penempatanSiswa) {
-                tempatIndustri = penempatanSiswa.industri || tempatIndustri;
-                namaPembimbing = penempatanSiswa.guru || namaPembimbing;
-                if (penempatanSiswa.siswa && penempatanSiswa.siswa.length > 0) {
-                    jumlahSiswaPkl = penempatanSiswa.siswa.length;
-                }
+            const targetSiswaNama = (profile.nama || "").toLowerCase().trim();
+            const foundSiswa = (window.cloudState.siswa || []).find(s => (s.nama || '').toLowerCase().trim() === targetSiswaNama);
+            if (foundSiswa && foundSiswa.industri) {
+                tempatIndustri = foundSiswa.industri;
             }
+
+            const pen = (window.cloudState.penempatan || []).find(p => (p.siswa || []).some(s => s.toLowerCase().trim() === targetSiswaNama));
+            if (pen) {
+                tempatIndustri = pen.industri || tempatIndustri;
+                namaPembimbing = pen.guru || namaPembimbing;
+                if (pen.siswa && pen.siswa.length > 0) {
+                    jumlahSiswaPkl = pen.siswa.length;
+                }
+            } else if (tempatIndustri) {
+                const sameIndSiswa = (window.cloudState.siswa || []).filter(s => (s.industri || '').toLowerCase().trim() === tempatIndustri.toLowerCase().trim());
+                if (sameIndSiswa.length > 0) jumlahSiswaPkl = sameIndSiswa.length;
+            }
+
+            if (!tempatIndustri && (window.cloudState.industri || []).length > 0) {
+                tempatIndustri = window.cloudState.industri[0].nama;
+            }
+            tempatIndustri = tempatIndustri || "Mitra Industri PKL";
 
             const pklCfg = window.cloudState.pklConfig || DEFAULT_PKL_CONFIG;
             const bannerList = (window.cloudState.bannerSliderImages && window.cloudState.bannerSliderImages.length > 0) 
@@ -1541,19 +1588,33 @@
 
             <div class="absensi-digital-card">
                 <div class="absensi-header-wrap">
-                    <div class="absensi-title-main">ABSENSI DIGITAL</div>
-                    <div class="absensi-status-badge" style="color: ${hasAbsenToday ? '#15803d' : '#475569'};">
-                        ${hasAbsenToday ? '● SUDAH ABSEN HARI INI' : 'BELUM ABSEN HARI INI'}
+                    <div>
+                        <div class="absensi-title-main">ABSENSI DIGITAL</div>
+                        <div style="font-size: 10px; color: #475569; margin-top: 2px;">Zona Waktu: <b>WITA (GMT+8)</b></div>
+                    </div>
+                    <div style="text-align: right; font-size: 10px;">
+                        <div>${statusDatangBadge}</div>
+                        <div style="margin-top: 2px;">${statusPulangBadge}</div>
                     </div>
                 </div>
                 <div class="absensi-btn-grid">
-                    <div class="btn-absensi-box" onclick="window.openFeature('presensi', 'Presensi GPS & Selfie')">
-                        <div class="btn-absensi-icon">📷</div>
-                        <div class="btn-absensi-text">SELFIE<br>ABSENSI</div>
+                    <div class="btn-absensi-box ${absenDatangToday ? 'done-card' : ''}" onclick="window.bukaFiturAbsenSiswa('datang')">
+                        <div class="btn-absensi-icon">${absenDatangToday ? '✅' : '🌅'}</div>
+                        <div class="btn-absensi-text">
+                            ABSEN DATANG<br>
+                            <small style="font-size: 9px; font-weight: normal; color: ${absenDatangToday ? '#15803d' : '#64748b'};">
+                                ${absenDatangToday ? 'Selesai: ' + absenDatangToday.jam + ' WITA' : 'Batas 15.00 WITA'}
+                            </small>
+                        </div>
                     </div>
-                    <div class="btn-absensi-box" onclick="window.openFeature('presensi', 'Presensi GPS & Selfie')">
-                        <div class="btn-absensi-icon">📍</div>
-                        <div class="btn-absensi-text">GPS<br>LOKASI</div>
+                    <div class="btn-absensi-box ${absenPulangToday ? 'done-card' : ''}" onclick="window.bukaFiturAbsenSiswa('pulang')">
+                        <div class="btn-absensi-icon">${absenPulangToday ? '✅' : '🌇'}</div>
+                        <div class="btn-absensi-text">
+                            ABSEN PULANG<br>
+                            <small style="font-size: 9px; font-weight: normal; color: ${absenPulangToday ? '#15803d' : '#64748b'};">
+                                ${absenPulangToday ? 'Selesai: ' + absenPulangToday.jam + ' WITA' : 'Batas 23.00 WITA'}
+                            </small>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1617,6 +1678,56 @@
                     </div>
                 </div>
             </div>`;
+        };
+
+        window.bukaFiturAbsenSiswa = function(tipe) {
+            const profile = window.cloudState.userProfile || { nama: "Muhammad Rizky", identitas: "0054829102" };
+            const myAbsensi = (window.cloudState.absensi || []).filter(a => a.nama === profile.nama || a.userId === profile.identitas);
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            const now = new Date();
+            const curMinutes = now.getHours() * 60 + now.getMinutes();
+
+            if (tipe === 'datang') {
+                const existingDatang = myAbsensi.find(a => a.tanggal === todayStr && (a.tipeAbsen === 'datang' || (a.status || '').toLowerCase().includes('datang') || (!a.tipeAbsen && !a.status?.toLowerCase().includes('pulang'))));
+                if (existingDatang) {
+                    window.showModalInfo("Sudah Presensi Datang 🌅", 
+                        `Anda sudah melakukan <b>Absen Datang</b> hari ini pada jam <b>${existingDatang.jam} WITA</b>.<br><br>` +
+                        `• <b>Status Tercatat:</b> ${existingDatang.status}<br>` +
+                        `• <b>Lokasi:</b> ${existingDatang.industri || '-'}<br><br>` +
+                        `<span style="color:#059669; font-weight:800;">Terima kasih! Jangan lupa melakukan Absen Pulang saat jam kerja berakhir.</span>`
+                    );
+                    return;
+                }
+
+                // Cek batas waktu 15.00 WITA
+                if (curMinutes > (15 * 60)) {
+                    window.showModalInfo("Batas Waktu Berakhir ⏰", 
+                        `Batas waktu untuk melakukan <b>Absen Datang</b> adalah pukul <b>15.00 WITA</b>.<br><br>` +
+                        `<span style="color:#dc2626; font-weight:800;">Saat ini sudah melewati pukul 15.00 WITA, status kehadiran Anda hari ini terhitung Tidak Hadir / Alpa.</span><br><br>` +
+                        `Jika Anda memiliki dispensasi atau tugas luar, silakan konfirmasi kepada Guru Pembimbing.`
+                    );
+                    return;
+                }
+            } else if (tipe === 'pulang') {
+                const existingPulang = myAbsensi.find(a => a.tanggal === todayStr && (a.tipeAbsen === 'pulang' || (a.status || '').toLowerCase().includes('pulang')));
+                if (existingPulang) {
+                    window.showModalInfo("Sudah Presensi Pulang 🌇", 
+                        `Anda sudah melakukan <b>Absen Pulang</b> hari ini pada jam <b>${existingPulang.jam} WITA</b>.<br><br>` +
+                        `• <b>Status Tercatat:</b> ${existingPulang.status}<br><br>` +
+                        `<span style="color:#059669; font-weight:800;">Presensi kepulangan Anda hari ini telah terekam lengkap!</span>`
+                    );
+                    return;
+                }
+
+                if (curMinutes > (23 * 60)) {
+                    window.showModalInfo("Batas Waktu Pulang Berakhir ⏰", "Batas waktu absen pulang untuk hari ini telah berakhir (pukul 23.00 WITA).");
+                    return;
+                }
+            }
+
+            window.currentTipeAbsenSiswa = tipe;
+            window.openFeature("presensi", `Presensi ${tipe === 'datang' ? 'Datang' : 'Pulang'}`);
         };
 
         window.renderOrangTuaDashboard = function() {
@@ -1891,6 +2002,7 @@
         window.renderPresensiGPS = function() {
             const profile = window.cloudState.userProfile || { nama: "Muhammad Rizky", identitas: "0054829102" };
             const myAbsensi = (window.cloudState.absensi || []).filter(a => a.nama === profile.nama || a.userId === profile.identitas);
+            const tipeAbsen = window.currentTipeAbsenSiswa || 'datang';
 
             const daftarIndustri = window.cloudState.industri || [];
 
@@ -1900,7 +2012,11 @@
                 targetIdx = window.selectedPresensiIndIdx;
             } else {
                 let indNameSiswa = (profile.industri || "").toLowerCase().trim();
-                const pen = (window.cloudState.penempatan || []).find(p => (p.siswa || []).some(s => s.toLowerCase().includes(profile.nama.toLowerCase())));
+                const targetSiswaNama = (profile.nama || "").toLowerCase().trim();
+                const foundS = (window.cloudState.siswa || []).find(s => (s.nama || '').toLowerCase().trim() === targetSiswaNama);
+                if (foundS && foundS.industri) indNameSiswa = foundS.industri.toLowerCase().trim();
+
+                const pen = (window.cloudState.penempatan || []).find(p => (p.siswa || []).some(s => s.toLowerCase().trim() === targetSiswaNama));
                 if (pen && pen.industri) indNameSiswa = pen.industri.toLowerCase().trim();
 
                 const foundIdx = daftarIndustri.findIndex(i => 
@@ -1925,6 +2041,31 @@
             const targetLng = window.parseCoordinateFloat(targetInd.lng, 121.94210);
             const allowedRadius = parseInt(targetInd.radius) || 100;
 
+            // Evaluasi kategori otomatis berdasarkan jam WITA
+            const now = new Date();
+            const curHour = now.getHours();
+            const curMin = now.getMinutes();
+            const totalMinutesNow = curHour * 60 + curMin;
+
+            let infoStatusOtomatis = "";
+            let kategoriOtomatis = "tepat";
+
+            if (tipeAbsen === 'datang') {
+                if (totalMinutesNow <= (8 * 60 + 15)) {
+                    infoStatusOtomatis = `<span style="color:#15803d; font-weight:800;">● Hadir Tepat Waktu (08.00 - 08.15 WITA)</span>`;
+                    kategoriOtomatis = "tepat";
+                } else if (totalMinutesNow <= (15 * 60)) {
+                    infoStatusOtomatis = `<span style="color:#d97706; font-weight:800;">● Terlambat Hadir (08.16 - 15.00 WITA)</span>`;
+                    kategoriOtomatis = "terlambat";
+                } else {
+                    infoStatusOtomatis = `<span style="color:#dc2626; font-weight:800;">● Alpa / Tidak Hadir (> 15.00 WITA)</span>`;
+                    kategoriOtomatis = "alpa";
+                }
+            } else {
+                infoStatusOtomatis = `<span style="color:#0284c7; font-weight:800;">● Absen Pulang Kerja (s.d 23.00 WITA)</span>`;
+                kategoriOtomatis = "pulang";
+            }
+
             // Buat pilihan dropdown semua industri resmi dari database
             let indSelectOptions = "";
             daftarIndustri.forEach((item, idx) => {
@@ -1933,19 +2074,24 @@
 
             let rows = "";
             myAbsensi.forEach((a, idx) => {
+                let badgeColor = "badge-green";
+                if ((a.status || '').toLowerCase().includes("terlambat")) badgeColor = "badge-amber";
+                else if ((a.status || '').toLowerCase().includes("alpa")) badgeColor = "badge-red";
+                else if ((a.status || '').toLowerCase().includes("pulang")) badgeColor = "badge-blue";
+
                 rows += `<tr>
                     <td>${idx+1}</td>
                     <td><b>${a.tanggal}</b></td>
                     <td>${a.jam} WITA</td>
-                    <td><span class="badge-status badge-green">${a.status}</span></td>
-                    <td>${a.jarakMeter !== undefined ? a.jarakMeter + ' Meter' : 'Valid'}</td>
+                    <td><span class="badge-status ${badgeColor}">${a.status}</span></td>
+                    <td>${a.jarakMeter !== undefined ? a.jarakMeter + 'm' : 'Valid'}</td>
                     <td>
                         ${a.fotoSelfie ? `<img src="${a.fotoSelfie}" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid #38bdf8; cursor:pointer;" onclick="window.tampilkanFotoPenuh('${a.fotoSelfie}')">` : '📷 Terekam'}
                     </td>
                 </tr>`;
             });
 
-            // Mulai inisialisasi kamera dan GPS secara otomatis
+            // Inisialisasi kamera dan GPS secara otomatis
             setTimeout(() => {
                 window.inisialisasiKameraSelfieRealtime();
                 window.deteksiLokasiPresensiRealtime(targetLat, targetLng, allowedRadius);
@@ -1955,14 +2101,30 @@
             <div class="card" style="border: 2px solid #93c5fd; background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                     <div>
-                        <div style="font-size: 11px; font-weight: 800; color: #0284c7; letter-spacing: 0.5px;">⚡ PRESENSI DIGITAL RESMI (ANTI-MANIPULASI)</div>
-                        <h3 style="font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 2px;">Kamera Selfie & Geofence GPS Industri</h3>
+                        <div style="font-size: 11px; font-weight: 800; color: #0284c7; letter-spacing: 0.5px;">
+                            ${tipeAbsen === 'datang' ? '🌅 PRESENSI DATANG RESMI' : '🌇 PRESENSI PULANG RESMI'}
+                        </div>
+                        <h3 style="font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 2px;">
+                            Kamera Selfie & Geofence GPS Satelit
+                        </h3>
                     </div>
                     <span class="badge-status badge-blue" style="font-size: 11px;">WITA (GMT+8)</span>
                 </div>
 
+                <!-- Info Waktu & Status Kategori Kehadiran -->
+                <div style="background: #ffffff; border: 1.5px solid #bfdbfe; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 11px; color: #334155;">
+                        Status Sesi Saat Ini:<br>
+                        ${infoStatusOtomatis}
+                    </div>
+                    <div style="text-align: right; font-size: 11px; color: #64748b;">
+                        Jam Server:<br>
+                        <b style="color: #0f172a; font-size: 13px;">${String(curHour).padStart(2,'0')}:${String(curMin).padStart(2,'0')} WITA</b>
+                    </div>
+                </div>
+
                 <!-- Pemilih Lokasi Industri Resmi dari Database -->
-                <div style="background: #ffffff; border: 2px solid #0284c7; border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.1);">
+                <div id="boxPilihanIndustriWrap" style="background: #ffffff; border: 2px solid #0284c7; border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.1);">
                     <label class="form-label" style="color: #0369a1; font-weight: 900; font-size: 12px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
                         <span>🏢 TITIK LOKASI / INDUSTRI PKL:</span>
                         <span style="font-size: 10px; color: #16a34a; font-weight: 800;">● TERKUNCI RESMI</span>
@@ -2037,14 +2199,19 @@
 
                 <div class="form-group">
                     <label class="form-label">Kondisi / Jenis Kehadiran:</label>
-                    <select id="inputStatusPresensi" class="form-control" style="font-weight: 700; color: #0284c7;">
-                        <option value="Hadir Tepat Waktu">Hadir Tepat Waktu di Industri</option>
-                        <option value="Tugas Lapangan / Dinas Luar">Tugas Lapangan / Dinas Luar</option>
-                        <option value="Sakit / Izin">Sakit / Izin (Ada Keterangan)</option>
+                    <select id="inputStatusPresensi" class="form-control" onchange="window.handlePerubahanJenisKehadiran()" style="font-weight: 700; color: #0284c7;">
+                        <option value="Hadir Tepat Waktu di Industri">Hadir di Industri (Geofence GPS Ketat)</option>
+                        <option value="Tugas Lapangan / Dinas Luar">Tugas Lapangan / Dinas Luar (Lokasi Saat Ini)</option>
+                        <option value="Sakit / Izin (Ada Keterangan)">Sakit / Izin (Ada Keterangan - Lokasi Saat Ini)</option>
                     </select>
                 </div>
 
-                <button type="button" id="btnKirimPresensiFinal" onclick="window.eksekusiPresensiRealtime('${targetInd.nama}', ${targetLat}, ${targetLng}, ${allowedRadius})" class="btn-action-primary" style="padding: 14px; font-size: 13px; letter-spacing: 0.5px; opacity: 0.5; pointer-events: none;">
+                <div id="boxKeteranganKhususWrap" style="display: none; margin-bottom: 14px;">
+                    <label class="form-label">Keterangan Tugas / Izin / Sakit:</label>
+                    <input type="text" id="inputKeteranganIzin" class="form-control" placeholder="Contoh: Menghadiri workshop DUDI / Istirahat dokter">
+                </div>
+
+                <button type="button" id="btnKirimPresensiFinal" onclick="window.eksekusiPresensiRealtime('${targetInd.nama}', ${targetLat}, ${targetLng}, ${allowedRadius}, '${kategoriOtomatis}')" class="btn-action-primary" style="padding: 14px; font-size: 13px; letter-spacing: 0.5px; opacity: 0.5; pointer-events: none;">
                     🔒 REKAM KEHADIRAN SEKARANG
                 </button>
                 <div id="textPetunjukPresensiLock" style="text-align: center; font-size: 11px; color: #ef4444; margin-top: 8px; font-weight: 700;">
@@ -2076,237 +2243,46 @@
             </div>`;
         };
 
-        window.gantiLokasiPresensiSiswa = function(idx) {
-            window.selectedPresensiIndIdx = parseInt(idx);
-            window.openFeature("presensi", "Presensi GPS & Selfie");
-        };
+        window.handlePerubahanJenisKehadiran = function() {
+            const selectEl = document.getElementById("inputStatusPresensi");
+            const boxKet = document.getElementById("boxKeteranganKhususWrap");
+            const boxInd = document.getElementById("boxPilihanIndustriWrap");
+            const val = selectEl?.value || "";
 
-        // Jurus Pamungkas 1: Kalibrasi titik industri ke koordinat GPS HP saat ini (Jarak -> 0m)
-        window.kalibrasiGpsIndustriKeHp = function(indIdx) {
-            if (!window.currentGpsPosition || !window.currentGpsPosition.lat) {
-                window.showModalInfo("Menunggu Sinyal GPS", "Mohon tunggu hingga koordinat GPS HP Anda terbaca di layar!");
-                return;
-            }
+            const isKhusus = val.includes("Tugas Lapangan") || val.includes("Sakit") || val.includes("Izin");
+            if (boxKet) boxKet.style.display = isKhusus ? "block" : "none";
 
-            const daftarIndustri = window.cloudState.industri || [];
-            const targetInd = daftarIndustri[indIdx];
-            if (!targetInd) return;
-
-            const curLat = window.currentGpsPosition.lat.toFixed(6);
-            const curLng = window.currentGpsPosition.lng.toFixed(6);
-
-            targetInd.lat = curLat;
-            targetInd.lng = curLng;
-            targetInd.radius = Math.max(parseInt(targetInd.radius) || 100, 200);
-
-            window.simpanDatabasePersisten(true);
-
-            window.showModalInfo("Kalibrasi Berhasil! 🎯", 
-                `Titik lokasi untuk <b>${targetInd.nama}</b> berhasil dikunci ke posisi HP Anda saat ini!<br><br>` +
-                `• <b>Latitude Baru:</b> <code>${curLat}</code><br>` +
-                `• <b>Longitude Baru:</b> <code>${curLng}</code><br>` +
-                `• <b>Radius Toleransi:</b> ${targetInd.radius} Meter<br><br>` +
-                `<span style="color:#059669; font-weight:800;">Jarak Anda sekarang: 0 - 5 Meter (100% VALID DALAM RADIUS)!</span>`
-            );
-
-            // Re-render presensi dengan koordinat baru yang langsung pas
-            window.openFeature("presensi", "Presensi GPS & Selfie");
-        };
-
-        // Jurus Pamungkas 2: Set toleransi radius instan (500m, 1000m, 3000m)
-        window.setRadiusToleransiCepat = function(indIdx, newRadius) {
-            const daftarIndustri = window.cloudState.industri || [];
-            const targetInd = daftarIndustri[indIdx];
-            if (!targetInd) return;
-
-            targetInd.radius = newRadius;
-            window.simpanDatabasePersisten(true);
-
-            window.showModalInfo("Toleransi Diperluas ⚡", 
-                `Batas radius untuk <b>${targetInd.nama}</b> disetel menjadi <b>${newRadius} Meter</b>.<br><br>` +
-                `<span style="color:#059669; font-weight:800;">Posisi Anda kini berada dalam batas toleransi resmi!</span>`
-            );
-
-            window.openFeature("presensi", "Presensi GPS & Selfie");
-        };
-
-        window.inisialisasiKameraSelfieRealtime = function() {
-            const videoEl = document.getElementById("liveSelfieVideo");
-            if (!videoEl) return;
-
-            if (window.activeCameraStream) {
-                window.activeCameraStream.getTracks().forEach(track => track.stop());
-                window.activeCameraStream = null;
-            }
-
-            const constraints = {
-                video: {
-                    facingMode: window.cameraFacingMode,
-                    width: { ideal: 640 },
-                    height: { ideal: 480 }
-                },
-                audio: false
-            };
-
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                navigator.mediaDevices.getUserMedia(constraints)
-                    .then(stream => {
-                        window.activeCameraStream = stream;
-                        videoEl.srcObject = stream;
-                        videoEl.play();
-                    })
-                    .catch(err => {
-                        console.warn("Gagal membuka kamera:", err);
-                        const statusDesc = document.getElementById("gpsStatusDesc");
-                        if (statusDesc) {
-                            statusDesc.innerHTML += `<br><span style="color:#ef4444;">⚠️ Mohon izinkan akses kamera di peramban HP Anda!</span>`;
-                        }
-                    });
-            }
-        };
-
-        window.putarArahKamera = function() {
-            window.cameraFacingMode = (window.cameraFacingMode === "user") ? "environment" : "user";
-            const videoEl = document.getElementById("liveSelfieVideo");
-            if (videoEl) {
-                videoEl.style.transform = (window.cameraFacingMode === "user") ? "scaleX(-1)" : "none";
-            }
-            window.inisialisasiKameraSelfieRealtime();
-        };
-
-        window.ambilJepretanSelfie = function() {
-            const videoEl = document.getElementById("liveSelfieVideo");
-            const previewImg = document.getElementById("selfiePreviewImg");
-            const canvasEl = document.getElementById("selfieCanvasHidden");
-            const btnAmbil = document.getElementById("btnAmbilSelfie");
-            const btnUlangi = document.getElementById("btnUlangiSelfie");
-            const faceGuide = document.getElementById("cameraFaceGuide");
-
-            if (!videoEl || !canvasEl || !videoEl.videoWidth) {
-                window.showModalInfo("Kamera Belum Siap", "Mohon tunggu hingga kamera selfie aktif!");
-                return;
-            }
-
-            canvasEl.width = videoEl.videoWidth;
-            canvasEl.height = videoEl.videoHeight;
-            const ctx = canvasEl.getContext("2d");
-
-            if (window.cameraFacingMode === "user") {
-                ctx.translate(canvasEl.width, 0);
-                ctx.scale(-1, 1);
-            }
-            ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
-
-            const now = new Date();
-            const timeStampText = `${now.toLocaleDateString('id-ID')} ${now.toLocaleTimeString('id-ID')} WITA`;
-            ctx.restore();
-            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-            ctx.fillRect(0, canvasEl.height - 35, canvasEl.width, 35);
-            ctx.fillStyle = "#ffffff";
-            ctx.font = "bold 14px Inter, sans-serif";
-            ctx.fillText(`📍 ${timeStampText} - SIP-PKL MARISA`, 12, canvasEl.height - 12);
-
-            const dataUrl = canvasEl.toDataURL("image/jpeg", 0.85);
-            window.capturedSelfieBlob = dataUrl;
-
-            if (previewImg) {
-                previewImg.src = dataUrl;
-                previewImg.style.display = "block";
-            }
-            if (videoEl) videoEl.style.display = "none";
-            if (faceGuide) faceGuide.style.display = "none";
-            if (btnAmbil) btnAmbil.style.display = "none";
-            if (btnUlangi) btnUlangi.style.display = "inline-block";
-
-            window.evaluasiKesiapanKirimPresensi();
-        };
-
-        window.ulangiJepretanSelfie = function() {
-            window.capturedSelfieBlob = null;
-            const videoEl = document.getElementById("liveSelfieVideo");
-            const previewImg = document.getElementById("selfiePreviewImg");
-            const btnAmbil = document.getElementById("btnAmbilSelfie");
-            const btnUlangi = document.getElementById("btnUlangiSelfie");
-            const faceGuide = document.getElementById("cameraFaceGuide");
-
-            if (previewImg) previewImg.style.display = "none";
-            if (videoEl) videoEl.style.display = "block";
-            if (faceGuide) faceGuide.style.display = "block";
-            if (btnAmbil) btnAmbil.style.display = "inline-block";
-            if (btnUlangi) btnUlangi.style.display = "none";
-
-            window.evaluasiKesiapanKirimPresensi();
-        };
-
-        window.deteksiLokasiPresensiRealtime = function(targetLat, targetLng, allowedRadius) {
             const cardEl = document.getElementById("gpsStatusCard");
             const titleEl = document.getElementById("gpsStatusTitle");
             const descEl = document.getElementById("gpsStatusDesc");
             const iconEl = document.getElementById("gpsIndicatorIcon");
-            const textJarak = document.getElementById("textJarakMeter");
             const textStatus = document.getElementById("textStatusGeofence");
-            const txtHp = document.getElementById("txtHpCoords");
-            const txtAkurasi = document.getElementById("txtAkurasiGps");
 
-            if (!navigator.geolocation) {
-                if (titleEl) titleEl.innerText = "GPS TIDAK DIDUKUNG";
-                if (descEl) descEl.innerText = "Peramban ini tidak mendukung deteksi satelit GPS.";
-                return;
-            }
-
-            if (titleEl) titleEl.innerText = "MENGUNCI SATELIT GPS...";
-            if (descEl) descEl.innerText = "Membaca koordinat presisi perangkat...";
-
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    const curLat = pos.coords.latitude;
-                    const curLng = pos.coords.longitude;
-                    const accuracy = Math.round(pos.coords.accuracy);
-
-                    const jarak = window.hitungJarakMeter(curLat, curLng, targetLat, targetLng);
-                    
-                    // Toleransi gabungan: radius industri + akurasi satelit GPS perangkat
-                    const effectiveRadius = Math.max(allowedRadius, allowedRadius + Math.min(accuracy, 100));
-                    const isValid = jarak <= effectiveRadius;
-
-                    window.currentGpsPosition = {
-                        lat: curLat,
-                        lng: curLng,
-                        jarak: jarak,
-                        accuracy: accuracy,
-                        isValid: isValid
-                    };
-
-                    if (textJarak) textJarak.innerText = `${jarak} Meter`;
-                    if (txtHp) txtHp.innerText = `${curLat.toFixed(5)}, ${curLng.toFixed(5)}`;
-                    if (txtAkurasi) txtAkurasi.innerText = `Akurasi: ±${accuracy}m`;
-
+            if (isKhusus) {
+                if (cardEl) { cardEl.style.background = "#f0fdf4"; cardEl.style.borderColor = "#86efac"; }
+                if (iconEl) iconEl.innerText = "📍";
+                if (titleEl) { titleEl.innerText = "LOKASI SAAT INI DIAKUI (TUGAS/IZIN)"; titleEl.style.color = "#166534"; }
+                if (descEl) { descEl.innerText = "Presensi selfie akan mengunci titik koordinat di mana Anda berada saat ini."; descEl.style.color = "#15803d"; }
+                if (textStatus) { textStatus.innerText = "TERVALIDASI LOKASI KHUSUS"; textStatus.style.color = "#16a34a"; }
+            } else {
+                // Evaluasi ulang GPS industri normal
+                if (window.currentGpsPosition) {
+                    const isValid = window.currentGpsPosition.isValid;
                     if (isValid) {
                         if (cardEl) { cardEl.style.background = "#f0fdf4"; cardEl.style.borderColor = "#86efac"; }
                         if (iconEl) iconEl.innerText = "✅";
                         if (titleEl) { titleEl.innerText = "LOKASI VALID DI INDUSTRI"; titleEl.style.color = "#166534"; }
-                        if (descEl) { descEl.innerText = `Akurasi: ±${accuracy}m. Posisi berada dalam radius resmi (${jarak}m dari target).`; descEl.style.color = "#15803d"; }
                         if (textStatus) { textStatus.innerText = "TERVERIFIKASI DALAM RADIUS"; textStatus.style.color = "#16a34a"; }
                     } else {
                         if (cardEl) { cardEl.style.background = "#fef2f2"; cardEl.style.borderColor = "#fca5a5"; }
                         if (iconEl) iconEl.innerText = "❌";
-                        if (titleEl) { titleEl.innerText = "DI LUAR RADIUS INDUSTRI"; titleEl.style.color = "#991b1b"; }
-                        if (descEl) { descEl.innerText = `Jarak Anda (${jarak}m) melebihi batas (${allowedRadius}m). Silakan gunakan tombol kalibrasi di bawah!`; descEl.style.color = "#b91c1c"; }
+                        if (titleEl) { titleEl.innerText = "DI LUAR RADIUS RESMI INDUSTRI"; titleEl.style.color = "#991b1b"; }
                         if (textStatus) { textStatus.innerText = "DITOLAK (DILUAR RADIUS)"; textStatus.style.color = "#ef4444"; }
                     }
+                }
+            }
 
-                    window.evaluasiKesiapanKirimPresensi();
-                },
-                (err) => {
-                    console.warn("Akses GPS terkendala:", err);
-                    if (cardEl) { cardEl.style.background = "#fffbeb"; cardEl.style.borderColor = "#fde68a"; }
-                    if (iconEl) iconEl.innerText = "⚠️";
-                    if (titleEl) { titleEl.innerText = "IZIN LOKASI DIBUTUHKAN"; titleEl.style.color = "#92400e"; }
-                    if (descEl) { descEl.innerText = "Aktifkan GPS lokasi HP Anda dan beri izin peramban."; descEl.style.color = "#b45309"; }
-                    window.evaluasiKesiapanKirimPresensi();
-                },
-                { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
-            );
+            window.evaluasiKesiapanKirimPresensi();
         };
 
         window.evaluasiKesiapanKirimPresensi = function() {
@@ -2315,9 +2291,9 @@
             const statusSelect = document.getElementById("inputStatusPresensi");
             if (!btnKirim) return;
 
-            const isTugasLuar = statusSelect && (statusSelect.value.includes("Tugas Lapangan") || statusSelect.value.includes("Sakit"));
+            const isKhusus = statusSelect && (statusSelect.value.includes("Tugas Lapangan") || statusSelect.value.includes("Sakit") || statusSelect.value.includes("Izin"));
             const hasSelfie = !!window.capturedSelfieBlob;
-            const hasGpsValid = (window.currentGpsPosition && window.currentGpsPosition.isValid) || isTugasLuar;
+            const hasGpsValid = (window.currentGpsPosition && window.currentGpsPosition.isValid) || isKhusus;
 
             if (hasSelfie && hasGpsValid) {
                 btnKirim.style.opacity = "1";
@@ -2332,45 +2308,73 @@
                 btnKirim.innerText = "🔒 REKAM KEHADIRAN SEKARANG";
                 if (textLock) {
                     if (!hasSelfie && !hasGpsValid) {
-                        textLock.innerHTML = `<span style="color:#ef4444;">⚠️ Wajib jepret foto selfie & berada dalam radius industri (atau gunakan tombol kalibrasi).</span>`;
+                        textLock.innerHTML = `<span style="color:#ef4444;">⚠️ Wajib jepret foto selfie langsung & berada di dalam radius resmi industri (atau pilih opsi Tugas Lapangan/Izin).</span>`;
                     } else if (!hasSelfie) {
                         textLock.innerHTML = `<span style="color:#ef4444;">⚠️ Silakan jepret foto selfie langsung di lokasi terlebih dahulu.</span>`;
                     } else {
-                        textLock.innerHTML = `<span style="color:#ef4444;">⚠️ Anda berada di luar radius (${window.currentGpsPosition?.jarak || 0}m). Klik tombol kalibrasi atau set radius 3.000m di atas.</span>`;
+                        textLock.innerHTML = `<span style="color:#ef4444;">⚠️ Anda berada di luar radius industri (${window.currentGpsPosition?.jarak || 0}m). Presensi hadir hanya diizinkan di titik resmi industri.</span>`;
                     }
                 }
             }
         };
 
-        window.eksekusiPresensiRealtime = function(namaIndustri, targetLat, targetLng, allowedRadius) {
+        window.eksekusiPresensiRealtime = function(namaIndustri, targetLat, targetLng, allowedRadius, kategoriDefault) {
             const statusSelect = document.getElementById("inputStatusPresensi");
-            const isTugasLuar = statusSelect && (statusSelect.value.includes("Tugas Lapangan") || statusSelect.value.includes("Sakit"));
+            const ketTambahan = document.getElementById("inputKeteranganIzin")?.value.trim() || "";
+            const isKhusus = statusSelect && (statusSelect.value.includes("Tugas Lapangan") || statusSelect.value.includes("Sakit") || statusSelect.value.includes("Izin"));
 
             if (!window.capturedSelfieBlob) {
                 window.showModalInfo("Foto Selfie Diperlukan", "Silakan ambil foto selfie langsung melalui kamera!");
                 return;
             }
-            if (!isTugasLuar && (!window.currentGpsPosition || !window.currentGpsPosition.isValid)) {
-                window.showModalInfo("Di Luar Radius", "Posisi Anda masih di luar radius industri. Gunakan tombol kalibrasi atau perluas radius toleransi!");
+            if (!isKhusus && (!window.currentGpsPosition || !window.currentGpsPosition.isValid)) {
+                window.showModalInfo("Di Luar Radius", "Posisi Anda masih di luar radius industri resmi!");
                 return;
             }
 
             const now = new Date();
-            const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+            const curHour = now.getHours();
+            const curMin = now.getMinutes();
+            const totalMinutesNow = curHour * 60 + curMin;
+            const timeStr = String(curHour).padStart(2, '0') + ':' + String(curMin).padStart(2, '0');
             const dateStr = now.toISOString().split('T')[0];
-            const ket = statusSelect?.value || "Hadir Tepat Waktu";
             const profile = window.cloudState.userProfile || { nama: "Muhammad Rizky", identitas: "0054829102" };
+            const tipeAbsen = window.currentTipeAbsenSiswa || 'datang';
+
+            let labelStatus = "";
+            let kategoriFinal = kategoriDefault;
+
+            if (isKhusus) {
+                labelStatus = statusSelect.value + (ketTambahan ? ` (${ketTambahan})` : '');
+                kategoriFinal = statusSelect.value.includes("Tugas") ? "tugas_luar" : "izin";
+            } else if (tipeAbsen === 'datang') {
+                if (totalMinutesNow <= (8 * 60 + 15)) {
+                    labelStatus = "Hadir Tepat Waktu (08.00-08.15 WITA)";
+                    kategoriFinal = "tepat";
+                } else if (totalMinutesNow <= (15 * 60)) {
+                    labelStatus = `Hadir Terlambat (${timeStr} WITA)`;
+                    kategoriFinal = "terlambat";
+                } else {
+                    labelStatus = "Tidak Hadir / Alpa (>15.00 WITA)";
+                    kategoriFinal = "alpa";
+                }
+            } else {
+                labelStatus = `Pulang Kerja (${timeStr} WITA)`;
+                kategoriFinal = "pulang";
+            }
 
             const record = {
                 id: "abs_" + Date.now(),
                 nama: profile.nama,
                 userId: profile.identitas || "-",
                 role: window.cloudState.activeRole,
-                industri: namaIndustri,
+                tipeAbsen: tipeAbsen,
+                kategoriHadir: kategoriFinal,
+                industri: isKhusus ? (statusSelect.value.split(' ')[0] + " - " + namaIndustri) : namaIndustri,
                 tanggal: dateStr,
                 jam: timeStr,
-                status: `${ket} (Selfie & GPS Valid)`,
-                jarakMeter: window.currentGpsPosition ? window.currentGpsPosition.jarak : 0,
+                status: labelStatus,
+                jarakMeter: isKhusus ? 0 : (window.currentGpsPosition ? window.currentGpsPosition.jarak : 0),
                 latitude: window.currentGpsPosition ? window.currentGpsPosition.lat : targetLat,
                 longitude: window.currentGpsPosition ? window.currentGpsPosition.lng : targetLng,
                 fotoSelfie: window.capturedSelfieBlob
@@ -2385,11 +2389,12 @@
             }
 
             window.showModalInfo("Kehadiran Berhasil Direkam! ⚡", 
-                `Presensi resmi atas nama <b>${profile.nama}</b> berhasil terekam!<br><br>` +
-                `• <b>Industri:</b> ${namaIndustri}<br>` +
-                `• <b>Jarak GPS:</b> ${record.jarakMeter} Meter (Valid)<br>` +
+                `Presensi <b>${tipeAbsen === 'datang' ? 'Datang' : 'Pulang'}</b> atas nama <b>${profile.nama}</b> berhasil dicatat!<br><br>` +
+                `• <b>Kategori:</b> <span style="font-weight:900; color:#0284c7;">${labelStatus}</span><br>` +
                 `• <b>Waktu:</b> ${dateStr} - ${timeStr} WITA<br>` +
-                `• <b>Foto Selfie:</b> Terekam langsung di database.`
+                `• <b>Lokasi:</b> ${record.industri}<br>` +
+                `• <b>Jarak GPS:</b> ${record.jarakMeter} Meter (Valid)<br><br>` +
+                `<span style="color:#059669; font-weight:800;">Status kehadiran otomatis terupdate di Dashboard Anda!</span>`
             );
             window.openFeature("dashboard", "Beranda Utama");
         };
@@ -3548,8 +3553,15 @@
             const durasiIndustri = document.getElementById("cfgDurasiIndustri")?.value.trim() || "4 Bulan (120 Hari)";
 
             window.cloudState.pklConfig = { tglAwal, tglPenarikan, durasiIndustri };
-            window.simpanDatabasePersisten();
-            window.showModalInfo("Jadwal PKL Diperbarui 📅", "Jadwal dan durasi PKL berhasil disimpan dan langsung disiarkan ke seluruh ekosistem!");
+            // Simpan secara persisten dan kirimkan langsung ke Cloud Database Google Sheets
+            window.simpanDatabasePersisten(true);
+            window.showModalInfo("Jadwal PKL Berhasil Disimpan 📅", 
+                `Jadwal PKL resmi berhasil disimpan dan langsung disinkronkan ke Cloud!<br><br>` +
+                `• <b>Tgl Awal:</b> ${tglAwal}<br>` +
+                `• <b>Tgl Penarikan:</b> ${tglPenarikan}<br>` +
+                `• <b>Durasi Industri:</b> ${durasiIndustri}<br><br>` +
+                `<span style="color:#059669; font-weight:800;">Data ini langsung aktif dan tampil otomatis di seluruh Dashboard Siswa!</span>`
+            );
         };
 
         window.bukaModalTambahBanner = function() {
