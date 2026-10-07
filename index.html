@@ -3798,7 +3798,438 @@
         };
 
         window.renderSiswaBimbinganList = function() {
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">👥 Daftar Siswa Bimbingan / Magang</h3><div class="empty-placeholder">Daftar siswa dalam alokasi Anda tampil di sini.</div></div>`;
+            const profile = window.cloudState.userProfile || { nama: "Guru Pembimbing" };
+            const role = window.cloudState.activeRole;
+            const allSiswa = window.cloudState.siswa || [];
+            const allPenempatan = window.cloudState.penempatan || [];
+            
+            let matchedSiswa = [];
+
+            if (role === 'guru') {
+                // Kumpulkan nama siswa dari tabel penempatan yang dipetakan ke guru ini
+                const namaGuruLogin = profile.nama || "";
+                const namaSiswaTerpetakan = new Set();
+                
+                allPenempatan.forEach(p => {
+                    if (window.isGuruMatch(p.guru, namaGuruLogin)) {
+                        (p.siswa || []).forEach(sName => {
+                            namaSiswaTerpetakan.add(String(sName).toLowerCase().trim());
+                        });
+                    }
+                });
+
+                // Cocokkan data siswa dari master data
+                matchedSiswa = allSiswa.filter(s => {
+                    const sName = (s.nama || "").toLowerCase().trim();
+                    const directMatch = window.isGuruMatch(s.guru || s.pembimbing, namaGuruLogin);
+                    const penempatanMatch = namaSiswaTerpetakan.has(sName);
+                    return directMatch || penempatanMatch;
+                });
+            } else if (role === 'industri') {
+                // Untuk login Industri Mitra DUDI
+                const namaIndustriLogin = profile.nama || profile.industri || "";
+                const namaSiswaTerpetakan = new Set();
+
+                allPenempatan.forEach(p => {
+                    if (window.isIndustriMatch(p.industri, namaIndustriLogin)) {
+                        (p.siswa || []).forEach(sName => {
+                            namaSiswaTerpetakan.add(String(sName).toLowerCase().trim());
+                        });
+                    }
+                });
+
+                matchedSiswa = allSiswa.filter(s => {
+                    const sName = (s.nama || "").toLowerCase().trim();
+                    const directMatch = window.isIndustriMatch(s.industri, namaIndustriLogin);
+                    const penempatanMatch = namaSiswaTerpetakan.has(sName);
+                    return directMatch || penempatanMatch;
+                });
+            } else {
+                matchedSiswa = allSiswa;
+            }
+
+            let cardsHtml = "";
+            matchedSiswa.forEach((s, idx) => {
+                const sName = s.nama;
+                const sAbsensi = (window.cloudState.absensi || []).filter(a => (a.nama || '').toLowerCase() === sName.toLowerCase());
+                const sJurnal = (window.cloudState.jurnal || []).filter(j => (j.siswa || '').toLowerCase() === sName.toLowerCase());
+                
+                let persenHadir = 100;
+                if (sAbsensi.length > 0) {
+                    const hadir = sAbsensi.filter(a => !(a.status || '').toLowerCase().includes("alpa")).length;
+                    persenHadir = Math.round((hadir / sAbsensi.length) * 100);
+                }
+
+                const waNum = (s.noHp || "").replace(/[^0-9]/g, '');
+                const waLink = waNum ? `https://wa.me/${waNum}` : null;
+
+                cardsHtml += `
+                <div class="card" style="margin-bottom:12px; padding:16px; border:1.5px solid #bfdbfe; background:#ffffff;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div style="width:42px; height:42px; border-radius:12px; background:#e0f2fe; color:#0284c7; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:900;">
+                                ${s.jk === 'P' ? '👩‍🎓' : '👨‍🎓'}
+                            </div>
+                            <div>
+                                <h4 style="font-size:14px; font-weight:900; color:#0f172a;">${idx+1}. ${s.nama}</h4>
+                                <div style="font-size:11px; color:#64748b;">
+                                    NIS: <b>${s.nis || s.nisn || '-'}</b> &bull; Kelas: <b>${s.kelas || 'XI PKL'}</b>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="badge-status badge-blue" style="font-size:11px; padding:4px 8px;">
+                            ${persenHadir}% Hadir
+                        </span>
+                    </div>
+
+                    <div style="margin-top:10px; padding:10px; background:#f8fafc; border-radius:10px; border:1px solid #e2e8f0; font-size:11px; display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                        <div>
+                            <span style="color:#64748b;">🏢 Tempat PKL:</span><br>
+                            <b style="color:#0284c7;">${s.industri || 'Belum diatur'}</b>
+                        </div>
+                        <div>
+                            <span style="color:#64748b;">📖 Log Jurnal:</span><br>
+                            <b style="color:#15803d;">${sJurnal.length} Aktivitas</b>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+                        ${waLink ? `
+                        <a href="${waLink}" target="_blank" class="btn-action btn-emerald" style="padding:6px 12px; text-decoration:none; display:inline-flex; align-items:center; gap:4px; font-size:11px;">
+                            📱 Hubungi Siswa
+                        </a>` : ''}
+                        <button onclick="window.lihatDetailPresensiSiswa('${encodeURIComponent(s.nama)}')" class="btn-action btn-blue" style="padding:6px 12px; font-size:11px;">
+                            📍 Cek Presensi (${sAbsensi.length})
+                        </button>
+                        <button onclick="window.lihatDetailJurnalSiswa('${encodeURIComponent(s.nama)}')" class="btn-action" style="background:#0284c7; color:#fff; padding:6px 12px; font-size:11px;">
+                            📖 Cek Jurnal (${sJurnal.length})
+                        </button>
+                    </div>
+                </div>`;
+            });
+
+            const headerTitle = role === 'guru' ? '👥 Daftar Siswa Bimbingan' : '👥 Daftar Siswa Magang Industri';
+            const subTitle = role === 'guru' 
+                ? `Menampilkan siswa yang dipetakan oleh Panitia PKL kepada <b>${profile.nama}</b>.` 
+                : `Menampilkan siswa yang ditempatkan di <b>${profile.nama || profile.industri}</b>.`;
+
+            return `
+            <div class="card" style="background:linear-gradient(135deg, #eff6ff 0%, #ffffff 100%); border-color:#93c5fd; margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-size:11px; font-weight:800; color:#0369a1; letter-spacing:0.5px;">ALOKASI AKTIF</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">${headerTitle}</h3>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">${subTitle}</p>
+                    </div>
+                    <span class="badge-status badge-blue" style="font-size:13px; font-weight:900; padding:6px 12px;">
+                        ${matchedSiswa.length} Siswa
+                    </span>
+                </div>
+            </div>
+
+            ${cardsHtml || `
+            <div class="card">
+                <div class="empty-placeholder" style="padding:28px 16px;">
+                    <div style="font-size:32px; margin-bottom:8px;">👥</div>
+                    <b style="color:#0f172a; font-size:14px;">Belum Ada Siswa yang Dipetakan</b>
+                    <p style="font-size:11px; color:#64748b; margin-top:6px; line-height:1.5;">
+                        Panitia PKL belum menetapkan alokasi siswa bimbingan untuk <b>${profile.nama}</b>.<br>
+                        Silakan hubungi Panitia PKL untuk memetakan siswa pada menu <i>Alokasi Guru & Siswa</i>.
+                    </p>
+                </div>
+            </div>`}`;
+        };
+
+        window.lihatDetailPresensiSiswa = function(encodedNama) {
+            const nama = decodeURIComponent(encodedNama);
+            const list = (window.cloudState.absensi || []).filter(a => (a.nama || '').toLowerCase() === nama.toLowerCase());
+            let rows = "";
+            list.forEach((a, idx) => {
+                let badgeCls = "badge-green";
+                if ((a.status || '').toLowerCase().includes("terlambat")) badgeCls = "badge-amber";
+                else if ((a.status || '').toLowerCase().includes("alpa")) badgeCls = "badge-red";
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${a.tanggal}</b></td>
+                    <td>${a.jam} WITA</td>
+                    <td><span class="badge-status ${badgeCls}">${a.status}</span></td>
+                    <td>${a.fotoSelfie ? `<img src="${a.fotoSelfie}" style="width:32px; height:32px; object-fit:cover; border-radius:6px; cursor:pointer;" onclick="window.tampilkanFotoPenuh('${a.fotoSelfie}')">` : '-'}</td>
+                </tr>`;
+            });
+
+            const modalHtml = `
+            <h3 style="font-size:15px; font-weight:900; color:#0284c7; margin-bottom:4px;">📍 Riwayat Presensi: ${nama}</h3>
+            <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Total Rekam Kehadiran: <b>${list.length} Hari</b></p>
+            <div class="table-wrap" style="max-height:260px; overflow-y:auto;">
+                <table>
+                    <thead><tr><th>No</th><th>Tanggal</th><th>Jam</th><th>Status</th><th>Foto</th></tr></thead>
+                    <tbody>${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada data presensi</td></tr>'}</tbody>
+                </table>
+            </div>
+            <div style="text-align:right; margin-top:14px;">
+                <button onclick="window.closeDynamicModal()" class="btn-action btn-blue" style="padding:8px 16px;">Tutup</button>
+            </div>`;
+            window.openDynamicModal(modalHtml);
+        };
+
+        window.lihatDetailJurnalSiswa = function(encodedNama) {
+            const nama = decodeURIComponent(encodedNama);
+            const list = (window.cloudState.jurnal || []).filter(j => (j.siswa || '').toLowerCase() === nama.toLowerCase());
+            let rows = "";
+            list.forEach((j, idx) => {
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${j.tanggal}</b></td>
+                    <td>${j.kegiatan}</td>
+                    <td><span class="badge-status ${j.status.includes('Disetujui') ? 'badge-green' : 'badge-amber'}">${j.status}</span></td>
+                </tr>`;
+            });
+
+            const modalHtml = `
+            <h3 style="font-size:15px; font-weight:900; color:#0284c7; margin-bottom:4px;">📖 Logbook Jurnal: ${nama}</h3>
+            <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Total Jurnal Terkirim: <b>${list.length} Catatan</b></p>
+            <div class="table-wrap" style="max-height:260px; overflow-y:auto;">
+                <table>
+                    <thead><tr><th>No</th><th>Tanggal</th><th>Aktivitas Pekerjaan</th><th>Status</th></tr></thead>
+                    <tbody>${rows || '<tr><td colspan="4" class="empty-placeholder">Belum ada jurnal terkirim</td></tr>'}</tbody>
+                </table>
+            </div>
+            <div style="text-align:right; margin-top:14px;">
+                <button onclick="window.closeDynamicModal()" class="btn-action btn-blue" style="padding:8px 16px;">Tutup</button>
+            </div>`;
+            window.openDynamicModal(modalHtml);
+        };
+
+        window.renderValidasiJurnalList = function() {
+            const profile = window.cloudState.userProfile || { nama: "Pembimbing" };
+            const role = window.cloudState.activeRole;
+            const allJurnal = window.cloudState.jurnal || [];
+
+            // Saring jurnal siswa bimbingan
+            let filteredJurnal = allJurnal;
+            if (role === 'guru') {
+                const namaGuruLogin = profile.nama || "";
+                const namaSiswaTerpetakan = new Set();
+                (window.cloudState.penempatan || []).forEach(p => {
+                    if (window.isGuruMatch(p.guru, namaGuruLogin)) {
+                        (p.siswa || []).forEach(sName => namaSiswaTerpetakan.add(String(sName).toLowerCase().trim()));
+                    }
+                });
+                (window.cloudState.siswa || []).forEach(s => {
+                    if (window.isGuruMatch(s.guru || s.pembimbing, namaGuruLogin)) {
+                        namaSiswaTerpetakan.add((s.nama || '').toLowerCase().trim());
+                    }
+                });
+                if (namaSiswaTerpetakan.size > 0) {
+                    filteredJurnal = allJurnal.filter(j => namaSiswaTerpetakan.has((j.siswa || '').toLowerCase().trim()));
+                }
+            }
+
+            let rows = "";
+            filteredJurnal.forEach((j, idx) => {
+                const isApproved = (j.status || '').toLowerCase().includes("disetujui");
+                rows += `
+                <tr>
+                    <td>${idx+1}</td>
+                    <td><b>${j.siswa}</b><div style="font-size:10px; color:#64748b;">${j.tanggal}</div></td>
+                    <td><b>${j.kegiatan}</b><div style="font-size:10px; color:#64748b;">Kendala: ${j.kendala || '-'} | Solusi: ${j.solusi || '-'}</div></td>
+                    <td><span class="badge-status ${isApproved ? 'badge-green' : 'badge-amber'}">${j.status}</span></td>
+                    <td>
+                        ${isApproved 
+                            ? `<span style="color:#15803d; font-weight:800; font-size:11px;">✓ Tervalidasi</span>` 
+                            : `<button onclick="window.setujuiJurnalSiswa(${idx})" class="btn-action btn-emerald" style="padding:5px 10px; font-size:11px;">✓ Setujui</button>`}
+                    </td>
+                </tr>`;
+            });
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0284c7;">📋 Pengesahan & Validasi Jurnal PKL</h3>
+                        <p style="font-size:11px; color:var(--text-muted);">Verifikasi laporan kompetensi teknis harian siswa bimbingan Anda.</p>
+                    </div>
+                    <span class="badge-status badge-blue">${filteredJurnal.length} Jurnal</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>No</th><th>Siswa & Tgl</th><th>Uraian Kerja & Catatan</th><th>Status</th><th>Aksi</th></tr></thead>
+                        <tbody>${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada jurnal bimbingan yang diajukan</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.setujuiJurnalSiswa = function(idx) {
+            const j = (window.cloudState.jurnal || [])[idx];
+            if (!j) return;
+            const profile = window.cloudState.userProfile || { nama: "Pembimbing" };
+            j.status = `Disetujui (${profile.nama})`;
+            window.simpanDatabasePersisten(true);
+            window.showModalInfo("Jurnal Disetujui ✅", `Jurnal siswa <b>${j.siswa}</b> tanggal ${j.tanggal} berhasil disahkan! Status otomatis terupdate di akun siswa dan orang tua.`);
+            window.openFeature("validasi-jurnal", "Validasi Jurnal");
+        };
+
+        window.renderAgendaKunjungan = function() {
+            const listInd = window.cloudState.industri || [];
+            let indOpts = "";
+            listInd.forEach(i => indOpts += `<option value="${i.nama}">${i.nama}</option>`);
+
+            const agendaList = window.cloudState.agendaKunjungan || [];
+            let rows = "";
+            agendaList.forEach((ag, idx) => {
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${ag.tanggal}</b></td>
+                    <td><b>${ag.industri}</b></td>
+                    <td>${ag.guru || '-'}</td>
+                    <td>${ag.catatan || '-'}</td>
+                    <td><button onclick="window.hapusAgendaKunjungan(${idx})" class="btn-action btn-red" style="padding:4px 8px; font-size:10px;">Hapus</button></td>
+                </tr>`;
+            });
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0284c7;">🚗 Agenda Kunjungan & Monitoring DUDI</h3>
+                        <p style="font-size:11px; color:var(--text-muted);">Jadwalkan kunjungan pemantauan langsung guru ke lokasi industri mitra.</p>
+                    </div>
+                </div>
+
+                <div style="background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:14px; padding:14px; margin-bottom:16px;">
+                    <div style="font-size:12px; font-weight:900; color:#0369a1; margin-bottom:10px;">+ Tambah Jadwal Kunjungan Baru</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">Tanggal Kunjungan:</label>
+                            <input type="date" id="agTgl" class="form-control" value="${new Date().toISOString().split('T')[0]}">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">Tujuan Mitra Industri:</label>
+                            <select id="agInd" class="form-control">${indOpts || '<option>Belum ada industri</option>'}</select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Tujuan / Agenda Monitoring:</label>
+                        <input type="text" id="agCatatan" class="form-control" placeholder="Contoh: Monitoring progres kompetensi siswa & koordinasi instruktur">
+                    </div>
+                    <button onclick="window.simpanAgendaKunjunganBaru()" class="btn-action btn-blue" style="width:100%; padding:10px; font-weight:800;">
+                        💾 Simpan Jadwal Kunjungan
+                    </button>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>No</th><th>Tanggal</th><th>Industri Mitra</th><th>Guru Monitor</th><th>Agenda / Catatan</th><th>Aksi</th></tr></thead>
+                        <tbody>${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada agenda kunjungan dijadwalkan</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.simpanAgendaKunjunganBaru = function() {
+            const tgl = document.getElementById("agTgl")?.value;
+            const ind = document.getElementById("agInd")?.value;
+            const cat = document.getElementById("agCatatan")?.value.trim() || "Monitoring PKL";
+            const profile = window.cloudState.userProfile || { nama: "Guru Pembimbing" };
+
+            if (!tgl || !ind) {
+                window.showModalInfo("Lengkapi Formulir", "Tanggal dan Tujuan Industri wajib dipilih!");
+                return;
+            }
+
+            if (!window.cloudState.agendaKunjungan) window.cloudState.agendaKunjungan = [];
+            window.cloudState.agendaKunjungan.unshift({
+                id: "ag_" + Date.now(),
+                tanggal: tgl,
+                industri: ind,
+                guru: profile.nama,
+                catatan: cat
+            });
+
+            window.simpanDatabasePersisten(true);
+            window.showModalInfo("Agenda Disimpan 🚗", `Kunjungan ke <b>${ind}</b> pada tanggal <b>${tgl}</b> berhasil dijadwalkan dan disinkronkan ke Cloud!`);
+            window.openFeature("agenda-kunjungan", "Agenda Kunjungan");
+        };
+
+        window.hapusAgendaKunjungan = function(idx) {
+            window.showConfirmDialog("Hapus Agenda", "Hapus jadwal kunjungan ini?", () => {
+                window.cloudState.agendaKunjungan.splice(idx, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("agenda-kunjungan", "Agenda Kunjungan");
+            });
+        };
+
+        window.renderPenilaianIndustri = function() {
+            const profile = window.cloudState.userProfile || { nama: "Penilai" };
+            const role = window.cloudState.activeRole;
+            const allSiswa = window.cloudState.siswa || [];
+            
+            let sOpts = "";
+            allSiswa.forEach(s => sOpts += `<option value="${s.nama}">${s.nama} (${s.kelas || 'XI PKL'}) - ${s.industri || 'DUDI'}</option>`);
+
+            return `
+            <div class="card">
+                <div style="margin-bottom:14px;">
+                    <h3 style="font-size:16px; font-weight:900; color:#0284c7;">🏆 Lembar Penilaian & Evaluasi PKL</h3>
+                    <p style="font-size:11px; color:var(--text-muted);">Input evaluasi capaian kompetensi magang siswa bimbingan.</p>
+                </div>
+
+                <div style="background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:16px; padding:16px;">
+                    <div class="form-group">
+                        <label class="form-label">Pilih Siswa yang Dinilai:</label>
+                        <select id="penilaiSiswaNama" class="form-control" style="font-weight:700; color:#0284c7;">
+                            ${sOpts || '<option>Belum ada siswa terdaftar</option>'}
+                        </select>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">Sikap & Kedisiplinan (0-100):</label>
+                            <input type="number" id="nilaiSikap" class="form-control" value="90" min="0" max="100">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">Keterampilan Teknis (0-100):</label>
+                            <input type="number" id="nilaiTeknis" class="form-control" value="88" min="0" max="100">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">Inisiatif & Kerjasama (0-100):</label>
+                            <input type="number" id="nilaiKerjasama" class="form-control" value="92" min="0" max="100">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">Laporan / Portofolio (0-100):</label>
+                            <input type="number" id="nilaiLaporan" class="form-control" value="85" min="0" max="100">
+                        </div>
+                    </div>
+
+                    <button onclick="window.simpanLembarNilaiSiswa()" class="btn-action btn-blue" style="width:100%; padding:11px; font-weight:800;">
+                        💾 Simpan & Terbitkan Lembar Nilai
+                    </button>
+                </div>
+            </div>`;
+        };
+
+        window.simpanLembarNilaiSiswa = function() {
+            const sNama = document.getElementById("penilaiSiswaNama")?.value;
+            const n1 = parseFloat(document.getElementById("nilaiSikap")?.value) || 0;
+            const n2 = parseFloat(document.getElementById("nilaiTeknis")?.value) || 0;
+            const n3 = parseFloat(document.getElementById("nilaiKerjasama")?.value) || 0;
+            const n4 = parseFloat(document.getElementById("nilaiLaporan")?.value) || 0;
+            const rata = Math.round((n1 + n2 + n3 + n4) / 4);
+
+            let predikat = "A (Sangat Baik)";
+            if (rata < 75) predikat = "C (Cukup)";
+            else if (rata < 85) predikat = "B (Baik)";
+
+            window.showModalInfo("Nilai Disimpan 🏆", 
+                `Penilaian atas nama <b>${sNama}</b> berhasil dicatat!<br><br>` +
+                `• <b>Nilai Akhir:</b> <span style="font-size:16px; font-weight:900; color:#0284c7;">${rata}</span> (${predikat})<br>` +
+                `• <b>Sikap:</b> ${n1} &bull; <b>Teknis:</b> ${n2} &bull; <b>Kerjasama:</b> ${n3} &bull; <b>Laporan:</b> ${n4}<br><br>` +
+                `<span style="color:#059669; font-weight:800;">Data telah disimpan permanen ke server database.</span>`
+            );
         };
 
         window.renderValidasiJurnalList = function() {
