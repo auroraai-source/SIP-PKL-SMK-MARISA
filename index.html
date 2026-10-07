@@ -982,19 +982,37 @@
             const allSiswa = window.cloudState.siswa || [];
             const allIndustri = window.cloudState.industri || [];
 
-            // Ikat penempatan ke data profil siswa
-            allPenempatan.forEach(p => {
-                const indObj = allIndustri.find(i => window.isIndustriMatch(i.nama, p.industri));
-                (p.siswa || []).forEach(sName => {
-                    const foundS = allSiswa.find(s => s.nama.toLowerCase().trim() === String(sName).toLowerCase().trim());
-                    if (foundS) {
-                        foundS.industri = p.industri;
-                        foundS.pembimbing = p.guru;
-                        if (indObj) {
-                            foundS.latIndustri = indObj.lat;
-                            foundS.lngIndustri = indObj.lng;
-                            foundS.radiusIndustri = indObj.radius;
+            // 1. Bersihkan alokasi penempatan lama jika industri di profil siswa sudah diganti
+            allSiswa.forEach(s => {
+                const targetInd = s.industri || s.tempatPkl;
+                if (targetInd) {
+                    allPenempatan.forEach(p => {
+                        if (Array.isArray(p.siswa)) {
+                            const hasStudent = p.siswa.some(sName => String(sName).toLowerCase().trim() === String(s.nama).toLowerCase().trim());
+                            // Jika siswa masih terdaftar di penempatan industri lama yang tidak cocok, cabut dari penempatan itu
+                            if (hasStudent && !window.isIndustriMatch(p.industri, targetInd)) {
+                                p.siswa = p.siswa.filter(sName => String(sName).toLowerCase().trim() !== String(s.nama).toLowerCase().trim());
+                            }
                         }
+                    });
+
+                    // Kaitkan koordinat GPS industri baru ke siswa
+                    const indObj = allIndustri.find(i => window.isIndustriMatch(i.nama, targetInd));
+                    if (indObj) {
+                        s.latIndustri = indObj.lat;
+                        s.lngIndustri = indObj.lng;
+                        s.radiusIndustri = indObj.radius;
+                    }
+                }
+            });
+
+            // 2. Kaitkan guru pembimbing jika ada alokasi penempatan yang cocok
+            allPenempatan.forEach(p => {
+                (p.siswa || []).forEach(sName => {
+                    const foundS = allSiswa.find(s => String(s.nama).toLowerCase().trim() === String(sName).toLowerCase().trim());
+                    if (foundS && window.isIndustriMatch(p.industri, foundS.industri || foundS.tempatPkl)) {
+                        foundS.pembimbing = p.guru;
+                        foundS.guru = p.guru;
                     }
                 });
             });
@@ -3048,10 +3066,11 @@
             const s = (window.cloudState.siswa || [])[idx];
             if (!s) return;
 
+            const curTempat = s.industri || s.tempatPkl || "";
             const listInd = window.cloudState.industri || [];
             let listDudiOptions = `<option value="">-- Tanpa / Pilih Tempat Industri PKL --</option>`;
             listInd.forEach(i => {
-                const sel = (s.industri === i.nama || s.tempatPkl === i.nama) ? "selected" : "";
+                const sel = (curTempat && window.isIndustriMatch(curTempat, i.nama)) ? "selected" : "";
                 listDudiOptions += `<option value="${i.nama}" ${sel}>🏢 ${i.nama}</option>`;
             });
 
@@ -3119,6 +3138,7 @@
             if (!s) return;
 
             const oldNama = s.nama;
+            const oldIndustri = s.industri || s.tempatPkl || "";
             const oldUname = s.username || s.nis || s.nisn;
 
             const nama = document.getElementById("editSiswaNama")?.value.trim();
@@ -3149,17 +3169,31 @@
             s.username = uname;
             s.pass = pwd;
 
-            // Update alokasi penempatan jika nama siswa berubah
-            if (oldNama !== nama) {
-                (window.cloudState.penempatan || []).forEach(p => {
-                    if (Array.isArray(p.siswa)) {
-                        const sIdx = p.siswa.findIndex(item => item.toLowerCase().trim() === oldNama.toLowerCase().trim());
-                        if (sIdx >= 0) p.siswa[sIdx] = nama;
-                    }
-                });
+            // Kaitkan koordinat GPS industri baru
+            const foundIndObj = (window.cloudState.industri || []).find(i => window.isIndustriMatch(i.nama, industri));
+            if (foundIndObj) {
+                s.latIndustri = foundIndObj.lat;
+                s.lngIndustri = foundIndObj.lng;
+                s.radiusIndustri = foundIndObj.radius;
             }
 
-            // Update user kredensial akun
+            // Selaraskan tabel alokasi penempatan
+            (window.cloudState.penempatan || []).forEach(p => {
+                if (Array.isArray(p.siswa)) {
+                    // Jika industri berubah, cabut siswa dari alokasi industri lama
+                    if (oldIndustri && !window.isIndustriMatch(p.industri, industri)) {
+                        p.siswa = p.siswa.filter(item => item.toLowerCase().trim() !== oldNama.toLowerCase().trim() && item.toLowerCase().trim() !== nama.toLowerCase().trim());
+                    } else if (window.isIndustriMatch(p.industri, industri)) {
+                        // Jika industri cocok dan nama siswa berubah, perbarui namanya
+                        const sIdx = p.siswa.findIndex(item => item.toLowerCase().trim() === oldNama.toLowerCase().trim());
+                        if (sIdx >= 0) {
+                            p.siswa[sIdx] = nama;
+                        }
+                    }
+                }
+            });
+
+            // Update kredensial akun siswa
             let uIdx = (window.cloudState.registeredUsers || []).findIndex(u => (u.username === oldUname || u.identitas === s.nis) && u.role === "siswa");
             const userObj = {
                 role: "siswa",
@@ -3167,7 +3201,8 @@
                 username: uname,
                 pass: pwd,
                 email: uname + "@smkn1marisa.sch.id",
-                identitas: nis
+                identitas: nis,
+                industri: industri
             };
 
             if (uIdx >= 0) {
@@ -3176,9 +3211,19 @@
                 window.cloudState.registeredUsers.unshift(userObj);
             }
 
+            // Perbarui sesi aktif jika siswa yang sedang login di perangkat ini diedit
+            if (window.cloudState.userProfile && (window.cloudState.userProfile.identitas === s.nis || window.cloudState.userProfile.nama === oldNama)) {
+                window.cloudState.userProfile.nama = nama;
+                window.cloudState.userProfile.industri = industri;
+                window.cloudState.userProfile.tempatPkl = industri;
+                try {
+                    localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(window.cloudState.userProfile));
+                } catch(e) {}
+            }
+
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
-            window.showModalInfo("Perubahan Tersimpan ✏️", `Data siswa <b>${nama}</b> berhasil diperbarui.`);
+            window.showModalInfo("Perubahan Tersimpan ✏️", `Data siswa <b>${nama}</b> berhasil diperbarui dengan tempat PKL: <b>${industri}</b>.`);
             window.openFeature("master-siswa", "Data Master Siswa");
         };
 
