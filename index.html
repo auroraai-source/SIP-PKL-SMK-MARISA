@@ -2761,16 +2761,29 @@
                 return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:6px;">📍 Jam Kerja & Radius Geofence GPS</h3><div class="empty-placeholder">Belum Ada Mitra Industri Terdaftar. Silakan tambahkan di menu Mitra Industri DUDI terlebih dahulu.<br><button onclick="window.openFeature('master-industri', 'Mitra Industri')" class="btn-action btn-blue" style="margin-top:12px;">+ Tambah Mitra Industri Sekarang</button></div></div>`;
             }
 
-            let selIdx = window.selectedGpsIndIdx || 0;
-            if (selIdx >= listInd.length) selIdx = 0;
-            const curInd = listInd[selIdx];
+            let selIdx = parseInt(window.selectedGpsIndIdx) || 0;
+            if (selIdx < 0 || selIdx >= listInd.length) selIdx = 0;
+            const curInd = listInd[selIdx] || {
+                nama: "Mitra Industri",
+                alamat: "Alamat belum diatur",
+                masuk: "08:00",
+                pulang: "16:00",
+                radius: 100,
+                lat: "0.45612",
+                lng: "121.94210"
+            };
 
             let indOptions = "";
             listInd.forEach((ind, i) => {
                 indOptions += `<option value="${i}" ${i === selIdx ? 'selected' : ''}>🏢 ${ind.nama} (${ind.alamat ? ind.alamat.substring(0,25)+'...' : 'Alamat tersimpan'})</option>`;
             });
 
-            const jamCfg = window.cloudState.jamConfig || DEFAULT_JAM_CONFIG;
+            const jamCfg = window.cloudState.jamConfig || (typeof DEFAULT_JAM_CONFIG !== 'undefined' ? DEFAULT_JAM_CONFIG : {
+                jamBukaDatang: "06:30",
+                batasTepatWaktu: "08:15",
+                batasMaksDatang: "15:00",
+                batasMaksPulang: "23:00"
+            });
 
             return `<div class="card">
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">📍 Pengaturan Jam Kerja & Radius Geofence GPS</h3>
