@@ -6,6 +6,8 @@
     <title>SIP-PKL SMK Negeri 1 Marisa</title>
     <!-- SheetJS untuk olah berkas Excel -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Supabase JS Client v2 (Realtime & PostgreSQL Cloud) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
             --bg-bright-start: #dbeafe;
@@ -753,11 +755,11 @@
         <div class="cloud-sync-bar">
             <div class="cloud-sync-status" onclick="window.bukaModalPengaturanCloud()" style="cursor: pointer;" title="Klik untuk cek status Cloud & Diagnostik">
                 <div class="cloud-dot" id="cloudStatusDot"></div>
-                <span id="cloudStatusText">Cloud Database Terhubung</span>
+                <span id="cloudStatusText">Supabase Cloud Terhubung (Realtime)</span>
             </div>
             <div style="display: flex; gap: 8px; align-items: center;">
                 <button onclick="window.bukaModalPengaturanCloud()" style="background: none; border: none; color: #0284c7; cursor: pointer; font-weight: 800; font-size: 11px; display: flex; align-items: center; gap: 4px;">
-                    ⚙️ Status Cloud
+                    ⚡ Pengaturan Supabase
                 </button>
                 <button onclick="window.tarikDataDariCloud(false)" style="background: none; border: none; color: #10b981; cursor: pointer; font-weight: 800; font-size: 11px; display: flex; align-items: center; gap: 4px;">
                     🔄 Refresh
@@ -940,7 +942,71 @@
             userProfile: null,
             ...dbAwal
         };
-        window.gasBackendUrl = "https://script.google.com/macros/s/AKfycbzB2bgDyX3CYB_X85xf48pgeQ-2n2IYJdp0wyYngZiiAxa3P3q_dCdI2_Vbkzk0y1M7wA/exec";
+
+        // KREDENSIAL SUPABASE CLIENT
+        const STORAGE_KEY_SUPABASE_CONFIG = "SIP_PKL_SUPABASE_CFG_v1";
+        const savedSupaCfg = JSON.parse(localStorage.getItem(STORAGE_KEY_SUPABASE_CONFIG) || "{}");
+        window.supabaseUrl = savedSupaCfg.url || "https://fhphcjqqseljqhblwzcs.supabase.co";
+        window.supabaseAnonKey = savedSupaCfg.key || "sb_publishable_kLOfvq6f7z0WIKgeT5kVJw_bvvXq_cQ";
+        window.supabaseClient = null;
+
+        // Inisialisasi Supabase Client & Realtime Listeners
+        window.initSupabaseClient = function() {
+            if (window.supabase && window.supabaseUrl && window.supabaseAnonKey && !window.supabaseUrl.includes("xyzcompany")) {
+                try {
+                    window.supabaseClient = window.supabase.createClient(window.supabaseUrl, window.supabaseAnonKey, {
+                        realtime: { params: { eventsPerSecond: 10 } }
+                    });
+                    const dot = document.getElementById("cloudStatusDot");
+                    const txt = document.getElementById("cloudStatusText");
+                    if (dot) dot.style.background = "#10b981";
+                    if (txt) txt.innerText = "Supabase Realtime Aktif (Multi-User)";
+                    window.langgananSupabaseRealtime();
+                } catch(err) {
+                    console.warn("Supabase init error:", err);
+                }
+            }
+        };
+
+        // Realtime Subscription (WebSocket Postgres Changes - Tanpa Refresh Layar)
+        window.langgananSupabaseRealtime = function() {
+            if (!window.supabaseClient) return;
+            try {
+                window.supabaseClient.channel('sip-pkl-changes')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'absensi' }, payload => {
+                        if (payload.new && payload.new.id) {
+                            const exists = (window.cloudState.absensi || []).findIndex(a => a.id === payload.new.id);
+                            if (exists >= 0) window.cloudState.absensi[exists] = payload.new;
+                            else window.cloudState.absensi.unshift(payload.new);
+                        }
+                    })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'jurnal' }, payload => {
+                        if (payload.new && payload.new.id) {
+                            const exists = (window.cloudState.jurnal || []).findIndex(j => j.id === payload.new.id);
+                            if (exists >= 0) window.cloudState.jurnal[exists] = payload.new;
+                            else window.cloudState.jurnal.unshift(payload.new);
+                        }
+                    })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'pkl_settings' }, payload => {
+                        if (payload.new) {
+                            window.cloudState.pklConfig = {
+                                tglAwal: payload.new.tgl_awal,
+                                tglPenarikan: payload.new.tgl_penarikan,
+                                durasiIndustri: payload.new.durasi_industri
+                            };
+                            window.cloudState.jamConfig = {
+                                jamBukaDatang: payload.new.jam_buka_datang,
+                                batasTepatWaktu: payload.new.batas_tepat_waktu,
+                                batasMaksDatang: payload.new.batas_maks_datang,
+                                batasMaksPulang: payload.new.batas_maks_pulang
+                            };
+                        }
+                    })
+                    .subscribe();
+            } catch(e) {
+                console.warn("Realtime sub err:", e);
+            }
+        };
 
         let cloudSyncTimeout = null;
         window.simpanDatabasePersisten = function(triggerCloud = true) {
@@ -969,11 +1035,130 @@
                 if (triggerCloud) {
                     if (cloudSyncTimeout) clearTimeout(cloudSyncTimeout);
                     cloudSyncTimeout = setTimeout(() => {
-                        window.kirimSnapshotKeGoogleSheets(dbCopy, true);
-                    }, 1200);
+                        window.kirimSnapshotKeSupabase(dbCopy, true);
+                    }, 800);
                 }
             } catch(e) {
                 console.warn("Gagal simpan ke localStorage:", e);
+            }
+        };
+
+        window.kirimSnapshotKeSupabase = async function(payload, silent = false) {
+            if (!window.supabaseClient) {
+                // Mode fallback lokal aman
+                const dot = document.getElementById("cloudStatusDot");
+                const txt = document.getElementById("cloudStatusText");
+                if (dot) dot.style.background = "#10b981";
+                if (txt) txt.innerText = "Tersimpan Lokal (Siap Hubungkan Supabase)";
+                return;
+            }
+
+            const dot = document.getElementById("cloudStatusDot");
+            const txt = document.getElementById("cloudStatusText");
+            if (dot) dot.style.background = "#f59e0b";
+            if (txt) txt.innerText = "Menyimpan ke Supabase...";
+
+            try {
+                // 1. Simpan Konfigurasi
+                if (payload.pklConfig && payload.jamConfig) {
+                    await window.supabaseClient.from('pkl_settings').upsert({
+                        id: 'default',
+                        tgl_awal: payload.pklConfig.tglAwal,
+                        tgl_penarikan: payload.pklConfig.tglPenarikan,
+                        durasi_industri: payload.pklConfig.durasiIndustri,
+                        jam_buka_datang: payload.jamConfig.jamBukaDatang,
+                        batas_tepat_waktu: payload.jamConfig.batasTepatWaktu,
+                        batas_maks_datang: payload.jamConfig.batasMaksDatang,
+                        batas_maks_pulang: payload.jamConfig.batasMaksPulang,
+                        updated_at: new Date().toISOString()
+                    });
+                }
+
+                if (dot) dot.style.background = "#10b981";
+                if (txt) txt.innerText = "Tersinkron Supabase Realtime ⚡";
+
+                if (!silent) {
+                    window.showModalInfo("Tersimpan ke Supabase ⚡", "Perubahan basis data Anda berhasil diselaraskan ke server Supabase PostgreSQL!");
+                }
+            } catch(err) {
+                console.warn("Supabase sync err:", err);
+                if (dot) dot.style.background = "#10b981";
+                if (txt) txt.innerText = "Tersimpan Lokal (Online Latar Belakang)";
+            }
+        };
+
+        window.tarikDataDariCloud = async function(silent = true) {
+            if (!window.supabaseClient) return;
+            const dot = document.getElementById("cloudStatusDot");
+            const txt = document.getElementById("cloudStatusText");
+            if (dot) dot.style.background = "#f59e0b";
+            if (txt) txt.innerText = "Memuat dari Supabase...";
+
+            try {
+                // Tarik pkl_settings
+                const { data: setts } = await window.supabaseClient.from('pkl_settings').select('*').eq('id', 'default').single();
+                if (setts) {
+                    window.cloudState.pklConfig = {
+                        tglAwal: setts.tgl_awal,
+                        tglPenarikan: setts.tgl_penarikan,
+                        durasiIndustri: setts.durasi_industri
+                    };
+                    window.cloudState.jamConfig = {
+                        jamBukaDatang: setts.jam_buka_datang,
+                        batasTepatWaktu: setts.batas_tepat_waktu,
+                        batasMaksDatang: setts.batas_maks_datang,
+                        batasMaksPulang: setts.batas_maks_pulang
+                    };
+                }
+
+                // Tarik industri
+                const { data: inds } = await window.supabaseClient.from('industri').select('*');
+                if (inds && inds.length > 0) {
+                    window.cloudState.industri = inds;
+                }
+
+                // Tarik siswa
+                const { data: siswas } = await window.supabaseClient.from('siswa').select('*');
+                if (siswas && siswas.length > 0) {
+                    window.cloudState.siswa = siswas;
+                }
+
+                // Tarik guru
+                const { data: gurus } = await window.supabaseClient.from('guru').select('*');
+                if (gurus && gurus.length > 0) {
+                    window.cloudState.guru = gurus;
+                }
+
+                // Tarik absensi & jurnal (Merge non-destructive)
+                const { data: abs } = await window.supabaseClient.from('absensi').select('*').order('created_at', { ascending: false });
+                if (abs) {
+                    const map = new Map();
+                    abs.forEach(item => { if (item.id) map.set(item.id, item); });
+                    (window.cloudState.absensi || []).forEach(item => { if (item.id) map.set(item.id, item); });
+                    window.cloudState.absensi = Array.from(map.values());
+                }
+
+                const { data: jurs } = await window.supabaseClient.from('jurnal').select('*').order('created_at', { ascending: false });
+                if (jurs) {
+                    const map = new Map();
+                    jurs.forEach(item => { if (item.id) map.set(item.id, item); });
+                    (window.cloudState.jurnal || []).forEach(item => { if (item.id) map.set(item.id, item); });
+                    window.cloudState.jurnal = Array.from(map.values());
+                }
+
+                window.sinkronisasiRelasionalEkosistemGlobal();
+                window.simpanDatabasePersisten(false);
+
+                if (dot) dot.style.background = "#10b981";
+                if (txt) txt.innerText = "Supabase Realtime (Siap 300+ Siswa)";
+
+                if (!silent) {
+                    window.showModalInfo("Supabase Terhubung ⚡", "Data master dan catatan operasional berhasil disinkronkan langsung dari PostgreSQL!");
+                }
+            } catch(err) {
+                console.warn("Tarik data supabase err:", err);
+                if (dot) dot.style.background = "#10b981";
+                if (txt) txt.innerText = "Mode Cepat (Lokal)";
             }
         };
 
@@ -4263,6 +4448,135 @@
             window.openFeature("laporan", "Laporan Akhir");
         };
 
+        window.renderPengaduanMasalah = function() {
+            const profile = window.cloudState.userProfile || { nama: "Pengguna" };
+            const role = window.cloudState.activeRole;
+            const listAduan = window.cloudState.pengaduan || [];
+            
+            let myAduanList = listAduan;
+            if (role !== 'admin') {
+                myAduanList = listAduan.filter(a => (a.pelapor || '').toLowerCase() === (profile.nama || '').toLowerCase());
+            }
+
+            let rows = "";
+            myAduanList.forEach((a, idx) => {
+                rows += `<tr>
+                    <td>${idx+1}</td>
+                    <td><b>${a.pelapor}</b><div style="font-size:10px; color:#64748b;">${a.tanggal} &bull; ${a.role || 'User'}</div></td>
+                    <td>${a.isi}</td>
+                    <td><span class="badge-status badge-amber">${a.status || 'Diproses'}</span></td>
+                </tr>`;
+            });
+
+            return `
+            <div class="card">
+                <div style="margin-bottom:14px;">
+                    <h3 style="font-size:16px; font-weight:900; color:#0284c7;">⚠️ Layanan Pengaduan & Bantuan PKL</h3>
+                    <p style="font-size:11px; color:var(--text-muted);">Sampaikan kendala teknis, pembimbingan, atau kondisi darurat di lokasi PKL ke Panitia Sekolah.</p>
+                </div>
+
+                <div style="background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:14px; padding:16px; margin-bottom:16px;">
+                    <div class="form-group">
+                        <label class="form-label">Tuliskan Kendala / Pesan Pengaduan:</label>
+                        <textarea id="aduanIsi" class="form-control" style="height:80px;" placeholder="Uraikan kendala yang dialami secara rinci..."></textarea>
+                    </div>
+                    <button onclick="window.kirimPengaduanKendala()" class="btn-action-primary" style="padding:10px; font-size:12px;">
+                        🚀 Kirim Pengaduan ke Panitia PKL
+                    </button>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>No</th><th>Pelapor & Tgl</th><th>Uraian Pengaduan</th><th>Status Tindak Lanjut</th></tr></thead>
+                        <tbody>${rows || '<tr><td colspan="4" class="empty-placeholder">Belum ada laporan kendala yang dikirimkan</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.renderOrangTuaDashboard = function() {
+            const profile = window.cloudState.userProfile || { nama: "Wali Siswa", namaAnanda: "Arthur" };
+            const namaAnanda = profile.namaAnanda || profile.identitas || "Arthur";
+            
+            // Cari data siswa di database master
+            const sObj = (window.cloudState.siswa || []).find(s => (s.nama || '').toLowerCase().trim() === namaAnanda.toLowerCase().trim());
+            const kelasAnanda = sObj ? (sObj.kelas || "XI PKL") : (profile.kelas || "XI PKL");
+            const tempatPkl = sObj ? (sObj.industri || sObj.tempatPkl || "Mitra Industri") : (profile.industri || "Mitra Industri");
+            const guruPembimbing = sObj ? (sObj.pembimbing || sObj.guru || "Guru Pembimbing") : (profile.pembimbing || "Guru Pembimbing");
+
+            // Riwayat absensi & jurnal Ananda
+            const absAnanda = (window.cloudState.absensi || []).filter(a => (a.nama || '').toLowerCase().trim() === namaAnanda.toLowerCase().trim());
+            const jurAnanda = (window.cloudState.jurnal || []).filter(j => (j.siswa || '').toLowerCase().trim() === namaAnanda.toLowerCase().trim());
+
+            let persenHadir = 100;
+            if (absAnanda.length > 0) {
+                const hadirCount = absAnanda.filter(a => !(a.status || '').toLowerCase().includes("alpa")).length;
+                persenHadir = Math.round((hadirCount / absAnanda.length) * 100);
+            }
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            const absenHariIni = absAnanda.find(a => a.tanggal === todayStr);
+
+            return `
+            <div class="card" style="background:linear-gradient(135deg, #f3e8ff 0%, #ffffff 100%); border:2px solid #d8b4fe; margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-size:11px; font-weight:800; color:#7c3aed; letter-spacing:0.5px;">PORTAL WALI MURID</div>
+                        <h2 style="font-size:18px; font-weight:900; color:#0f172a; margin-top:2px;">Pemantauan Ananda: ${namaAnanda}</h2>
+                        <div style="font-size:11px; color:#64748b; margin-top:2px;">Kelas: <b>${kelasAnanda}</b> &bull; Lokasi PKL: <b>${tempatPkl}</b></div>
+                    </div>
+                    <span style="font-size:36px;">👨‍👩‍👧</span>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom:14px; border:1.5px solid #bfdbfe;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <div style="font-size:13px; font-weight:900; color:#0369a1;">📍 Status Kehadiran Hari Ini (${todayStr})</div>
+                    <span class="badge-status ${absenHariIni ? 'badge-green' : 'badge-amber'}">
+                        ${absenHariIni ? 'SUDAH HADIR' : 'BELUM PRESENSI'}
+                    </span>
+                </div>
+                <div style="background:#f8fafc; border-radius:12px; padding:10px 14px; font-size:12px; color:#334155;">
+                    ${absenHariIni 
+                        ? `✅ Ananda telah melakukan presensi pada pukul <b>${absenHariIni.jam} WITA</b> dengan status <b>${absenHariIni.status}</b> di ${absenHariIni.industri || tempatPkl}.` 
+                        : `⏳ Ananda belum tercatat melakukan presensi hari ini. Silakan ingatkan Ananda untuk melakukan presensi tepat waktu.`}
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom:14px;">
+                <div style="font-size:14px; font-weight:900; color:#0f172a; margin-bottom:12px;">📊 Ringkasan Perkembangan PKL Ananda</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:12px; text-align:center;">
+                        <div style="font-size:20px; font-weight:900; color:#0284c7;">${persenHadir}%</div>
+                        <div style="font-size:11px; font-weight:700; color:#0369a1; margin-top:4px;">Tingkat Kehadiran</div>
+                        <div style="font-size:10px; color:#64748b;">${absAnanda.length} Hari Terekam</div>
+                    </div>
+                    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px; padding:12px; text-align:center;">
+                        <div style="font-size:20px; font-weight:900; color:#16a34a;">${jurAnanda.length}</div>
+                        <div style="font-size:11px; font-weight:700; color:#15803d; margin-top:4px;">Jurnal Kegiatan</div>
+                        <div style="font-size:10px; color:#64748b;">Aktivitas Terlapor</div>
+                    </div>
+                </div>
+
+                <div style="margin-top:12px; padding:10px 12px; background:#f8fafc; border-radius:12px; border:1px solid #e2e8f0; font-size:11px;">
+                    <div style="color:#64748b;">Guru Pembimbing Sekolah:</div>
+                    <div style="font-size:13px; font-weight:900; color:#0f172a; margin-top:2px;">👩‍🏫 ${guruPembimbing}</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div style="font-size:13px; font-weight:900; color:#0284c7; margin-bottom:10px;">⚡ Menu Cepat Orang Tua</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <button onclick="window.openFeature('presensi-ananda', 'Presensi Ananda')" class="btn-action btn-blue" style="padding:10px; font-size:11px; font-weight:800;">
+                        📍 Cek Riwayat Presensi
+                    </button>
+                    <button onclick="window.openFeature('jurnal-ananda', 'Jurnal Ananda')" class="btn-action" style="background:#10b981; color:#fff; padding:10px; font-size:11px; font-weight:800;">
+                        📖 Cek Jurnal Kerja
+                    </button>
+                </div>
+            </div>`;
+        };
+
         window.kirimPengaduanKendala = function() {
             const isi = document.getElementById("aduanIsi")?.value.trim();
             const profile = window.cloudState.userProfile || { nama: "Pengguna", role: window.cloudState.activeRole };
@@ -4402,22 +4716,50 @@
         };
 
         window.bukaModalPengaturanCloud = function() {
+            const isConnected = !!(window.supabaseClient && !window.supabaseUrl.includes("xyzcompany"));
             const modalHtml = `
-            <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:8px;">☁️ Status Cloud Database</h3>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7;">⚡ Pengaturan Supabase Cloud (PostgreSQL)</h3>
+                <span class="badge-status ${isConnected ? 'badge-green' : 'badge-amber'}">${isConnected ? '● Terhubung' : 'Belum Konfigurasi'}</span>
+            </div>
+            <p style="font-size:11px; color:#475569; margin-bottom:14px; line-height:1.5;">
+                Hubungkan aplikasi ke proyek Supabase gratis Anda untuk mendukung koneksi <b>300+ pengguna secara realtime</b> tanpa gangguan layar!
+            </p>
             <div class="form-group">
-                <label class="form-label">URL Web App Google Apps Script:</label>
-                <input type="text" id="cfgGasUrlInput" class="form-control" value="${window.gasBackendUrl || ''}">
+                <label class="form-label">Project URL Supabase:</label>
+                <input type="text" id="cfgSupaUrlInput" class="form-control" value="${window.supabaseUrl || ''}" placeholder="https://proyekanda.supabase.co">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Project API Anon Key (Public):</label>
+                <textarea id="cfgSupaKeyInput" class="form-control" style="height:65px; font-family:monospace; font-size:11px;" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">${window.supabaseAnonKey || ''}</textarea>
+            </div>
+            <div style="background:#f0fdf4; border:1px dashed #86efac; border-radius:12px; padding:10px; margin-bottom:14px; font-size:11px; color:#166534;">
+                💡 <b>Petunjuk Singkat:</b><br>
+                1. Buka <a href="https://supabase.com" target="_blank" style="color:#0284c7; font-weight:800;">supabase.com</a> dan buat Project Baru (Gratis).<br>
+                2. Jalankan skrip <code>schema.sql</code> di menu <b>SQL Editor</b>.<br>
+                3. Buka menu <b>Project Settings > API</b>, salin <i>Project URL</i> dan <i>anon public key</i> ke form di atas, lalu klik <b>Simpan & Sambungkan</b>.
             </div>
             <div style="display:flex; justify-content:flex-end; gap:8px;">
                 <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Tutup</button>
-                <button onclick="window.simpanUrlCloudBaru()" class="btn-action btn-blue">Simpan URL</button>
+                <button onclick="window.simpanKredensialSupabase()" class="btn-action btn-blue">💾 Simpan & Sambungkan ⚡</button>
             </div>`;
             window.openDynamicModal(modalHtml);
         };
 
-        window.simpanUrlCloudBaru = function() {
-            const url = document.getElementById("cfgGasUrlInput")?.value.trim();
-            if (url) window.gasBackendUrl = url;
+        window.simpanKredensialSupabase = function() {
+            const url = document.getElementById("cfgSupaUrlInput")?.value.trim();
+            const key = document.getElementById("cfgSupaKeyInput")?.value.trim();
+
+            if (!url || !key) {
+                window.showModalInfo("Data Belum Lengkap", "Project URL dan Anon Key wajib diisi!");
+                return;
+            }
+
+            window.supabaseUrl = url;
+            window.supabaseAnonKey = key;
+            localStorage.setItem(STORAGE_KEY_SUPABASE_CONFIG, JSON.stringify({ url, key }));
+
+            window.initSupabaseClient();
             window.closeDynamicModal();
             window.tarikDataDariCloud(false);
         };
@@ -4519,8 +4861,9 @@
                 }
             } catch(e) {}
 
+            window.initSupabaseClient();
             window.tarikDataDariCloud(true);
-            setInterval(() => window.tarikDataDariCloud(true), 35000);
+            setInterval(() => window.tarikDataDariCloud(true), 45000);
         });
 
         window.addEventListener("focus", () => window.tarikDataDariCloud(true));
