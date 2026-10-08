@@ -946,8 +946,8 @@
         // KREDENSIAL SUPABASE CLIENT
         const STORAGE_KEY_SUPABASE_CONFIG = "SIP_PKL_SUPABASE_CFG_v1";
         const savedSupaCfg = JSON.parse(localStorage.getItem(STORAGE_KEY_SUPABASE_CONFIG) || "{}");
-        window.supabaseUrl = savedSupaCfg.url || "https://fhphcjqqseljqhblwzcs.supabase.co";
-        window.supabaseAnonKey = savedSupaCfg.key || "sb_publishable_kLOfvq6f7z0WIKgeT5kVJw_bvvXq_cQ";
+        window.supabaseUrl = savedSupaCfg.url || "https://xyzcompany.supabase.co";
+        window.supabaseAnonKey = savedSupaCfg.key || "sb_publishable_kLOfvq6f7zOWIKgeT5kVJw_bvvXq_cQ";
         window.supabaseClient = null;
 
         // Inisialisasi Supabase Client & Realtime Listeners
@@ -4848,7 +4848,377 @@
         };
 
         window.bukaModalUploadExcel = function(kat) {
-            window.showModalInfo("Impor Excel", `Gunakan berkas Excel sesuai template resmi untuk mengimpor data ${kat}.`);
+            const modalHtml = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7;">📥 Impor Berkas Excel ${kat}</h3>
+                <span class="badge-status badge-blue">SheetJS XLSX</span>
+            </div>
+            <p style="font-size:11px; color:#475569; margin-bottom:14px; line-height:1.5;">
+                Silakan pilih berkas Excel (<code>.xlsx</code> / <code>.xls</code> / <code>.csv</code>) yang telah diisi sesuai dengan <b>Template Resmi</b> yang diunduh. Data baru dan akun login akan otomatis dibuat dan diselaraskan ke database.
+            </p>
+
+            <div style="background:#f8fafc; border:2px dashed #93c5fd; border-radius:14px; padding:18px; text-align:center; margin-bottom:14px;">
+                <div style="font-size:28px; margin-bottom:6px;">📊</div>
+                <label for="excelFileInputEl" style="cursor:pointer; display:inline-block; background:#0284c7; color:#fff; padding:8px 16px; border-radius:10px; font-size:12px; font-weight:800; margin-bottom:6px;">
+                    📂 Pilih Berkas Excel
+                </label>
+                <input type="file" id="excelFileInputEl" accept=".xlsx, .xls, .csv" style="display:none;" onchange="window.tinjauBerkasExcelDipilih(this, '${kat}')">
+                <div id="namaFileTerpilih" style="font-size:11px; color:#64748b;">Belum ada berkas dipilih</div>
+            </div>
+
+            <div id="previewHasilExcelWrap" style="display:none; margin-bottom:14px;">
+                <div style="font-size:12px; font-weight:800; color:#0369a1; margin-bottom:6px;" id="infoRingkasanExcel">-</div>
+                <div class="table-wrap" style="max-height:180px; overflow-y:auto; border:1px solid #bfdbfe;">
+                    <table id="tabelPreviewExcel">
+                        <thead><tr id="headerPreviewExcel"></tr></thead>
+                        <tbody id="bodyPreviewExcel"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                <button id="btnEksekusiImporExcel" onclick="window.eksekusiImporExcelData('${kat}')" class="btn-action btn-blue" style="opacity:0.5; pointer-events:none;">
+                    ⚡ Proses & Simpan ke Database
+                </button>
+            </div>`;
+
+            window.dataParsedExcelBaru = null;
+            window.openDynamicModal(modalHtml);
+        };
+
+        window.tinjauBerkasExcelDipilih = function(inputEl, kat) {
+            const file = inputEl.files[0];
+            const nameEl = document.getElementById("namaFileTerpilih");
+            const btnEl = document.getElementById("btnEksekusiImporExcel");
+            const previewWrap = document.getElementById("previewHasilExcelWrap");
+            const infoRingkasan = document.getElementById("infoRingkasanExcel");
+            const headerRow = document.getElementById("headerPreviewExcel");
+            const tbodyEl = document.getElementById("bodyPreviewExcel");
+
+            if (!file) return;
+            if (nameEl) nameEl.innerText = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const rowsJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+
+                    if (!rowsJson || rowsJson.length < 2) {
+                        window.showModalInfo("Berkas Kosong", "Berkas Excel tidak memiliki baris data setelah header.");
+                        return;
+                    }
+
+                    const rawHeaders = rowsJson[0].map(h => String(h).trim());
+                    const dataRows = rowsJson.slice(1).filter(r => r.some(cell => String(cell).trim() !== ""));
+
+                    if (dataRows.length === 0) {
+                        window.showModalInfo("Tidak Ada Data", "Tidak ditemukan baris data yang valid di dalam berkas Excel.");
+                        return;
+                    }
+
+                    window.dataParsedExcelBaru = {
+                        headers: rawHeaders,
+                        rows: dataRows
+                    };
+
+                    if (headerRow) {
+                        headerRow.innerHTML = rawHeaders.slice(0, 7).map(h => `<th>${h || '-'}</th>`).join("");
+                    }
+
+                    if (tbodyEl) {
+                        tbodyEl.innerHTML = dataRows.slice(0, 5).map(r => {
+                            return `<tr>${r.slice(0, 7).map(c => `<td>${c}</td>`).join("")}</tr>`;
+                        }).join("");
+                    }
+
+                    if (infoRingkasan) {
+                        infoRingkasan.innerText = `✅ Terbaca ${dataRows.length} baris data (Menampilkan sampel 5 baris pertama):`;
+                    }
+                    if (previewWrap) previewWrap.style.display = "block";
+                    if (btnEl) {
+                        btnEl.style.opacity = "1";
+                        btnEl.style.pointerEvents = "auto";
+                    }
+
+                } catch(err) {
+                    console.error("Gagal membaca berkas Excel:", err);
+                    window.showModalInfo("Gagal Membaca Excel", "Format berkas tidak sesuai atau rusak. Pastikan berkas berupa file Excel (.xlsx / .xls).");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        };
+
+        window.eksekusiImporExcelData = async function(kat) {
+            if (!window.dataParsedExcelBaru || !window.dataParsedExcelBaru.rows) {
+                window.showModalInfo("Pilih Berkas", "Silakan pilih berkas Excel terlebih dahulu.");
+                return;
+            }
+
+            const { headers, rows } = window.dataParsedExcelBaru;
+            let totalSukses = 0;
+            const normHeaders = headers.map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+            // Helper index finder
+            const findCol = (keywords) => {
+                for (let i = 0; i < normHeaders.length; i++) {
+                    if (keywords.some(k => normHeaders[i].includes(k))) return i;
+                }
+                return -1;
+            };
+
+            if (kat === 'Siswa') {
+                const colNama = findCol(['nama', 'siswa']);
+                const colNis = findCol(['nis', 'nisn', 'induk']);
+                const colJk = findCol(['jk', 'kelamin', 'gender']);
+                const colKelas = findCol(['kelas']);
+                const colJurusan = findCol(['jurusan', 'kompetensi']);
+                const colNoHp = findCol(['hp', 'wa', 'telepon', 'nohp']);
+                const colInd = findCol(['tempat', 'industri', 'dudi', 'pkl']);
+                const colUname = findCol(['user', 'username', 'login']);
+                const colPass = findCol(['pass', 'sandi', 'password']);
+
+                rows.forEach(r => {
+                    const nama = String(r[colNama >= 0 ? colNama : 1] || "").trim();
+                    const nis = String(r[colNis >= 0 ? colNis : 2] || "").trim();
+                    if (!nama && !nis) return;
+
+                    const jkRaw = String(r[colJk >= 0 ? colJk : 3] || "L").trim().toUpperCase();
+                    const jk = jkRaw.startsWith("P") ? "P" : "L";
+                    const kelas = String(r[colKelas >= 0 ? colKelas : 4] || "XI PKL").trim();
+                    const jurusan = String(r[colJurusan >= 0 ? colJurusan : 5] || "-").trim();
+                    const noHp = String(r[colNoHp >= 0 ? colNoHp : 6] || "-").trim();
+                    const tempatPkl = String(r[colInd >= 0 ? colInd : 7] || "Belum Ditentukan").trim();
+                    const uname = String(r[colUname >= 0 ? colUname : 8] || nis || nama.toLowerCase().replace(/[^a-z0-9]/g,'')).trim();
+                    const pass = String(r[colPass >= 0 ? colPass : 9] || "siswa123").trim();
+
+                    // Cek duplikasi berdasarkan NIS atau Username
+                    const idxExist = (window.cloudState.siswa || []).findIndex(s => s.nis === nis || (s.username && s.username === uname));
+                    const itemObj = {
+                        id: "s_" + (nis || Date.now() + Math.random().toString().slice(2,6)),
+                        nama: nama || "Siswa PKL",
+                        nis: nis || uname,
+                        nisn: nis || uname,
+                        jk: jk,
+                        kelas: kelas,
+                        jurusan: jurusan,
+                        noHp: noHp,
+                        industri: tempatPkl,
+                        tempatPkl: tempatPkl,
+                        username: uname,
+                        pass: pass,
+                        hadir: 100
+                    };
+
+                    if (idxExist >= 0) {
+                        window.cloudState.siswa[idxExist] = { ...window.cloudState.siswa[idxExist], ...itemObj };
+                    } else {
+                        window.cloudState.siswa.push(itemObj);
+                    }
+
+                    // Sinkronkan ke kredensial registeredUsers
+                    let uIdx = (window.cloudState.registeredUsers || []).findIndex(u => u.username === uname && u.role === 'siswa');
+                    const userObj = {
+                        id: itemObj.id,
+                        role: "siswa",
+                        nama: nama,
+                        username: uname,
+                        pass: pass,
+                        identitas: nis || uname,
+                        email: `${uname}@smkn1marisa.sch.id`,
+                        industri: tempatPkl
+                    };
+                    if (uIdx >= 0) window.cloudState.registeredUsers[uIdx] = userObj;
+                    else window.cloudState.registeredUsers.push(userObj);
+
+                    totalSukses++;
+                });
+
+                // Sinkronkan relasional global dan kirim ke Supabase jika aktif
+                window.sinkronisasiRelasionalEkosistemGlobal();
+                window.simpanDatabasePersisten(true);
+
+                if (window.supabaseClient) {
+                    try {
+                        const recordsToUpsert = window.cloudState.siswa.map(s => ({
+                            id: s.id || `s_${s.nis}`,
+                            nama: s.nama,
+                            nis: s.nis,
+                            nisn: s.nisn,
+                            jk: s.jk,
+                            kelas: s.kelas,
+                            jurusan: s.jurusan,
+                            no_hp: s.noHp,
+                            industri_nama: s.industri || s.tempatPkl,
+                            username: s.username,
+                            pass: s.pass
+                        }));
+                        await window.supabaseClient.from('siswa').upsert(recordsToUpsert, { onConflict: 'nis' });
+                    } catch(e) { console.warn("Supabase Siswa batch upsert err:", e); }
+                }
+
+                window.closeDynamicModal();
+                window.showModalInfo("Impor Siswa Berhasil 👨‍🎓", `Sebanyak <b>${totalSukses} data siswa</b> dan akun login berhasil diimpor ke dalam database!`);
+                window.openFeature("master-siswa", "Data Master Siswa");
+
+            } else if (kat === 'Guru') {
+                const colNama = findCol(['nama', 'guru']);
+                const colNip = findCol(['nip', 'identitas']);
+                const colMapel = findCol(['mapel', 'bidang', 'pelajaran']);
+                const colUname = findCol(['user', 'username', 'login']);
+                const colPass = findCol(['pass', 'sandi', 'password']);
+
+                rows.forEach(r => {
+                    const nama = String(r[colNama >= 0 ? colNama : 1] || "").trim();
+                    const nip = String(r[colNip >= 0 ? colNip : 2] || "").trim();
+                    if (!nama && !nip) return;
+
+                    const mapel = String(r[colMapel >= 0 ? colMapel : 3] || "Guru Pembimbing").trim();
+                    const uname = String(r[colUname >= 0 ? colUname : 4] || nip || nama.toLowerCase().replace(/[^a-z0-9]/g,'')).trim();
+                    const pass = String(r[colPass >= 0 ? colPass : 5] || "guru123").trim();
+
+                    const idxExist = (window.cloudState.guru || []).findIndex(g => g.nip === nip || (g.username && g.username === uname));
+                    const itemObj = {
+                        id: "g_" + (nip || Date.now() + Math.random().toString().slice(2,6)),
+                        nama: nama || "Guru Pembimbing",
+                        nip: nip || uname,
+                        mapel: mapel,
+                        username: uname,
+                        pass: pass
+                    };
+
+                    if (idxExist >= 0) {
+                        window.cloudState.guru[idxExist] = { ...window.cloudState.guru[idxExist], ...itemObj };
+                    } else {
+                        window.cloudState.guru.push(itemObj);
+                    }
+
+                    // Sinkronkan ke registeredUsers
+                    let uIdx = (window.cloudState.registeredUsers || []).findIndex(u => u.username === uname && u.role === 'guru');
+                    const userObj = {
+                        id: itemObj.id,
+                        role: "guru",
+                        nama: nama,
+                        username: uname,
+                        pass: pass,
+                        identitas: nip || uname,
+                        email: `${uname}@smkn1marisa.sch.id`
+                    };
+                    if (uIdx >= 0) window.cloudState.registeredUsers[uIdx] = userObj;
+                    else window.cloudState.registeredUsers.push(userObj);
+
+                    totalSukses++;
+                });
+
+                window.sinkronisasiRelasionalEkosistemGlobal();
+                window.simpanDatabasePersisten(true);
+
+                if (window.supabaseClient) {
+                    try {
+                        const recordsToUpsert = window.cloudState.guru.map(g => ({
+                            id: g.id || `g_${g.nip}`,
+                            nama: g.nama,
+                            nip: g.nip,
+                            mapel: g.mapel,
+                            username: g.username,
+                            pass: g.pass
+                        }));
+                        await window.supabaseClient.from('guru').upsert(recordsToUpsert, { onConflict: 'nip' });
+                    } catch(e) { console.warn("Supabase Guru batch upsert err:", e); }
+                }
+
+                window.closeDynamicModal();
+                window.showModalInfo("Impor Guru Berhasil 👩‍🏫", `Sebanyak <b>${totalSukses} data guru pembimbing</b> dan akun login berhasil diimpor!`);
+                window.openFeature("master-guru", "Data Master Guru");
+
+            } else if (kat === 'Industri') {
+                const colNama = findCol(['nama', 'perusahaan', 'industri', 'dudi']);
+                const colAlamat = findCol(['alamat', 'lokasi']);
+                const colPimpinan = findCol(['pimpinan', 'hrd', 'direktur', 'kontak']);
+                const colNoWa = findCol(['wa', 'hp', 'nomor', 'telepon']);
+                const colUname = findCol(['user', 'username', 'login']);
+                const colPass = findCol(['pass', 'sandi', 'password']);
+
+                rows.forEach(r => {
+                    const nama = String(r[colNama >= 0 ? colNama : 1] || "").trim();
+                    if (!nama) return;
+
+                    const alamat = String(r[colAlamat >= 0 ? colAlamat : 2] || "-").trim();
+                    const pimpinan = String(r[colPimpinan >= 0 ? colPimpinan : 3] || "HRD").trim();
+                    const noWa = String(r[colNoWa >= 0 ? colNoWa : 4] || "-").trim();
+                    const uname = String(r[colUname >= 0 ? colUname : 5] || nama.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,14)).trim();
+                    const pass = String(r[colPass >= 0 ? colPass : 6] || "dudi123").trim();
+
+                    const idxExist = (window.cloudState.industri || []).findIndex(i => window.isIndustriMatch(i.nama, nama) || i.username === uname);
+                    const itemObj = {
+                        id: "ind_" + (idxExist >= 0 ? window.cloudState.industri[idxExist].id : (Date.now() + Math.random().toString().slice(2,6))),
+                        nama: nama,
+                        alamat: alamat,
+                        pimpinan: pimpinan,
+                        noWa: noWa,
+                        radius: 100,
+                        masuk: "08:00",
+                        pulang: "16:00",
+                        lat: "0.45612",
+                        lng: "121.94210",
+                        username: uname,
+                        pass: pass
+                    };
+
+                    if (idxExist >= 0) {
+                        window.cloudState.industri[idxExist] = { ...window.cloudState.industri[idxExist], ...itemObj };
+                    } else {
+                        window.cloudState.industri.push(itemObj);
+                    }
+
+                    // Sinkronkan ke registeredUsers
+                    let uIdx = (window.cloudState.registeredUsers || []).findIndex(u => u.username === uname && u.role === 'industri');
+                    const userObj = {
+                        id: itemObj.id,
+                        role: "industri",
+                        nama: nama,
+                        username: uname,
+                        pass: pass,
+                        identitas: uname,
+                        email: `${uname}@smkn1marisa.sch.id`
+                    };
+                    if (uIdx >= 0) window.cloudState.registeredUsers[uIdx] = userObj;
+                    else window.cloudState.registeredUsers.push(userObj);
+
+                    totalSukses++;
+                });
+
+                window.sinkronisasiRelasionalEkosistemGlobal();
+                window.simpanDatabasePersisten(true);
+
+                if (window.supabaseClient) {
+                    try {
+                        const recordsToUpsert = window.cloudState.industri.map(ind => ({
+                            id: ind.id,
+                            nama: ind.nama,
+                            alamat: ind.alamat,
+                            pimpinan: ind.pimpinan,
+                            no_wa: ind.noWa,
+                            radius: ind.radius || 100,
+                            lat: window.parseCoordinateFloat(ind.lat, 0.45612),
+                            lng: window.parseCoordinateFloat(ind.lng, 121.94210),
+                            masuk: ind.masuk || "08:00",
+                            pulang: ind.pulang || "16:00",
+                            username: ind.username,
+                            pass: ind.pass
+                        }));
+                        await window.supabaseClient.from('industri').upsert(recordsToUpsert, { onConflict: 'nama' });
+                    } catch(e) { console.warn("Supabase Industri batch upsert err:", e); }
+                }
+
+                window.closeDynamicModal();
+                window.showModalInfo("Impor Industri Berhasil 🏭", `Sebanyak <b>${totalSukses} mitra industri</b> dan akun login berhasil diimpor!`);
+                window.openFeature("master-industri", "Mitra Industri DUDI");
+            }
         };
 
         // Siklus Hidup Aplikasi & Pemulihan Sesi
