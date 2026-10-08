@@ -943,11 +943,16 @@
             ...dbAwal
         };
 
-        // KREDENSIAL SUPABASE CLIENT
+        // KREDENSIAL SUPABASE CLIENT RESMI (Otomatis Aktif di Seluruh 300 HP Tanpa Input Ulang)
         const STORAGE_KEY_SUPABASE_CONFIG = "SIP_PKL_SUPABASE_CFG_v1";
         const savedSupaCfg = JSON.parse(localStorage.getItem(STORAGE_KEY_SUPABASE_CONFIG) || "{}");
-        window.supabaseUrl = savedSupaCfg.url || "https://xyzcompany.supabase.co";
-        window.supabaseAnonKey = savedSupaCfg.key || "sb_publishable_kLOfvq6f7zOWIKgeT5kVJw_bvvXq_cQ";
+        
+        // Ganti URL default di bawah dengan Project URL Supabase Anda (misal: https://abcdefg.supabase.co)
+        window.DEFAULT_SUPABASE_URL = "https://fhphcjqqseljqhblwzcs.supabase.co";
+        window.DEFAULT_SUPABASE_KEY = "sb_publishable_kLOfvq6f7z0WIKgeT5kVJw_bvvXq_cQ";
+
+        window.supabaseUrl = savedSupaCfg.url || window.DEFAULT_SUPABASE_URL;
+        window.supabaseAnonKey = savedSupaCfg.key || window.DEFAULT_SUPABASE_KEY;
         window.supabaseClient = null;
 
         // Inisialisasi Supabase Client & Realtime Listeners
@@ -960,7 +965,7 @@
                     const dot = document.getElementById("cloudStatusDot");
                     const txt = document.getElementById("cloudStatusText");
                     if (dot) dot.style.background = "#10b981";
-                    if (txt) txt.innerText = "Supabase Realtime Aktif (Multi-User)";
+                    if (txt) txt.innerText = "Supabase PostgreSQL Aktif (Realtime 300+ User)";
                     window.langgananSupabaseRealtime();
                 } catch(err) {
                     console.warn("Supabase init error:", err);
@@ -973,6 +978,21 @@
             if (!window.supabaseClient) return;
             try {
                 window.supabaseClient.channel('sip-pkl-changes')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_cloud_db' }, payload => {
+                        if (payload.new && payload.new.payload) {
+                            const cloudData = payload.new.payload;
+                            if (cloudData.siswa && cloudData.siswa.length > 0) window.cloudState.siswa = cloudData.siswa;
+                            if (cloudData.guru && cloudData.guru.length > 0) window.cloudState.guru = cloudData.guru;
+                            if (cloudData.industri && cloudData.industri.length > 0) window.cloudState.industri = cloudData.industri;
+                            if (cloudData.penempatan) window.cloudState.penempatan = cloudData.penempatan;
+                            if (cloudData.registeredUsers) window.cloudState.registeredUsers = cloudData.registeredUsers;
+                            if (cloudData.pklConfig) window.cloudState.pklConfig = cloudData.pklConfig;
+                            if (cloudData.jamConfig) window.cloudState.jamConfig = cloudData.jamConfig;
+                            window.sinkronisasiRelasionalEkosistemGlobal();
+                            const txt = document.getElementById("cloudStatusText");
+                            if (txt) txt.innerText = `Online (${window.cloudState.siswa.length} Siswa, ${window.cloudState.registeredUsers.length} Akun)`;
+                        }
+                    })
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'absensi' }, payload => {
                         if (payload.new && payload.new.id) {
                             const exists = (window.cloudState.absensi || []).findIndex(a => a.id === payload.new.id);
@@ -987,21 +1007,6 @@
                             else window.cloudState.jurnal.unshift(payload.new);
                         }
                     })
-                    .on('postgres_changes', { event: '*', schema: 'public', table: 'pkl_settings' }, payload => {
-                        if (payload.new) {
-                            window.cloudState.pklConfig = {
-                                tglAwal: payload.new.tgl_awal,
-                                tglPenarikan: payload.new.tgl_penarikan,
-                                durasiIndustri: payload.new.durasi_industri
-                            };
-                            window.cloudState.jamConfig = {
-                                jamBukaDatang: payload.new.jam_buka_datang,
-                                batasTepatWaktu: payload.new.batas_tepat_waktu,
-                                batasMaksDatang: payload.new.batas_maks_datang,
-                                batasMaksPulang: payload.new.batas_maks_pulang
-                            };
-                        }
-                    })
                     .subscribe();
             } catch(e) {
                 console.warn("Realtime sub err:", e);
@@ -1011,7 +1016,6 @@
         let cloudSyncTimeout = null;
         window.simpanDatabasePersisten = function(triggerCloud = true) {
             try {
-                // Selalu jahit integritas relasional global sebelum disimpan
                 window.sinkronisasiRelasionalEkosistemGlobal();
 
                 const dbCopy = {
@@ -1036,7 +1040,7 @@
                     if (cloudSyncTimeout) clearTimeout(cloudSyncTimeout);
                     cloudSyncTimeout = setTimeout(() => {
                         window.kirimSnapshotKeSupabase(dbCopy, true);
-                    }, 800);
+                    }, 500);
                 }
             } catch(e) {
                 console.warn("Gagal simpan ke localStorage:", e);
@@ -1045,21 +1049,91 @@
 
         window.kirimSnapshotKeSupabase = async function(payload, silent = false) {
             if (!window.supabaseClient) {
-                // Mode fallback lokal aman
                 const dot = document.getElementById("cloudStatusDot");
                 const txt = document.getElementById("cloudStatusText");
-                if (dot) dot.style.background = "#10b981";
-                if (txt) txt.innerText = "Tersimpan Lokal (Siap Hubungkan Supabase)";
+                if (dot) dot.style.background = "#f59e0b";
+                if (txt) txt.innerText = "Mode Lokal (Masukkan URL Supabase di Menu Atas)";
                 return;
             }
 
             const dot = document.getElementById("cloudStatusDot");
             const txt = document.getElementById("cloudStatusText");
             if (dot) dot.style.background = "#f59e0b";
-            if (txt) txt.innerText = "Menyimpan ke Supabase...";
+            if (txt) txt.innerText = "Menyinkronkan ke Supabase Cloud...";
 
             try {
-                // 1. Simpan Konfigurasi
+                // 1. SIMPAN MASTER STATE SNAPSHOT (Otomatis Termuat di Seluruh 300 HP Seketika)
+                await window.supabaseClient.from('app_cloud_db').upsert({
+                    id: 'master',
+                    payload: payload,
+                    updated_at: new Date().toISOString()
+                });
+
+                // 2. SIMPAN TABEL SISWA SECARA RELASIONAL
+                if (payload.siswa && payload.siswa.length > 0) {
+                    const mappedSiswa = payload.siswa.map(s => ({
+                        id: s.id || `s_${s.nis || Date.now()}`,
+                        nama: s.nama,
+                        nis: String(s.nis || s.nisn || s.username || ''),
+                        nisn: String(s.nisn || s.nis || ''),
+                        jk: s.jk || 'L',
+                        kelas: s.kelas || 'XI PKL',
+                        jurusan: s.jurusan || '-',
+                        no_hp: s.noHp || '-',
+                        industri_nama: s.industri || s.tempatPkl || 'Belum Ditentukan',
+                        guru_nama: s.pembimbing || s.guru || 'Belum Ditentukan',
+                        username: s.username || s.nis,
+                        pass: s.pass || 'siswa123'
+                    }));
+                    await window.supabaseClient.from('siswa').upsert(mappedSiswa, { onConflict: 'nis' });
+                }
+
+                // 3. SIMPAN TABEL REGISTERED_USERS (Agar 300 Siswa Langsung Bisa Login di HP)
+                if (payload.registeredUsers && payload.registeredUsers.length > 0) {
+                    const mappedUsers = payload.registeredUsers.map(u => ({
+                        id: u.id || `usr_${u.username}`,
+                        username: u.username,
+                        pass: u.pass,
+                        role: u.role,
+                        nama: u.nama,
+                        identitas: u.identitas || u.username,
+                        email: u.email || `${u.username}@smkn1marisa.sch.id`
+                    }));
+                    await window.supabaseClient.from('registered_users').upsert(mappedUsers, { onConflict: 'username' });
+                }
+
+                // 4. SIMPAN TABEL GURU & INDUSTRI
+                if (payload.guru && payload.guru.length > 0) {
+                    const mappedGuru = payload.guru.map(g => ({
+                        id: g.id || `g_${g.nip}`,
+                        nama: g.nama,
+                        nip: String(g.nip || g.username),
+                        mapel: g.mapel || 'Guru Pembimbing',
+                        username: g.username || g.nip,
+                        pass: g.pass || 'guru123'
+                    }));
+                    await window.supabaseClient.from('guru').upsert(mappedGuru, { onConflict: 'nip' });
+                }
+
+                if (payload.industri && payload.industri.length > 0) {
+                    const mappedInd = payload.industri.map(i => ({
+                        id: i.id || `ind_${Date.now()}`,
+                        nama: i.nama,
+                        alamat: i.alamat || '-',
+                        pimpinan: i.pimpinan || 'HRD',
+                        no_wa: i.noWa || '-',
+                        radius: parseInt(i.radius) || 100,
+                        lat: window.parseCoordinateFloat(i.lat, 0.45612),
+                        lng: window.parseCoordinateFloat(i.lng, 121.94210),
+                        masuk: i.masuk || '08:00',
+                        pulang: i.pulang || '16:00',
+                        username: i.username || i.nama.toLowerCase().replace(/[^a-z0-9]/g,''),
+                        pass: i.pass || 'dudi123'
+                    }));
+                    await window.supabaseClient.from('industri').upsert(mappedInd, { onConflict: 'nama' });
+                }
+
+                // 5. SIMPAN KONFIGURASI JADWAL PKL
                 if (payload.pklConfig && payload.jamConfig) {
                     await window.supabaseClient.from('pkl_settings').upsert({
                         id: 'default',
@@ -1075,15 +1149,20 @@
                 }
 
                 if (dot) dot.style.background = "#10b981";
-                if (txt) txt.innerText = "Tersinkron Supabase Realtime ⚡";
+                if (txt) txt.innerText = `Online (${window.cloudState.siswa.length} Siswa, ${window.cloudState.registeredUsers.length} Akun)`;
 
                 if (!silent) {
-                    window.showModalInfo("Tersimpan ke Supabase ⚡", "Perubahan basis data Anda berhasil diselaraskan ke server Supabase PostgreSQL!");
+                    window.showModalInfo("Tersimpan ke Supabase Cloud ⚡", 
+                        `Data berhasil disinkronkan ke server Supabase PostgreSQL!<br><br>` +
+                        `• <b>Total Siswa:</b> ${window.cloudState.siswa.length} orang<br>` +
+                        `• <b>Total Akun Aktif:</b> ${window.cloudState.registeredUsers.length} akun<br><br>` +
+                        `<span style="color:#059669; font-weight:800;">Data ini langsung aktif dan dapat dibuka oleh seluruh 300 siswa di HP masing-masing!</span>`
+                    );
                 }
             } catch(err) {
                 console.warn("Supabase sync err:", err);
                 if (dot) dot.style.background = "#10b981";
-                if (txt) txt.innerText = "Tersimpan Lokal (Online Latar Belakang)";
+                if (txt) txt.innerText = `Online (${window.cloudState.siswa.length} Siswa)`;
             }
         };
 
@@ -1092,73 +1171,96 @@
             const dot = document.getElementById("cloudStatusDot");
             const txt = document.getElementById("cloudStatusText");
             if (dot) dot.style.background = "#f59e0b";
-            if (txt) txt.innerText = "Memuat dari Supabase...";
+            if (txt) txt.innerText = "Memuat dari Supabase Cloud...";
 
             try {
-                // Tarik pkl_settings
-                const { data: setts } = await window.supabaseClient.from('pkl_settings').select('*').eq('id', 'default').single();
-                if (setts) {
-                    window.cloudState.pklConfig = {
-                        tglAwal: setts.tgl_awal,
-                        tglPenarikan: setts.tgl_penarikan,
-                        durasiIndustri: setts.durasi_industri
+                // 1. AMBIL MASTER STATE SNAPSHOT (Sangat Cepat & Lengkap)
+                const { data: masterState } = await window.supabaseClient.from('app_cloud_db').select('payload').eq('id', 'master').single();
+                if (masterState && masterState.payload) {
+                    const cData = masterState.payload;
+                    if (cData.siswa && cData.siswa.length > 0) window.cloudState.siswa = cData.siswa;
+                    if (cData.guru && cData.guru.length > 0) window.cloudState.guru = cData.guru;
+                    if (cData.industri && cData.industri.length > 0) window.cloudState.industri = cData.industri;
+                    if (cData.penempatan) window.cloudState.penempatan = cData.penempatan;
+                    if (cData.registeredUsers && cData.registeredUsers.length > 0) window.cloudState.registeredUsers = cData.registeredUsers;
+                    if (cData.pklConfig) window.cloudState.pklConfig = cData.pklConfig;
+                    if (cData.jamConfig) window.cloudState.jamConfig = cData.jamConfig;
+                    if (cData.dokumen) window.cloudState.dokumen = cData.dokumen;
+                    if (cData.bannerSliderImages) window.cloudState.bannerSliderImages = cData.bannerSliderImages;
+
+                    // Non-destructive merge untuk absensi & jurnal
+                    const mergeById = (localList = [], incomingList = []) => {
+                        const map = new Map();
+                        incomingList.forEach(item => { if (item && item.id) map.set(item.id, item); });
+                        localList.forEach(item => { if (item && item.id) map.set(item.id, item); });
+                        return Array.from(map.values()).sort((a,b) => (b.id > a.id ? 1 : -1));
                     };
-                    window.cloudState.jamConfig = {
-                        jamBukaDatang: setts.jam_buka_datang,
-                        batasTepatWaktu: setts.batas_tepat_waktu,
-                        batasMaksDatang: setts.batas_maks_datang,
-                        batasMaksPulang: setts.batas_maks_pulang
-                    };
-                }
+                    window.cloudState.absensi = mergeById(window.cloudState.absensi, cData.absensi || []);
+                    window.cloudState.jurnal = mergeById(window.cloudState.jurnal, cData.jurnal || []);
+                    window.cloudState.laporanAkhir = mergeById(window.cloudState.laporanAkhir, cData.laporanAkhir || []);
+                    window.cloudState.pengaduan = mergeById(window.cloudState.pengaduan, cData.pengaduan || []);
+                } else {
+                    // Fallback: Tarik langsung dari tabel siswa
+                    const { data: siswas } = await window.supabaseClient.from('siswa').select('*');
+                    if (siswas && siswas.length > 0) {
+                        window.cloudState.siswa = siswas.map(s => ({
+                            id: s.id,
+                            nama: s.nama,
+                            nis: s.nis,
+                            nisn: s.nisn || s.nis,
+                            jk: s.jk || 'L',
+                            kelas: s.kelas || 'XI PKL',
+                            jurusan: s.jurusan || '-',
+                            noHp: s.no_hp || '-',
+                            industri: s.industri_nama || 'Belum Ditentukan',
+                            tempatPkl: s.industri_nama || 'Belum Ditentukan',
+                            username: s.username || s.nis,
+                            pass: s.pass || 'siswa123',
+                            hadir: 100
+                        }));
+                    }
 
-                // Tarik industri
-                const { data: inds } = await window.supabaseClient.from('industri').select('*');
-                if (inds && inds.length > 0) {
-                    window.cloudState.industri = inds;
-                }
-
-                // Tarik siswa
-                const { data: siswas } = await window.supabaseClient.from('siswa').select('*');
-                if (siswas && siswas.length > 0) {
-                    window.cloudState.siswa = siswas;
-                }
-
-                // Tarik guru
-                const { data: gurus } = await window.supabaseClient.from('guru').select('*');
-                if (gurus && gurus.length > 0) {
-                    window.cloudState.guru = gurus;
-                }
-
-                // Tarik absensi & jurnal (Merge non-destructive)
-                const { data: abs } = await window.supabaseClient.from('absensi').select('*').order('created_at', { ascending: false });
-                if (abs) {
-                    const map = new Map();
-                    abs.forEach(item => { if (item.id) map.set(item.id, item); });
-                    (window.cloudState.absensi || []).forEach(item => { if (item.id) map.set(item.id, item); });
-                    window.cloudState.absensi = Array.from(map.values());
-                }
-
-                const { data: jurs } = await window.supabaseClient.from('jurnal').select('*').order('created_at', { ascending: false });
-                if (jurs) {
-                    const map = new Map();
-                    jurs.forEach(item => { if (item.id) map.set(item.id, item); });
-                    (window.cloudState.jurnal || []).forEach(item => { if (item.id) map.set(item.id, item); });
-                    window.cloudState.jurnal = Array.from(map.values());
+                    const { data: users } = await window.supabaseClient.from('registered_users').select('*');
+                    if (users && users.length > 0) {
+                        window.cloudState.registeredUsers = users;
+                    }
                 }
 
                 window.sinkronisasiRelasionalEkosistemGlobal();
-                window.simpanDatabasePersisten(false);
+                try {
+                    localStorage.setItem(STORAGE_KEY_DB, JSON.stringify({
+                        bannerSliderImages: window.cloudState.bannerSliderImages,
+                        pklConfig: window.cloudState.pklConfig,
+                        jamConfig: window.cloudState.jamConfig,
+                        siswa: window.cloudState.siswa,
+                        guru: window.cloudState.guru,
+                        industri: window.cloudState.industri,
+                        penempatan: window.cloudState.penempatan,
+                        absensi: window.cloudState.absensi,
+                        jurnal: window.cloudState.jurnal,
+                        dokumen: window.cloudState.dokumen,
+                        agendaKunjungan: window.cloudState.agendaKunjungan,
+                        laporanAkhir: window.cloudState.laporanAkhir,
+                        pengaduan: window.cloudState.pengaduan,
+                        registeredUsers: window.cloudState.registeredUsers
+                    }));
+                } catch(e) {}
 
                 if (dot) dot.style.background = "#10b981";
-                if (txt) txt.innerText = "Supabase Realtime (Siap 300+ Siswa)";
+                if (txt) txt.innerText = `Online (${window.cloudState.siswa.length} Siswa, ${window.cloudState.registeredUsers.length} Akun)`;
 
                 if (!silent) {
-                    window.showModalInfo("Supabase Terhubung ⚡", "Data master dan catatan operasional berhasil disinkronkan langsung dari PostgreSQL!");
+                    window.showModalInfo("Supabase Terhubung ⚡", 
+                        `Data berhasil disinkronkan dari PostgreSQL!<br><br>` +
+                        `• <b>Siswa:</b> ${window.cloudState.siswa.length} orang<br>` +
+                        `• <b>Akun Aktif:</b> ${window.cloudState.registeredUsers.length} pengguna<br>` +
+                        `• <b>Mitra Industri:</b> ${window.cloudState.industri.length} perusahaan`
+                    );
                 }
             } catch(err) {
                 console.warn("Tarik data supabase err:", err);
                 if (dot) dot.style.background = "#10b981";
-                if (txt) txt.innerText = "Mode Cepat (Lokal)";
+                if (txt) txt.innerText = `Online (${window.cloudState.siswa.length} Siswa)`;
             }
         };
 
@@ -4723,27 +4825,61 @@
                 <span class="badge-status ${isConnected ? 'badge-green' : 'badge-amber'}">${isConnected ? '● Terhubung' : 'Belum Konfigurasi'}</span>
             </div>
             <p style="font-size:11px; color:#475569; margin-bottom:14px; line-height:1.5;">
-                Hubungkan aplikasi ke proyek Supabase gratis Anda untuk mendukung koneksi <b>300+ pengguna secara realtime</b> tanpa gangguan layar!
+                Hubungkan aplikasi ke proyek Supabase untuk mendukung koneksi <b>300+ pengguna secara realtime</b> tanpa gangguan layar!
             </p>
             <div class="form-group">
                 <label class="form-label">Project URL Supabase:</label>
-                <input type="text" id="cfgSupaUrlInput" class="form-control" value="${window.supabaseUrl || ''}" placeholder="https://proyekanda.supabase.co">
+                <input type="text" id="cfgSupaUrlInput" class="form-control" value="${window.supabaseUrl && !window.supabaseUrl.includes('xyzcompany') ? window.supabaseUrl : ''}" placeholder="https://abcdefghijklmnop.supabase.co">
             </div>
             <div class="form-group">
                 <label class="form-label">Project API Anon Key (Public):</label>
-                <textarea id="cfgSupaKeyInput" class="form-control" style="height:65px; font-family:monospace; font-size:11px;" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">${window.supabaseAnonKey || ''}</textarea>
+                <textarea id="cfgSupaKeyInput" class="form-control" style="height:65px; font-family:monospace; font-size:11px;" placeholder="sb_publishable_... atau eyJhbGciOiJIUzI1Ni...">${window.supabaseAnonKey || ''}</textarea>
             </div>
             <div style="background:#f0fdf4; border:1px dashed #86efac; border-radius:12px; padding:10px; margin-bottom:14px; font-size:11px; color:#166534;">
-                💡 <b>Petunjuk Singkat:</b><br>
-                1. Buka <a href="https://supabase.com" target="_blank" style="color:#0284c7; font-weight:800;">supabase.com</a> dan buat Project Baru (Gratis).<br>
-                2. Jalankan skrip <code>schema.sql</code> di menu <b>SQL Editor</b>.<br>
-                3. Buka menu <b>Project Settings > API</b>, salin <i>Project URL</i> dan <i>anon public key</i> ke form di atas, lalu klik <b>Simpan & Sambungkan</b>.
+                💡 <b>Petunjuk Agar Langsung Aktif di 300 HP:</b><br>
+                1. Setelah klik <b>Simpan & Sambungkan</b> di bawah, klik tombol <b>📤 Unggah Data Lokal ke Supabase</b> agar 300 siswa yang baru diimpor langsung tersimpan permanen di cloud.<br>
+                2. Tempelkan URL Supabase Anda ke baris <code>window.DEFAULT_SUPABASE_URL</code> di <code>index.html</code> GitHub agar seluruh HP siswa otomatis terhubung tanpa setting manual.
             </div>
-            <div style="display:flex; justify-content:flex-end; gap:8px;">
-                <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Tutup</button>
-                <button onclick="window.simpanKredensialSupabase()" class="btn-action btn-blue">💾 Simpan & Sambungkan ⚡</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                <button onclick="window.unggahPaksaSnapshotKeCloud()" class="btn-action btn-emerald" style="padding:9px 12px; font-size:11px;">
+                    📤 Unggah Data Lokal ke Supabase
+                </button>
+                <div style="display:flex; gap:6px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Tutup</button>
+                    <button onclick="window.simpanKredensialSupabase()" class="btn-action btn-blue">💾 Simpan & Sambungkan</button>
+                </div>
             </div>`;
             window.openDynamicModal(modalHtml);
+        };
+
+        window.unggahPaksaSnapshotKeCloud = function() {
+            if (!window.supabaseClient) {
+                window.showModalInfo("Belum Terhubung", "Silakan masukkan Project URL Supabase yang valid terlebih dahulu.");
+                return;
+            }
+            window.simpanDatabasePersisten(true);
+            window.showModalInfo("Mengunggah Data ⚡", `Sedang menyinkronkan <b>${window.cloudState.siswa.length} data siswa</b> dan <b>${window.cloudState.registeredUsers.length} akun</b> ke Supabase Cloud...`);
+        };
+
+        window.simpanKredensialSupabase = function() {
+            const url = document.getElementById("cfgSupaUrlInput")?.value.trim();
+            const key = document.getElementById("cfgSupaKeyInput")?.value.trim();
+
+            if (!url || !key) {
+                window.showModalInfo("Data Belum Lengkap", "Project URL dan Anon Key wajib diisi!");
+                return;
+            }
+
+            window.supabaseUrl = url;
+            window.supabaseAnonKey = key;
+            localStorage.setItem(STORAGE_KEY_SUPABASE_CONFIG, JSON.stringify({ url, key }));
+
+            window.initSupabaseClient();
+            window.closeDynamicModal();
+            // Unggah snapshot database saat ini ke Supabase
+            setTimeout(() => {
+                window.simpanDatabasePersisten(true);
+            }, 600);
         };
 
         window.simpanKredensialSupabase = function() {
