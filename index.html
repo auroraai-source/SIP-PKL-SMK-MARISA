@@ -537,10 +537,10 @@
         .btn-red { background: #ef4444; color: #fff; }
 
         .cloud-sync-bar {
+            display: none !important;
             background: #f0f9ff;
             border-bottom: 1px solid #bae6fd;
             padding: 8px 16px;
-            display: flex;
             justify-content: space-between;
             align-items: center;
             font-size: 11px;
@@ -751,8 +751,8 @@
             </div>
         </header>
 
-        <!-- Indikator Cloud Database -->
-        <div class="cloud-sync-bar">
+        <!-- Indikator Cloud Database (Bekerja Senyap di Latar Belakang) -->
+        <div class="cloud-sync-bar" style="display: none !important;">
             <div class="cloud-sync-status" onclick="window.bukaModalPengaturanCloud()" style="cursor: pointer;" title="Klik untuk cek status Cloud & Diagnostik">
                 <div class="cloud-dot" id="cloudStatusDot"></div>
                 <span id="cloudStatusText">Supabase Cloud Terhubung (Realtime)</span>
@@ -4192,6 +4192,18 @@
 
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h3 style="font-size: 16px; font-weight: 900; color: #0284c7;">⚡ Koneksi Basis Data Cloud Supabase</h3>
+                    <button onclick="window.bukaModalPengaturanCloud()" class="btn-action btn-blue" style="font-size: 11px; padding: 6px 12px;">
+                        ⚙️ Buka Pengaturan Supabase
+                    </button>
+                </div>
+                <p style="font-size: 11px; color: #64748b; line-height: 1.5;">
+                    Basis data PostgreSQL berjalan di latar belakang secara otomatis untuk menyinkronkan 300+ akun pengguna, riwayat presensi, dan log jurnal secara realtime.
+                </p>
+            </div>
+
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                     <h3 style="font-size: 16px; font-weight: 900; color: #0284c7;">🖼️ Banner Berjalan (Slider)</h3>
                     <button onclick="window.bukaModalTambahBanner()" class="btn-action btn-emerald">+ Upload Banner</button>
                 </div>
@@ -4366,11 +4378,71 @@
         };
 
         window.renderRekapAbsensiGlobal = function() {
+            window.selectedBatchItems.absensi.clear();
+            const totalAbsen = (window.cloudState.absensi || []).length;
             let rows = "";
+
             (window.cloudState.absensi || []).forEach((a, idx) => {
-                rows += `<tr><td>${idx+1}</td><td><b>${a.nama}</b></td><td>${a.industri || '-'}</td><td>${a.tanggal}</td><td>${a.jam} WITA</td><td><span class="badge-status badge-green">${a.status}</span></td></tr>`;
+                rows += `<tr>
+                    <td style="text-align:center;">
+                        <input type="checkbox" class="cb-item-absensi" value="${idx}" onchange="window.toggleItemBatch('absensi', ${idx}, this.checked)" style="width:16px; height:16px; cursor:pointer;">
+                    </td>
+                    <td>${idx+1}</td>
+                    <td><b>${a.nama}</b></td>
+                    <td>${a.industri || '-'}</td>
+                    <td>${a.tanggal}</td>
+                    <td>${a.jam} WITA</td>
+                    <td><span class="badge-status badge-green">${a.status}</span></td>
+                    <td>
+                        <button onclick="window.hapusSatuPresensi(${idx})" class="btn-action btn-red" style="padding:4px 8px; font-size:10px;">Hapus</button>
+                    </td>
+                </tr>`;
             });
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">📊 Rekapitulasi Presensi Global</h3><div class="table-wrap"><table><thead><tr><th>No</th><th>Nama</th><th>Industri</th><th>Tanggal</th><th>Jam</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada riwayat kehadiran tercatat</td></tr>'}</tbody></table></div></div>`;
+
+            return `<div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0284c7;">📊 Rekapitulasi Presensi Global</h3>
+                        <p style="font-size:11px; color:var(--text-muted);">Total Kehadiran Terekam: <b>${totalAbsen} Catatan</b></p>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <button id="btnHapusMassal_absensi" onclick="window.eksekusiHapusMassal('absensi')" class="btn-action btn-red" style="display:none; padding:6px 12px; font-weight:900;">
+                            🗑️ Hapus Terpilih (<span id="countSelected_absensi">0</span>)
+                        </button>
+                        ${totalAbsen > 0 ? `
+                        <button onclick="window.kosongkanSemuaData('absensi', 'Riwayat Presensi')" class="btn-action" style="background:#7f1d1d; color:#ffffff; padding:6px 10px; font-size:11px; font-weight:800;">
+                            ⚠️ Kosongkan Semua Presensi
+                        </button>` : ''}
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px; text-align:center;">
+                                    <input type="checkbox" id="cbAll_absensi" onchange="window.toggleSelectAllBatch('absensi', this.checked)" style="width:16px; height:16px; cursor:pointer;">
+                                </th>
+                                <th>No</th>
+                                <th>Nama</th>
+                                <th>Industri</th>
+                                <th>Tanggal</th>
+                                <th>Jam</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows || '<tr><td colspan="8" class="empty-placeholder">Belum ada riwayat kehadiran tercatat</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.hapusSatuPresensi = function(idx) {
+            window.showConfirmDialog("Hapus Presensi", "Hapus rekaman presensi ini secara permanen?", () => {
+                window.cloudState.absensi.splice(idx, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("rekap-absensi", "Rekap Presensi");
+            });
         };
 
         window.renderManajemenDokumen = function() {
@@ -5358,7 +5430,7 @@
         };
 
         // Siklus Hidup Aplikasi & Pemulihan Sesi
-        window.addEventListener("DOMContentLoaded", () => {
+        window.addEventListener("DOMContentLoaded", async () => {
             try {
                 const savedSession = localStorage.getItem(STORAGE_KEY_SESSION);
                 if (savedSession) {
@@ -5367,9 +5439,14 @@
                 }
             } catch(e) {}
 
+            // Inisialisasi Supabase Client resmi
             window.initSupabaseClient();
-            window.tarikDataDariCloud(true);
-            setInterval(() => window.tarikDataDariCloud(true), 45000);
+
+            // Tarik data langsung dari Supabase Cloud (Menjamin seluruh HP sinkron seketika)
+            await window.tarikDataDariCloud(true);
+
+            // Interval sinkronisasi background berkala
+            setInterval(() => window.tarikDataDariCloud(true), 30000);
         });
 
         window.addEventListener("focus", () => window.tarikDataDariCloud(true));
