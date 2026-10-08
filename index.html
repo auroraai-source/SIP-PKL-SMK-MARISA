@@ -752,7 +752,7 @@
         </header>
 
         <!-- Indikator Cloud Database -->
-        <div class="cloud-sync-bar">
+        <div class="cloud-sync-bar" style="display: none;">
             <div class="cloud-sync-status" onclick="window.bukaModalPengaturanCloud()" style="cursor: pointer;" title="Klik untuk cek status Cloud & Diagnostik">
                 <div class="cloud-dot" id="cloudStatusDot"></div>
                 <span id="cloudStatusText">Cloud Database Terhubung</span>
@@ -1165,6 +1165,42 @@
             if (dot) dot.style.background = "#10b981";
             if (txt) txt.innerText = "Mode Cepat (Lokal)";
         }
+    };
+
+    // FITUR REALTIME MENDENGARKAN PERUBAHAN DARI ADMIN/PENGGUNA LAIN
+    window.aktifkanSinkronisasiRealtime = function() {
+        if (!SUPABASE_URL || SUPABASE_URL.includes("YOUR_PROJECT_ID")) return;
+        
+        window.supabaseClient
+            .channel('sinkronisasi-global')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, payload => {
+                console.log('✅ Pembaruan data realtime diterima dari server!', payload);
+                if (payload.new && payload.new.payload) {
+                    const cloudData = payload.new.payload;
+                    window.cloudState.bannerSliderImages = cloudData.bannerSliderImages || window.cloudState.bannerSliderImages;
+                    window.cloudState.pklConfig = cloudData.pklConfig || window.cloudState.pklConfig;
+                    window.cloudState.jamConfig = cloudData.jamConfig || window.cloudState.jamConfig;
+                    window.cloudState.siswa = cloudData.siswa || [];
+                    window.cloudState.guru = cloudData.guru || [];
+                    window.cloudState.industri = cloudData.industri || [];
+                    window.cloudState.penempatan = cloudData.penempatan || [];
+                    window.cloudState.absensi = cloudData.absensi || [];
+                    window.cloudState.jurnal = cloudData.jurnal || [];
+                    window.cloudState.agendaKunjungan = cloudData.agendaKunjungan || [];
+                    window.cloudState.laporanAkhir = cloudData.laporanAkhir || [];
+                    window.cloudState.pengaduan = cloudData.pengaduan || [];
+                    window.cloudState.registeredUsers = cloudData.registeredUsers || [];
+
+                    window.sinkronisasiRelasionalEkosistemGlobal();
+                    try { localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cloudData)); } catch(e) {}
+
+                    // Auto-refresh tampilan di layar pengguna saat admin mengubah data
+                    if (window.cloudState.currentFeature) {
+                        window.openFeature(window.cloudState.currentFeature);
+                    }
+                }
+            })
+            .subscribe();
     };
 
     const roleDefaults = {
@@ -4227,6 +4263,7 @@
             } catch(e) {}
 
             window.tarikDataDariCloud(true);
+            window.aktifkanSinkronisasiRealtime(); // Menyalakan jembatan WebSocket Supabase
             setInterval(() => window.tarikDataDariCloud(true), 35000);
         });
 
