@@ -843,40 +843,78 @@
 
     <script>
         (function() {
+            // Tangkap dan redam error keamanan WebSocket sandbox di Canvas
             window.addEventListener('error', function(event) {
-                if (event && event.message && event.message.includes('WebSocket')) {
+                if (event && (
+                    (event.message && (event.message.includes('WebSocket') || event.message.includes('Canvas') || event.message.includes('SecurityError'))) ||
+                    (event.error && String(event.error).includes('SecurityError'))
+                )) {
                     event.preventDefault();
                     return true;
                 }
-            });
+            }, true);
+
             window.addEventListener('unhandledrejection', function(event) {
-                if (event && event.reason && String(event.reason).includes('WebSocket')) {
+                if (event && event.reason && (
+                    String(event.reason).includes('WebSocket') ||
+                    String(event.reason).includes('Canvas') ||
+                    String(event.reason).includes('SecurityError')
+                )) {
                     event.preventDefault();
                 }
             });
 
-            if (typeof window !== 'undefined' && window.WebSocket) {
+            // Deteksi apakah sedang berjalan di dalam iframe/sandbox Canvas
+            const isCanvasOrIframe = (function() {
+                try {
+                    if (window.self !== window.top) return true;
+                    if (typeof location !== 'undefined' && (
+                        location.hostname.includes('canvas') ||
+                        location.hostname.includes('usercontent') ||
+                        location.hostname.includes('google')
+                    )) return true;
+                } catch(e) {
+                    return true;
+                }
+                return false;
+            })();
+
+            // Mock WebSocket yang aman dan tidak memicu SecurityError di Canvas
+            function MockWebSocket(url, protocols) {
+                this.url = url;
+                this.protocols = protocols;
+                this.readyState = 3; // CLOSED
+                this.onopen = null;
+                this.onclose = null;
+                this.onerror = null;
+                this.onmessage = null;
+                setTimeout(() => {
+                    if (typeof this.onclose === 'function') {
+                        this.onclose({ code: 1000, reason: "Canvas sandbox active - fallback HTTP sync", wasClean: true });
+                    }
+                }, 50);
+            }
+            MockWebSocket.prototype.send = function() {};
+            MockWebSocket.prototype.close = function() { this.readyState = 3; };
+            MockWebSocket.prototype.addEventListener = function() {};
+            MockWebSocket.prototype.removeEventListener = function() {};
+            MockWebSocket.CONNECTING = 0;
+            MockWebSocket.OPEN = 1;
+            MockWebSocket.CLOSING = 2;
+            MockWebSocket.CLOSED = 3;
+
+            window.MockWebSocket = MockWebSocket;
+            window.isCanvasSandbox = isCanvasOrIframe;
+
+            if (isCanvasOrIframe || typeof window.WebSocket === 'undefined') {
+                window.WebSocket = MockWebSocket;
+            } else {
                 const NativeWebSocket = window.WebSocket;
                 window.WebSocket = function(url, protocols) {
                     try {
                         return new NativeWebSocket(url, protocols);
                     } catch (err) {
-                        const dummySocket = {
-                            readyState: 3,
-                            close: function() {},
-                            send: function() {},
-                            addEventListener: function() {},
-                            removeEventListener: function() {},
-                            onopen: null,
-                            onclose: null,
-                            onerror: null,
-                            onmessage: null
-                        };
-                        setTimeout(() => {
-                            if (typeof dummySocket.onerror === 'function') dummySocket.onerror(new Error("WebSocket sandbox bypassed"));
-                            if (typeof dummySocket.onclose === 'function') dummySocket.onclose({ code: 1006, reason: "Fallback HTTP active", wasClean: false });
-                        }, 0);
-                        return dummySocket;
+                        return new MockWebSocket(url, protocols);
                     }
                 };
                 window.WebSocket.prototype = NativeWebSocket.prototype;
@@ -1022,7 +1060,13 @@
             if (typeof supabase !== 'undefined') {
                 try {
                     const creds = window.getSupabaseCredentials();
-                    window.supabaseClient = supabase.createClient(creds.url, creds.key);
+                    const clientOpts = {
+                        auth: { persistSession: false }
+                    };
+                    if (window.isCanvasSandbox && window.MockWebSocket) {
+                        clientOpts.realtime = { transport: window.MockWebSocket };
+                    }
+                    window.supabaseClient = supabase.createClient(creds.url, creds.key, clientOpts);
                     window.isCloudConnected = true;
                 } catch(err) {
                     window.isCloudConnected = false;
@@ -1118,6 +1162,12 @@
         window.aktifkanSinkronisasiRealtime = function() {
             if (!window.supabaseClient) return;
             window.mulaiFallbackHttpPolling();
+
+            // Di dalam sandbox Canvas, hindari membuka koneksi WebSocket agar tidak memicu SecurityError.
+            // Sinkronisasi data antar PC dan HP tetap berjalan penuh melalui HTTP Polling (REST API).
+            if (window.isCanvasSandbox) {
+                return;
+            }
 
             try {
                 window.supabaseClient
@@ -1341,91 +1391,63 @@
             window.closeDrawerSidebar();
             window.kembaliKeGerbangEkosistem();
         };
+        window.currentBannerIndex = 0;
+        window.bannerSlideInterval = null;
 
-        window.toggleDrawerSidebar = function() {
-            document.getElementById("appSidebar")?.classList.toggle("open");
-            document.getElementById("sidebarBackdrop")?.classList.toggle("active");
+        window.mulaiAutoSlideBanner = function() {
+            if (window.bannerSlideInterval) {
+                clearInterval(window.bannerSlideInterval);
+            }
+            window.bannerSlideInterval = setInterval(() => {
+                const slides = document.querySelectorAll('.banner-slide');
+                const dots = document.querySelectorAll('.banner-dot');
+                if (!slides || slides.length <= 1) return;
+
+                slides[window.currentBannerIndex]?.classList.remove('active');
+                dots[window.currentBannerIndex]?.classList.remove('active');
+
+                window.currentBannerIndex = (window.currentBannerIndex + 1) % slides.length;
+
+                slides[window.currentBannerIndex]?.classList.add('active');
+                dots[window.currentBannerIndex]?.classList.add('active');
+            }, 4500);
         };
 
-        window.closeDrawerSidebar = function() {
-            document.getElementById("appSidebar")?.classList.remove("open");
-            document.getElementById("sidebarBackdrop")?.classList.remove("active");
-        };
+        window.keSlideBanner = function(targetIdx) {
+            const slides = document.querySelectorAll('.banner-slide');
+            const dots = document.querySelectorAll('.banner-dot');
+            if (!slides || slides.length === 0) return;
 
-        window.renderSidebar = function() {
-            const role = window.cloudState.activeRole;
-            const menus = roleMenus[role] || [];
-            const container = document.getElementById("sidebarNavContainer");
-            if (!container) return;
+            slides[window.currentBannerIndex]?.classList.remove('active');
+            dots[window.currentBannerIndex]?.classList.remove('active');
 
-            let html = "";
-            menus.forEach(m => {
-                const active = m.id === window.cloudState.currentFeature ? "active" : "";
-                html += `<div class="sidebar-nav-item ${active}" onclick="window.openFeature('${m.id}', '${m.label}')">
-                    <span style="font-size: 16px;">${m.icon}</span>
-                    <span>${m.label.replace(/^[^\s]+\s/, '')}</span>
-                </div>`;
-            });
-            container.innerHTML = html;
-        };
+            window.currentBannerIndex = targetIdx % slides.length;
 
-        window.openFeature = function(featureId, title, isSilentRefresh = false) {
-            window.cloudState.currentFeature = featureId;
-            window.renderSidebar();
-
-            if (!isSilentRefresh) {
-                window.closeDrawerSidebar();
-            }
-
-            const container = document.getElementById("mainFeatureContainer");
-            const mobileBack = document.getElementById("mobileBackButtonWrap");
-            if (mobileBack) mobileBack.style.display = (featureId === 'dashboard') ? "none" : "block";
-            if (!container) return;
-
-            const role = window.cloudState.activeRole;
-
-            if (featureId === "dashboard") {
-                if (role === 'siswa') container.innerHTML = window.renderSiswaOfficialDashboard();
-                else if (role === 'guru') container.innerHTML = window.renderGuruOfficialDashboard();
-                else if (role === 'industri') container.innerHTML = window.renderIndustriOfficialDashboard();
-                else if (role === 'orangtua') container.innerHTML = window.renderOrangTuaDashboard();
-                else container.innerHTML = window.renderAdminDashboard();
-                return;
-            }
-
-            switch(featureId) {
-                case "kelola-akun": container.innerHTML = window.renderKelolaAkunPengguna(); break;
-                case "master-siswa": container.innerHTML = window.renderMasterSiswaTable(); break;
-                case "master-guru": container.innerHTML = window.renderMasterGuruTable(); break;
-                case "master-industri": container.innerHTML = window.renderMasterIndustriTable(); break;
-                case "penempatan": container.innerHTML = window.renderPenempatanGuru(); break;
-                case "rekap-absensi": container.innerHTML = window.renderRekapAbsensiGlobal(); break;
-                case "jam-geofence": container.innerHTML = window.renderJamGeofenceGPS(); break;
-                case "dokumen": container.innerHTML = window.renderManajemenDokumen(); break;
-                case "laporan": container.innerHTML = window.renderLaporanAkhir(); break;
-                case "aduan": container.innerHTML = window.renderPengaduanMasalah(); break;
-                case "database-cloud": container.innerHTML = window.renderDatabaseCloud(); break;
-                case "banner-jadwal": container.innerHTML = window.renderBannerJadwalPKL(); break;
-                
-                case "presensi": container.innerHTML = window.renderPresensiGPS(); break;
-                case "jurnal": container.innerHTML = window.renderJurnalKegiatan(); break;
-                case "siswa-bimbingan":
-                case "siswa-magang": container.innerHTML = window.renderSiswaBimbinganList(); break;
-                case "validasi-jurnal": container.innerHTML = window.renderValidasiJurnalList(); break;
-                case "agenda-kunjungan": container.innerHTML = window.renderAgendaKunjungan(); break;
-                case "penilaian":
-                case "penilaian-industri": container.innerHTML = window.renderPenilaianIndustri(); break;
-                case "presensi-ananda": container.innerHTML = window.renderPresensiAnandaOnly(); break;
-                case "jurnal-ananda": container.innerHTML = window.renderJurnalAnandaOnly(); break;
-                default: container.innerHTML = window.renderAdminDashboard();
-            }
+            slides[window.currentBannerIndex]?.classList.add('active');
+            dots[window.currentBannerIndex]?.classList.add('active');
         };
 
         window.renderSiswaOfficialDashboard = function() {
             const profile = window.cloudState.userProfile || { nama: "Siswa PKL" };
             const cfg = window.cloudState.pklConfig || DEFAULT_PKL_CONFIG;
-            const banners = window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES;
-            const banner = banners[0] || DEFAULT_BANNER_IMAGES[0];
+            const banners = (window.cloudState.bannerSliderImages && window.cloudState.bannerSliderImages.length > 0)
+                ? window.cloudState.bannerSliderImages
+                : DEFAULT_BANNER_IMAGES;
+
+            let slidesHtml = "";
+            let dotsHtml = "";
+            banners.forEach((b, idx) => {
+                slidesHtml += `
+                <div class="banner-slide ${idx === 0 ? 'active' : ''}" data-idx="${idx}">
+                    <img src="${b.url}" class="banner-slide-bg" alt="Banner ${idx + 1}" onerror="this.src='https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80'">
+                    <div class="banner-slide-overlay"></div>
+                    <div class="banner-slogan-wrap">
+                        <div class="banner-slogan-title">${b.slogan1 || 'SMK BISA! SMK HEBAT!'}</div>
+                        <div class="banner-slogan-sub">${b.slogan2 || 'SIAP KERJA, SANTUN, MANDIRI, KREATIF'}</div>
+                    </div>
+                </div>`;
+                dotsHtml += `<div class="banner-dot ${idx === 0 ? 'active' : ''}" onclick="window.keSlideBanner(${idx})"></div>`;
+            });
 
             const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
             const guruName = penempatan ? penempatan.guru : "Ibu Wilasia S. Talaa, S.ST";
@@ -1436,17 +1458,13 @@
             const absenMasuk = (window.cloudState.absensi || []).find(a => a.nama === profile.nama && a.tipe_absen === 'Masuk' && a.tanggal === todayStr);
             const absenPulang = (window.cloudState.absensi || []).find(a => a.nama === profile.nama && a.tipe_absen === 'Pulang' && a.tanggal === todayStr);
 
+            setTimeout(window.mulaiAutoSlideBanner, 150);
+
             return `
             <div class="banner-carousel-wrap">
-                <img src="${banner.url}" class="banner-slide-bg" alt="Banner Siswa">
-                <div class="banner-slide-overlay"></div>
-                <div class="banner-slogan-wrap">
-                    <div class="banner-slogan-title">${banner.slogan1 || 'SMK BISA! SMK HEBAT!'}</div>
-                    <div class="banner-slogan-sub">${banner.slogan2 || 'SIAP KERJA, SANTUN, MANDIRI, KREATIF'}</div>
-                </div>
+                ${slidesHtml}
                 <div class="banner-dots-wrap">
-                    <div class="banner-dot active"></div>
-                    <div class="banner-dot"></div>
+                    ${dotsHtml}
                 </div>
             </div>
 
@@ -1516,21 +1534,37 @@
         window.renderGuruOfficialDashboard = function() {
             const profile = window.cloudState.userProfile || { nama: "Guru Pembimbing" };
             const cfg = window.cloudState.pklConfig || DEFAULT_PKL_CONFIG;
-            const banners = window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES;
-            const banner = banners[0] || DEFAULT_BANNER_IMAGES[0];
+            const banners = (window.cloudState.bannerSliderImages && window.cloudState.bannerSliderImages.length > 0)
+                ? window.cloudState.bannerSliderImages
+                : DEFAULT_BANNER_IMAGES;
+
+            let slidesHtml = "";
+            let dotsHtml = "";
+            banners.forEach((b, idx) => {
+                slidesHtml += `
+                <div class="banner-slide ${idx === 0 ? 'active' : ''}">
+                    <img src="${b.url}" class="banner-slide-bg" alt="Banner ${idx + 1}" onerror="this.src='https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80'">
+                    <div class="banner-slide-overlay"></div>
+                    <div class="banner-slogan-wrap">
+                        <div class="banner-slogan-title">${b.slogan1 || 'SMK BISA! SMK HEBAT!'}</div>
+                        <div class="banner-slogan-sub">RUANG GURU PEMBIMBING LAPANGAN</div>
+                    </div>
+                </div>`;
+                dotsHtml += `<div class="banner-dot ${idx === 0 ? 'active' : ''}" onclick="window.keSlideBanner(${idx})"></div>`;
+            });
 
             const myPlacements = (window.cloudState.penempatan || []).filter(p => window.isGuruMatch(p.guru, profile.nama));
             let totalSiswa = 0;
             myPlacements.forEach(p => { if (Array.isArray(p.siswa)) totalSiswa += p.siswa.length; });
             const pendingJurnal = (window.cloudState.jurnal || []).filter(j => j.status === 'Menunggu Verifikasi').length;
 
+            setTimeout(window.mulaiAutoSlideBanner, 150);
+
             return `
             <div class="banner-carousel-wrap">
-                <img src="${banner.url}" class="banner-slide-bg" alt="Banner Guru">
-                <div class="banner-slide-overlay"></div>
-                <div class="banner-slogan-wrap">
-                    <div class="banner-slogan-title">${banner.slogan1 || 'SMK BISA! SMK HEBAT!'}</div>
-                    <div class="banner-slogan-sub">RUANG GURU PEMBIMBING LAPANGAN</div>
+                ${slidesHtml}
+                <div class="banner-dots-wrap">
+                    ${dotsHtml}
                 </div>
             </div>
 
@@ -1585,21 +1619,37 @@
         window.renderIndustriOfficialDashboard = function() {
             const profile = window.cloudState.userProfile || { nama: "Mitra Industri" };
             const cfg = window.cloudState.pklConfig || DEFAULT_PKL_CONFIG;
-            const banners = window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES;
-            const banner = banners[0] || DEFAULT_BANNER_IMAGES[0];
+            const banners = (window.cloudState.bannerSliderImages && window.cloudState.bannerSliderImages.length > 0)
+                ? window.cloudState.bannerSliderImages
+                : DEFAULT_BANNER_IMAGES;
+
+            let slidesHtml = "";
+            let dotsHtml = "";
+            banners.forEach((b, idx) => {
+                slidesHtml += `
+                <div class="banner-slide ${idx === 0 ? 'active' : ''}">
+                    <img src="${b.url}" class="banner-slide-bg" alt="Banner ${idx + 1}" onerror="this.src='https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80'">
+                    <div class="banner-slide-overlay"></div>
+                    <div class="banner-slogan-wrap">
+                        <div class="banner-slogan-title">${b.slogan1 || 'SMK BISA! SMK HEBAT!'}</div>
+                        <div class="banner-slogan-sub">PANEL MITRA INDUSTRI DUDI</div>
+                    </div>
+                </div>`;
+                dotsHtml += `<div class="banner-dot ${idx === 0 ? 'active' : ''}" onclick="window.keSlideBanner(${idx})"></div>`;
+            });
 
             const placements = (window.cloudState.penempatan || []).filter(p => window.isIndustriMatch(p.industri, profile.nama));
             let totalMagang = 0;
             placements.forEach(p => { if (Array.isArray(p.siswa)) totalMagang += p.siswa.length; });
             const indData = (window.cloudState.industri || []).find(i => window.isIndustriMatch(i.nama, profile.nama)) || {};
 
+            setTimeout(window.mulaiAutoSlideBanner, 150);
+
             return `
             <div class="banner-carousel-wrap">
-                <img src="${banner.url}" class="banner-slide-bg" alt="Banner Industri">
-                <div class="banner-slide-overlay"></div>
-                <div class="banner-slogan-wrap">
-                    <div class="banner-slogan-title">${banner.slogan1 || 'SMK BISA! SMK HEBAT!'}</div>
-                    <div class="banner-slogan-sub">PANEL MITRA INDUSTRI DUDI</div>
+                ${slidesHtml}
+                <div class="banner-dots-wrap">
+                    ${dotsHtml}
                 </div>
             </div>
 
@@ -2992,7 +3042,7 @@
                     const img = new Image();
                     img.onload = function() {
                         const canvas = document.createElement('canvas');
-                        const maxW = 900;
+                        const maxW = 750;
                         let w = img.width;
                         let h = img.height;
                         if (w > maxW) {
@@ -3003,8 +3053,9 @@
                         canvas.height = h;
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, w, h);
-                        
-                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.82);
+
+                        // Kompres ke JPEG ~60KB agar instan sinkron ke Supabase Cloud
+                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.72);
                         window.tempBannerBase64 = compressedBase64;
 
                         const prevImg = document.getElementById("bannerPreviewImg");
@@ -3020,7 +3071,7 @@
             }
         };
 
-        window.prosesSimpanUploadBanner = function() {
+        window.prosesSimpanUploadBanner = async function() {
             if (!window.tempBannerBase64) {
                 return window.showModalInfo("Pilih Gambar", "Silakan pilih berkas gambar banner terlebih dahulu!");
             }
@@ -3040,7 +3091,7 @@
 
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
-            window.showModalInfo("Banner Berhasil Diunggah 📸", "Gambar banner baru telah disimpan dan otomatis tampil di dashboard seluruh siswa dan pengguna!");
+            window.showModalInfo("Banner Berhasil Diunggah 📸", "Gambar banner baru telah tersimpan dan langsung disiarkan ke cloud Supabase agar tampil di semua HP!");
             window.openFeature("banner-jadwal", "Banner & Jadwal PKL");
         };
 
@@ -3963,6 +4014,12 @@
         window.addEventListener('DOMContentLoaded', async () => {
             window.inisialisasiSupabaseClient();
 
+            // Prioritaskan menarik data terbaru dari Supabase sebelum memuat profil
+            if (window.supabaseClient) {
+                await window.tarikDataDariCloud(false);
+                window.aktifkanSinkronisasiRealtime();
+            }
+
             const savedSession = localStorage.getItem(STORAGE_KEY_SESSION);
             if (savedSession) {
                 try {
@@ -3971,11 +4028,6 @@
                         window.suksesLogin(prof);
                     }
                 } catch(e) {}
-            }
-
-            if (window.supabaseClient) {
-                window.aktifkanSinkronisasiRealtime();
-                await window.tarikDataDariCloud(true);
             }
         });
     </script>
