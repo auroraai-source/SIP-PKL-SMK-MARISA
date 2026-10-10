@@ -2364,11 +2364,11 @@
             const users = (window.cloudState.registeredUsers || []).filter(u => u.role === tab);
 
             let rows = "";
-            users.forEach((u) => {
+            users.forEach((u, displayIdx) => {
                 const originalIdx = (window.cloudState.registeredUsers || []).indexOf(u);
                 rows += `<tr>
                     <td><input type="checkbox" class="cb-akun" value="${originalIdx}"></td>
-                    <td>${originalIdx + 1}</td>
+                    <td>${displayIdx + 1}</td>
                     <td><b>${u.nama}</b></td>
                     <td><code style="color:#0284c7; font-weight:800;">${u.username}</code></td>
                     <td><span style="font-family:monospace; background:#f1f5f9; padding:2px 8px; border-radius:6px; font-weight:700;">${u.pass}</span></td>
