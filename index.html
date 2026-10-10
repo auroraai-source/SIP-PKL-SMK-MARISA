@@ -1501,6 +1501,11 @@
 
             document.getElementById("topbarRoleTitle").innerText = "SIP-PKL";
             document.getElementById("topbarUserName").innerText = `${profile.nama}`;
+            const roleBadge = document.getElementById("topbarUserRoleBadge");
+            if (roleBadge) {
+                const roleLabels = { siswa: "SISWA PKL", guru: "GURU PEMBIMBING", industri: "MITRA DUDI", orangtua: "WALI MURID", admin: "PANITIA PKL" };
+                roleBadge.innerText = roleLabels[profile.role] || (profile.role).toUpperCase();
+            }
             document.getElementById("sidebarRoleLabel").innerText = (roleDefaults[profile.role]?.label || profile.role).toUpperCase();
 
             window.renderSidebar();
