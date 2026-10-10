@@ -1474,14 +1474,14 @@
                     <div class="absensi-status-badge">${absenMasuk ? 'SUDAH ABSEN HARI INI' : 'BELUM ABSEN HARI INI'}</div>
                 </div>
                 <div class="absensi-btn-grid">
-                    <div class="btn-absensi-box ${absenMasuk ? 'done-card' : ''}" onclick="window.openFeature('presensi', 'Presensi')">
+                    <div class="btn-absensi-box ${absenMasuk ? 'done-card' : ''}" onclick="window.bukaModalAmbilPresensiSelfieGPS('Masuk')">
                         <div class="btn-absensi-icon-wrap">${absenMasuk ? '✅' : '📷'}</div>
                         <div>
                             <div class="btn-absensi-text">PRESENSI MASUK</div>
                             <div style="font-size: 10px; color: #475569; font-weight: 700; margin-top: 2px;">${absenMasuk ? absenMasuk.jam + ' WITA' : 'Tekan untuk Masuk'}</div>
                         </div>
                     </div>
-                    <div class="btn-absensi-box ${absenPulang ? 'done-card' : ''}" onclick="window.openFeature('presensi', 'Presensi')">
+                    <div class="btn-absensi-box ${absenPulang ? 'done-card' : ''}" onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang')">
                         <div class="btn-absensi-icon-wrap">${absenPulang ? '✅' : '🚪'}</div>
                         <div>
                             <div class="btn-absensi-text">PRESENSI PULANG</div>
