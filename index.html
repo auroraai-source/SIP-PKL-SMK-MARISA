@@ -4428,25 +4428,41 @@
 
                     if (json.length === 0) return window.showModalInfo("Berkas Kosong", "Data pada lembar Excel tidak ditemukan!");
 
+                    let addedCount = 0;
+                    let updatedCount = 0;
+
                     if (type === 'Siswa') {
                         json.forEach(row => {
-                            const nama = row['Nama Siswa'] || row['nama'] || row['Nama'];
-                            const nis = String(row['NIS'] || row['nis'] || '');
-                            if (nama && nis) {
-                                window.cloudState.siswa.unshift({
-                                    nama: nama,
-                                    nis: nis,
-                                    jk: row['JK'] || 'L',
-                                    kelas: row['Kelas'] || 'Teknik Jaringan Komputer & Telekomunikasi (TJKT)',
-                                    noHp: String(row['No HP'] || '-')
-                                });
-                                if (!window.cloudState.registeredUsers.some(u => u.username === nis)) {
-                                    window.cloudState.registeredUsers.unshift({
+                            const nama = (row['Nama Siswa'] || row['nama'] || row['Nama'] || row['NAMA SISWA'] || row['NAMA'] || '').toString().trim();
+                            if (!nama) return;
+
+                            const kelas = (row['Kelas'] || row['kelas'] || row['Jurusan'] || row['jurusan'] || row['Kelas / Jurusan'] || 'Teknik Jaringan Komputer & Telekomunikasi (TJKT)').toString().trim();
+                            const nis = (row['NIS'] || row['nis'] || row['Nis'] || '-').toString().trim();
+                            const jk = (row['JK'] || row['jk'] || 'L').toString().trim().toUpperCase();
+                            const noHp = (row['No HP'] || row['no_hp'] || row['No. HP'] || row['No WhatsApp'] || '-').toString().trim();
+
+                            // Pencocokan cerdas berdasarkan nama (case-insensitive) untuk mencegah data ganda
+                            const existingIdx = window.cloudState.siswa.findIndex(s => s.nama.toLowerCase().trim() === nama.toLowerCase());
+                            if (existingIdx !== -1) {
+                                // Perbarui kolom data yang ada tanpa menduplikasi baris
+                                if (kelas && kelas !== '-') window.cloudState.siswa[existingIdx].kelas = kelas;
+                                if (nis && nis !== '-') window.cloudState.siswa[existingIdx].nis = nis;
+                                if (jk && jk !== '-') window.cloudState.siswa[existingIdx].jk = jk;
+                                if (noHp && noHp !== '-') window.cloudState.siswa[existingIdx].noHp = noHp;
+                                updatedCount++;
+                            } else {
+                                // Tambahkan sebagai siswa baru
+                                window.cloudState.siswa.push({ nama, nis, jk, kelas, noHp });
+                                addedCount++;
+
+                                const uname = (nis !== "-") ? nis : nama.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10);
+                                if (uname && !window.cloudState.registeredUsers.some(u => u.username === uname)) {
+                                    window.cloudState.registeredUsers.push({
                                         role: "siswa",
                                         nama: nama,
-                                        username: nis,
+                                        username: uname,
                                         pass: "siswa123",
-                                        identitas: nis
+                                        identitas: uname
                                     });
                                 }
                             }
@@ -4454,22 +4470,31 @@
                         window.openFeature("master-siswa", "Data Siswa");
                     } else if (type === 'Guru') {
                         json.forEach(row => {
-                            const nama = row['Nama Guru'] || row['nama'];
-                            const nip = String(row['NIP'] || row['nip'] || '');
-                            if (nama && nip) {
-                                window.cloudState.guru.unshift({
-                                    nama: nama,
-                                    nip: nip,
-                                    mapel: row['Bidang / Mapel'] || 'Guru Pembimbing',
-                                    noHp: String(row['No HP'] || '-')
-                                });
-                                if (!window.cloudState.registeredUsers.some(u => u.username === nip)) {
-                                    window.cloudState.registeredUsers.unshift({
+                            const nama = (row['Nama Guru'] || row['nama'] || row['Nama'] || row['NAMA GURU'] || '').toString().trim();
+                            if (!nama) return;
+
+                            const mapel = (row['Bidang / Mapel'] || row['mapel'] || row['Mapel'] || row['Bidang'] || 'Guru Pembimbing').toString().trim();
+                            const nip = (row['NIP'] || row['nip'] || row['Nip'] || '-').toString().trim();
+                            const noHp = (row['No HP'] || row['no_hp'] || row['No. HP'] || '-').toString().trim();
+
+                            const existingIdx = window.cloudState.guru.findIndex(g => g.nama.toLowerCase().trim() === nama.toLowerCase());
+                            if (existingIdx !== -1) {
+                                if (mapel && mapel !== '-') window.cloudState.guru[existingIdx].mapel = mapel;
+                                if (nip && nip !== '-') window.cloudState.guru[existingIdx].nip = nip;
+                                if (noHp && noHp !== '-') window.cloudState.guru[existingIdx].noHp = noHp;
+                                updatedCount++;
+                            } else {
+                                window.cloudState.guru.push({ nama, nip, mapel, noHp });
+                                addedCount++;
+
+                                const uname = (nip !== "-") ? nip : nama.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10);
+                                if (uname && !window.cloudState.registeredUsers.some(u => u.username === uname)) {
+                                    window.cloudState.registeredUsers.push({
                                         role: "guru",
                                         nama: nama,
-                                        username: nip,
+                                        username: uname,
                                         pass: "guru123",
-                                        identitas: nip
+                                        identitas: uname
                                     });
                                 }
                             }
@@ -4477,20 +4502,36 @@
                         window.openFeature("master-guru", "Data Guru");
                     } else if (type === 'Industri') {
                         json.forEach(row => {
-                            const nama = row['Nama Industri'] || row['nama'];
-                            if (nama) {
-                                window.cloudState.industri.unshift({
+                            const nama = (row['Nama Industri'] || row['nama'] || row['Nama'] || row['Perusahaan'] || '').toString().trim();
+                            if (!nama) return;
+
+                            const pimpinan = (row['Pimpinan'] || row['pimpinan'] || row['HRD'] || row['Pimpinan / HRD'] || 'HRD').toString().trim();
+                            const alamat = (row['Alamat'] || row['alamat'] || '-').toString().trim();
+                            const noWa = (row['No WA'] || row['no_wa'] || row['No. WA'] || '-').toString().trim();
+                            const radius = parseInt(row['Radius']) || 100;
+                            const masuk = row['Jam Masuk'] || '08:00';
+                            const pulang = row['Jam Pulang'] || '16:00';
+
+                            const existingIdx = window.cloudState.industri.findIndex(i => i.nama.toLowerCase().trim() === nama.toLowerCase());
+                            if (existingIdx !== -1) {
+                                if (pimpinan && pimpinan !== '-') window.cloudState.industri[existingIdx].pimpinan = pimpinan;
+                                if (alamat && alamat !== '-') window.cloudState.industri[existingIdx].alamat = alamat;
+                                if (noWa && noWa !== '-') window.cloudState.industri[existingIdx].noWa = noWa;
+                                updatedCount++;
+                            } else {
+                                window.cloudState.industri.push({
                                     id: "ind_" + Date.now() + Math.random(),
                                     nama: nama,
-                                    alamat: row['Alamat'] || '-',
-                                    pimpinan: row['Pimpinan'] || 'HRD',
-                                    noWa: String(row['No WA'] || '-'),
-                                    radius: parseInt(row['Radius']) || 100,
-                                    masuk: row['Jam Masuk'] || '08:00',
-                                    pulang: row['Jam Pulang'] || '16:00',
+                                    alamat: alamat,
+                                    pimpinan: pimpinan,
+                                    noWa: noWa,
+                                    radius: radius,
+                                    masuk: masuk,
+                                    pulang: pulang,
                                     lat: "0.45612",
                                     lng: "121.94210"
                                 });
+                                addedCount++;
                             }
                         });
                         window.openFeature("master-industri", "Data Industri");
@@ -4498,7 +4539,10 @@
 
                     window.simpanDatabasePersisten(true);
                     window.closeDynamicModal();
-                    window.showModalInfo("Impor Berhasil 📥", `Sebanyak <b>${json.length} data ${type}</b> berhasil dimasukkan.`);
+                    window.showModalInfo(
+                        "Impor Cerdas Berhasil 📥", 
+                        `Proses impor selesai dengan aman:<br><br>• <b>${addedCount} Data Baru</b> berhasil ditambahkan.<br>• <b>${updatedCount} Data yang Sudah Ada</b> diperbarui tanpa duplikasi!`
+                    );
                 } catch(err) {
                     window.showModalInfo("Gagal Membaca Berkas", "Terjadi kesalahan saat memproses file Excel: " + err.message);
                 }
@@ -4550,13 +4594,7 @@
         };
 
         window.addEventListener('DOMContentLoaded', async () => {
-            window.inisialisasiSupabaseClient();
-
-            if (window.supabaseClient) {
-                await window.tarikDataDariCloud(false);
-                window.aktifkanSinkronisasiRealtime();
-            }
-
+            // 1. Pulihkan sesi pengguna terlebih dahulu secara instan agar tidak pernah balik ke layar login saat di-refresh
             const savedSession = localStorage.getItem(STORAGE_KEY_SESSION);
             if (savedSession) {
                 try {
@@ -4565,6 +4603,13 @@
                         window.suksesLogin(prof);
                     }
                 } catch(e) {}
+            }
+
+            // 2. Inisialisasi Supabase dan lakukan penarikan sinkronisasi di latar belakang tanpa mengganggu tampilan
+            window.inisialisasiSupabaseClient();
+            if (window.supabaseClient) {
+                await window.tarikDataDariCloud(false);
+                window.aktifkanSinkronisasiRealtime();
             }
         });
     </script>
