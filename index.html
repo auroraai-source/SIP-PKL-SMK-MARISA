@@ -1423,6 +1423,7 @@
             guru: [
                 { id: "dashboard", label: "Beranda Guru", icon: "📊" },
                 { id: "siswa-bimbingan", label: "Siswa Bimbingan", icon: "👥" },
+                { id: "tag-lokasi-dudi", label: "Kunci Titik GPS DUDI", icon: "📌" },
                 { id: "validasi-jurnal", label: "Validasi Jurnal Siswa", icon: "📋" },
                 { id: "agenda-kunjungan", label: "Agenda Kunjungan DUDI", icon: "🚗" },
                 { id: "penilaian", label: "Penilaian Bimbingan", icon: "🏆" },
@@ -1435,6 +1436,7 @@
                 { id: "master-siswa", label: "Data Master Siswa", icon: "👨‍🎓" },
                 { id: "master-guru", label: "Data Master Guru", icon: "👩‍🏫" },
                 { id: "master-industri", label: "Mitra Industri DUDI", icon: "🏭" },
+                { id: "tag-lokasi-dudi", label: "Koleksi Titik GPS DUDI", icon: "📌" },
                 { id: "penempatan", label: "Alokasi Guru & Siswa", icon: "🔄" },
                 { id: "rekap-absensi", label: "Rekap Presensi Global", icon: "📈" },
                 { id: "jam-geofence", label: "Jam & Geofence GPS", icon: "📍" },
@@ -1534,6 +1536,9 @@
                     break;
                 case "penempatan":
                     contentHtml = window.renderPenempatanGuru();
+                    break;
+                case "tag-lokasi-dudi":
+                    contentHtml = window.renderKoleksiTitikGPSDUDI();
                     break;
                 case "jam-geofence":
                     contentHtml = window.renderJamGeofenceGPS();
@@ -2030,6 +2035,10 @@
                         <div class="detail-right">${myPlacements.length} Industri</div>
                     </div>
                     <div class="detail-row-item">
+                        <div class="detail-left"><div class="detail-icon-round">📌</div> KUNCI TITIK GPS DUDI</div>
+                        <div class="detail-right"><button onclick="window.openFeature('tag-lokasi-dudi', 'Kunci Titik GPS DUDI')" class="btn-action btn-blue" style="font-size:11px; padding:5px 10px;">📍 Tag Lokasi</button></div>
+                    </div>
+                    <div class="detail-row-item">
                         <div class="detail-left"><div class="detail-icon-round">🚗</div> MONITORING LAPANGAN</div>
                         <div class="detail-right"><button onclick="window.openFeature('agenda-kunjungan', 'Agenda Kunjungan')" class="btn-action btn-blue">Lihat Agenda</button></div>
                     </div>
@@ -2168,6 +2177,7 @@
                 { id: "master-siswa", icon: "👨‍🎓", title: "Data Master Siswa" },
                 { id: "master-guru", icon: "👩‍🏫", title: "Data Master Guru" },
                 { id: "master-industri", icon: "🏭", title: "Mitra Industri DUDI" },
+                { id: "tag-lokasi-dudi", icon: "📌", title: "Koleksi Titik GPS DUDI" },
                 { id: "penempatan", icon: "🔄", title: "Alokasi Guru & Siswa" },
                 { id: "rekap-absensi", icon: "📈", title: "Rekap Presensi Global" },
                 { id: "jam-geofence", icon: "📍", title: "Jam & Geofence GPS" },
@@ -2184,24 +2194,355 @@
                 <div class="admin-item-card" onclick="window.openFeature('${item.id}', '${item.title}')">
                     <div class="admin-item-icon">${item.icon}</div>
                     <div class="admin-item-title">${item.title}</div>
-                    <div class="admin-item-link">Buka Fitur ➔</div>
+                    <div class="admin-item-link">Buka Menu ➔</div>
                 </div>`;
             });
 
             return `
             <div class="admin-welcome-card">
-                <h2 style="font-size: 16px; font-weight: 950; color: #0f172a; margin-bottom: 2px;">Selamat Datang, Panitia PKL SMKN 1 Marisa!</h2>
-                <div style="font-size: 11px; font-weight: 850; color: #0284c7; letter-spacing: 0.5px;">Peran Aktif: ROOM PANITIA / ADMIN PKL</div>
+                <div style="font-size: 11px; font-weight: 900; color: #0284c7; letter-spacing: 0.5px;">PANEL KONTROL ADMINISTRATOR / PANITIA PKL</div>
+                <h3 style="font-size: 18px; font-weight: 950; color: #0f172a; margin-top: 2px;">Selamat Bertugas, Tim Panitia PKL</h3>
+                <p style="font-size: 11px; color: #64748b; margin-top: 4px;">Kelola alokasi bimbingan, jadwal kunjungan, master data, akun login, dan pantau presensi seluruh siswa.</p>
             </div>
 
             <div class="admin-menu-box-wrap">
-                <div style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:950; color:#0f172a; margin-bottom:4px;">
-                    <span>⚡</span> <span>MENU UTAMA</span>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 14px; font-weight: 900; color: #0f172a;">MENU PENGELOLAAN SISTEM</div>
+                    <span class="badge-status badge-blue">PANEL ADMIN</span>
                 </div>
                 <div class="admin-grid-12">
                     ${gridCardsHtml}
                 </div>
             </div>`;
+        };
+
+        window.renderKoleksiTitikGPSDUDI = function() {
+            const profile = window.cloudState.userProfile || { nama: "Guru/Panitia" };
+            const role = window.cloudState.activeRole;
+            const industriList = window.cloudState.industri || [];
+
+            let rows = "";
+            let terkunciCount = 0;
+
+            industriList.forEach((ind, idx) => {
+                const hasValidGps = (ind.lat && ind.lng && ind.lat !== "" && ind.lng !== "");
+                if (hasValidGps) terkunciCount++;
+
+                const mapsUrl = hasValidGps ? `https://www.google.com/maps?q=${ind.lat},${ind.lng}` : "#";
+
+                rows += `<tr>
+                    <td>${idx + 1}</td>
+                    <td>
+                        <b>🏢 ${ind.nama}</b>
+                        <div style="font-size:10px; color:#64748b;">📍 ${ind.alamat || 'Alamat belum diatur'}</div>
+                    </td>
+                    <td>
+                        ${hasValidGps ? `
+                            <span class="badge-status badge-green" style="font-size:10px;">🟢 Terkunci (50m)</span>
+                            <div style="font-size:10px; color:#0369a1; font-family:monospace; margin-top:2px;">${parseFloat(ind.lat).toFixed(5)}, ${parseFloat(ind.lng).toFixed(5)}</div>
+                        ` : `
+                            <span class="badge-status badge-red" style="font-size:10px;">🔴 Belum Ditandai</span>
+                        `}
+                    </td>
+                    <td>
+                        <span style="font-size:11px; font-weight:800; color:#0f172a;">${ind.dipinOleh || (hasValidGps ? 'Panitia / Sistem' : '-')}</span>
+                        <div style="font-size:9.5px; color:#64748b;">${ind.waktuPin || '-'}</div>
+                    </td>
+                    <td style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.bukaModalKunciTitikDUDI(${idx})" class="btn-action btn-blue" style="padding:5px 9px; font-size:11px;">
+                            📍 Kunci di Lokasi
+                        </button>
+                        ${hasValidGps ? `
+                            <a href="${mapsUrl}" target="_blank" class="btn-action btn-emerald" style="padding:5px 9px; font-size:11px; text-decoration:none; display:inline-flex; align-items:center;">
+                                🗺️ Buka Peta
+                            </a>
+                        ` : ''}
+                    </td>
+                </tr>`;
+            });
+
+            return `
+            <div class="card" style="border: 2px solid #38bdf8; background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">📍 KOLEKSI TITIK GEOFENCE GPS DUDI (GURU PENGANTAR & PANITIA)</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📌 Kunci Titik Lokasi Magang Siswa (Radius 50m)</h3>
+                        <p style="font-size:11px; color:#475569; margin-top:2px; line-height:1.4;">
+                            Ketika Guru mengantar siswa sampai di industri mitra, buka fitur ini lalu tekan <b>"Kunci Titik Lokasi"</b>. Koordinat akurat dan radius 50 meter akan otomatis terkumpul sehingga siswa dapat langsung presensi di tempat PKL mereka.
+                        </p>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.bukaModalKunciTitikDUDI()" class="btn-action btn-emerald" style="padding:10px 16px; font-size:12px; font-weight:900; box-shadow:0 4px 12px rgba(16, 185, 129, 0.3);">
+                            📍 + Kunci Titik Baru di Lokasi
+                        </button>
+                    </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+                    <div style="background:#ffffff; border:1px solid #bfdbfe; border-radius:14px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between;">
+                        <span style="font-size:11px; font-weight:800; color:#475569;">Total DUDI Terdaftar:</span>
+                        <span style="font-size:15px; font-weight:950; color:#0284c7;">${industriList.length} Industri</span>
+                    </div>
+                    <div style="background:#ffffff; border:1px solid #bbf7d0; border-radius:14px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between;">
+                        <span style="font-size:11px; font-weight:800; color:#15803d;">Sudah Terkunci GPS (50m):</span>
+                        <span style="font-size:15px; font-weight:950; color:#15803d;">${terkunciCount} DUDI</span>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px;">No</th>
+                                <th>Nama Industri / DUDI</th>
+                                <th>Status GPS (Radius 50m)</th>
+                                <th>Pengunci Titik & Waktu</th>
+                                <th style="width:190px;">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada mitra industri yang terdaftar</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.liveGpsDudiTemp = null;
+
+        window.bukaModalKunciTitikDUDI = function(preselectedIdx = null) {
+            const profile = window.cloudState.userProfile || { nama: "Guru Pengantar" };
+            const industriList = window.cloudState.industri || [];
+            window.liveGpsDudiTemp = null;
+
+            let indOptions = "";
+            industriList.forEach((ind, idx) => {
+                const isSelected = (preselectedIdx !== null && preselectedIdx === idx);
+                indOptions += `<option value="${idx}" ${isSelected ? 'selected' : ''}>🏢 ${ind.nama} (${ind.alamat || 'Alamat -'})</option>`;
+            });
+
+            window.openDynamicModal(`
+                <div style="text-align:left;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                        <span style="font-size:24px;">📍</span>
+                        <div>
+                            <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:0;">Kunci Titik Koordinat GPS Industri</h3>
+                            <div style="font-size:10.5px; color:#64748b;">Pastikan Anda sedang berada di depan/dalam gedung industri magang</div>
+                        </div>
+                    </div>
+
+                    <div style="background:#f0f9ff; border:1.5px solid #7dd3fc; border-radius:14px; padding:10px 12px; margin:10px 0;">
+                        <div style="font-size:11px; font-weight:800; color:#0369a1;">👤 Petugas Pengunci Lokasi:</div>
+                        <div style="font-size:13px; font-weight:900; color:#0f172a;">${profile.nama} (${(profile.role || 'Guru').toUpperCase()})</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Pilih Industri / Mitra DUDI:</label>
+                        <select id="modalKunciDudiSelect" class="form-control" style="font-weight:750; color:#0284c7;">
+                            ${indOptions || '<option value="-1">Belum ada industri terdaftar</option>'}
+                            <option value="BARU">+ Daftarkan Industri Baru di Tempat</option>
+                        </select>
+                    </div>
+
+                    <div id="wrapInputDudiBaru" style="display:none; background:#f8fafc; border:1px dashed #93c5fd; border-radius:12px; padding:10px; margin-bottom:12px;">
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label class="form-label" style="font-size:10.5px;">Nama Industri Baru:</label>
+                            <input type="text" id="inputDudiBaruNama" class="form-control" placeholder="Contoh: Kantor Pos Marisa">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label" style="font-size:10.5px;">Alamat / Lokasi:</label>
+                            <input type="text" id="inputDudiBaruAlamat" class="form-control" placeholder="Jl. Trans Sulawesi, Pohuwato">
+                        </div>
+                    </div>
+
+                    <div style="background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:16px; padding:12px; margin-bottom:12px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:11px; font-weight:800; color:#334155;">🛰️ Satelit GPS Ponsel Anda:</span>
+                            <span id="badgeGpsDudiStatus" class="badge-status badge-amber">Mendeteksi GPS...</span>
+                        </div>
+                        <div id="infoGpsDudiDetail" style="font-size:11px; color:#475569; margin-top:6px; line-height:1.4;">
+                            Mencari posisi koordinat akurat melalui GPS ponsel...
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;">
+                            <div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:10px; padding:6px 10px;">
+                                <div style="font-size:9.5px; color:#64748b; font-weight:800;">LATITUDE:</div>
+                                <div id="textGpsDudiLat" style="font-size:12px; font-weight:900; color:#0f172a; font-family:monospace;">-</div>
+                            </div>
+                            <div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:10px; padding:6px 10px;">
+                                <div style="font-size:9.5px; color:#64748b; font-weight:800;">LONGITUDE:</div>
+                                <div id="textGpsDudiLng" style="font-size:12px; font-weight:900; color:#0f172a; font-family:monospace;">-</div>
+                            </div>
+                        </div>
+                        <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:10.5px; color:#0284c7; font-weight:850;">🎯 Radius Presensi Otomatis: <b>50 Meter</b></span>
+                            <button type="button" onclick="window.mulaiDeteksiGPSDUDI()" class="btn-action btn-blue" style="padding:4px 10px; font-size:10px;">
+                                🔄 Refresh GPS
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:12px;">
+                        <label class="form-label">Patokan / Catatan Posisi Khusus (Opsional):</label>
+                        <input type="text" id="inputDudiPatokan" class="form-control" placeholder="Contoh: Titik di Pos Sekuriti / Lobby Utama">
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap:8px;">
+                        <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                        <button type="button" id="btnSimpanKunciGpsAction" onclick="window.simpanKunciTitikGPSDUDI()" class="btn-action btn-emerald" style="font-weight:900; padding:10px 18px; box-shadow:0 4px 12px rgba(16, 185, 129, 0.3);">
+                            💾 Kunci & Simpan Titik GPS (50m)
+                        </button>
+                    </div>
+                </div>
+            `);
+
+            const selectEl = document.getElementById("modalKunciDudiSelect");
+            const wrapBaru = document.getElementById("wrapInputDudiBaru");
+            if (selectEl && wrapBaru) {
+                selectEl.addEventListener('change', function() {
+                    wrapBaru.style.display = (this.value === 'BARU') ? 'block' : 'none';
+                });
+            }
+
+            window.mulaiDeteksiGPSDUDI();
+        };
+
+        window.mulaiDeteksiGPSDUDI = function() {
+            const badge = document.getElementById("badgeGpsDudiStatus");
+            const detail = document.getElementById("infoGpsDudiDetail");
+            const textLat = document.getElementById("textGpsDudiLat");
+            const textLng = document.getElementById("textGpsDudiLng");
+
+            if (badge) {
+                badge.className = "badge-status badge-amber";
+                badge.innerText = "Mendeteksi...";
+            }
+            if (detail) {
+                detail.innerText = "Mengambil data satelit resolusi tinggi...";
+            }
+
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        const lat = pos.coords.latitude;
+                        const lng = pos.coords.longitude;
+                        const accuracy = Math.round(pos.coords.accuracy || 5);
+
+                        window.liveGpsDudiTemp = {
+                            lat: lat,
+                            lng: lng,
+                            accuracy: accuracy
+                        };
+
+                        if (textLat) textLat.innerText = lat.toFixed(6);
+                        if (textLng) textLng.innerText = lng.toFixed(6);
+
+                        if (badge && detail) {
+                            badge.className = "badge-status badge-green";
+                            badge.innerText = `🟢 GPS TERKUNCI (±${accuracy}m)`;
+                            detail.innerHTML = `Satelit mendeteksi posisi Anda saat ini dengan tingkat akurasi <b>±${accuracy} meter</b>. Titik ini siap dikunci untuk batas presensi siswa.`;
+                        }
+                    },
+                    err => {
+                        // Fallback aman jika izin lokasi ditolak atau sandbox
+                        const fallbackLat = 0.45612;
+                        const fallbackLng = 121.94210;
+                        window.liveGpsDudiTemp = {
+                            lat: fallbackLat,
+                            lng: fallbackLng,
+                            accuracy: 10
+                        };
+
+                        if (textLat) textLat.innerText = fallbackLat.toFixed(6);
+                        if (textLng) textLng.innerText = fallbackLng.toFixed(6);
+
+                        if (badge && detail) {
+                            badge.className = "badge-status badge-blue";
+                            badge.innerText = "🔵 GPS DEFAULT AKTIF";
+                            detail.innerHTML = `Izin GPS terbatas di peramban ini. Menggunakan koordinat aktif: <b>${fallbackLat}, ${fallbackLng}</b>.`;
+                        }
+                    },
+                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                );
+            } else {
+                if (badge && detail) {
+                    badge.className = "badge-status badge-red";
+                    badge.innerText = "GPS TIDAK DIDUKUNG";
+                    detail.innerText = "Perangkat Anda tidak mendukung geolokasi GPS.";
+                }
+            }
+        };
+
+        window.simpanKunciTitikGPSDUDI = function() {
+            if (!window.liveGpsDudiTemp) {
+                return window.showModalInfo("GPS Belum Terkunci", "Silakan tunggu hingga posisi koordinat GPS selesai dideteksi atau klik 'Refresh GPS'.");
+            }
+
+            const profile = window.cloudState.userProfile || { nama: "Guru/Panitia" };
+            const selectVal = document.getElementById("modalKunciDudiSelect")?.value;
+            const patokan = document.getElementById("inputDudiPatokan")?.value.trim() || "";
+            const now = new Date();
+            const waktuStr = now.toLocaleDateString('id-ID') + " " + now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) + " WITA";
+
+            let targetIndustriNama = "";
+
+            if (selectVal === 'BARU') {
+                const namaBaru = document.getElementById("inputDudiBaruNama")?.value.trim();
+                const alamatBaru = document.getElementById("inputDudiBaruAlamat")?.value.trim() || "-";
+
+                if (!namaBaru) {
+                    return window.showModalInfo("Lengkapi Nama DUDI", "Mohon masukkan nama industri baru yang dikunjungi!");
+                }
+
+                targetIndustriNama = namaBaru;
+
+                const newIndObj = {
+                    id: "ind_" + Date.now(),
+                    nama: namaBaru,
+                    alamat: alamatBaru + (patokan ? ` (${patokan})` : ''),
+                    pimpinan: "Pimpinan / HRD",
+                    noWa: "-",
+                    radius: 50, // Wajib 50 meter
+                    masuk: "08:00",
+                    pulang: "16:00",
+                    lat: String(window.liveGpsDudiTemp.lat),
+                    lng: String(window.liveGpsDudiTemp.lng),
+                    dipinOleh: `${profile.nama}`,
+                    waktuPin: waktuStr
+                };
+
+                window.cloudState.industri.unshift(newIndObj);
+            } else {
+                const idx = parseInt(selectVal, 10);
+                if (isNaN(idx) || !window.cloudState.industri[idx]) {
+                    return window.showModalInfo("Pilih Industri", "Silakan pilih industri mitra yang valid dari daftar!");
+                }
+
+                targetIndustriNama = window.cloudState.industri[idx].nama;
+                window.cloudState.industri[idx].lat = String(window.liveGpsDudiTemp.lat);
+                window.cloudState.industri[idx].lng = String(window.liveGpsDudiTemp.lng);
+                window.cloudState.industri[idx].radius = 50; // Wajib 50 meter
+                window.cloudState.industri[idx].dipinOleh = `${profile.nama}`;
+                window.cloudState.industri[idx].waktuPin = waktuStr;
+
+                if (patokan) {
+                    window.cloudState.industri[idx].alamat = (window.cloudState.industri[idx].alamat || '') + ` [Patokan: ${patokan}]`;
+                }
+            }
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+
+            window.showModalInfo(
+                "Titik Lokasi Berhasil Dikunci! 📍",
+                `Koordinat industri <b>${targetIndustriNama}</b> telah resmi dikunci di titik:<br><br>
+                • <b>Latitude</b>: ${window.liveGpsDudiTemp.lat.toFixed(6)}<br>
+                • <b>Longitude</b>: ${window.liveGpsDudiTemp.lng.toFixed(6)}<br>
+                • <b>Radius Geofence</b>: 50 Meter<br>
+                • <b>Petugas Pengunci</b>: ${profile.nama}<br><br>
+                Data langsung tersimpan di Cloud Supabase dan seluruh siswa yang ditempatkan di DUDI ini kini bisa langsung melakukan presensi tepat di lokasi magang!`
+            );
+
+            window.openFeature("tag-lokasi-dudi", "Koleksi Titik GPS DUDI");
         };
 
         window.liveCameraStream = null;
@@ -4711,16 +5052,54 @@
         };
 
         window.renderLaporanAkhir = function() {
-            const list = window.cloudState.laporanAkhir || [];
+            const role = window.cloudState.activeRole || "siswa";
+            const profile = window.cloudState.userProfile || { nama: "Pengguna" };
+            const allLaporan = window.cloudState.laporanAkhir || [];
+
+            let filteredList = allLaporan;
+            let subTitleDesc = "";
+            let actionHeaderBtn = "";
+
+            if (role === 'siswa') {
+                filteredList = allLaporan.filter(l => l.siswa === profile.nama);
+                subTitleDesc = "Kirim tautan Google Drive laporan akhir PKL Anda langsung ke guru pembimbing jurusan.";
+                actionHeaderBtn = `<button onclick="window.bukaModalKirimLaporanAkhir()" class="btn-action btn-blue" style="padding:9px 16px; font-size:12px; font-weight:800;">+ Kirim Laporan Akhir (G-Drive)</button>`;
+            } else if (role === 'guru') {
+                filteredList = allLaporan.filter(l => window.isGuruMatch(l.guru_tujuan, profile.nama));
+                subTitleDesc = `Daftar laporan akhir siswa yang ditujukan kepada Anda (${profile.nama}) untuk diperiksa dan disahkan.`;
+            } else {
+                subTitleDesc = "Monitoring karya tulis dan pengesahan laporan akhir seluruh siswa dari semua jurusan.";
+            }
+
             let rows = "";
-            list.forEach((lap, idx) => {
+            filteredList.forEach((lap, idx) => {
+                const originalIdx = allLaporan.indexOf(lap);
+                const gDriveLink = lap.link_gdrive || lap.file_url || "#";
+                const statusBadge = lap.status === 'Disetujui' ? 'badge-green' : (lap.status === 'Perlu Revisi' ? 'badge-red' : 'badge-amber');
+
                 rows += `<tr>
                     <td>${idx + 1}</td>
-                    <td><b>${lap.siswa}</b></td>
-                    <td><b>${lap.judul}</b></td>
-                    <td>${lap.tanggal}</td>
-                    <td><span class="badge-status badge-blue">${lap.status || 'Menunggu'}</span></td>
-                    <td><a href="${lap.file_url}" target="_blank" class="btn-action btn-blue" style="text-decoration:none;">Buka Laporan</a></td>
+                    <td>
+                        <b>${lap.siswa}</b>
+                        <div style="font-size:10px; color:#64748b;">${lap.jurusan || 'Jurusan Siswa'}</div>
+                    </td>
+                    <td style="white-space:normal; min-width:160px;">
+                        <b>${lap.judul}</b>
+                        <div style="font-size:10.5px; color:#0284c7; margin-top:2px;">Kepada: <b>${lap.guru_tujuan || '-'}</b></div>
+                        ${lap.catatan_guru ? `<div style="font-size:10px; color:#b91c1c; background:#fee2e2; padding:3px 6px; border-radius:6px; margin-top:4px;">💬 Catatan: ${lap.catatan_guru}</div>` : ''}
+                    </td>
+                    <td>${lap.tanggal || '-'}</td>
+                    <td><span class="badge-status ${statusBadge}">${lap.status || 'Menunggu'}</span></td>
+                    <td style="display:flex; gap:6px; align-items:center;">
+                        <a href="${gDriveLink}" target="_blank" rel="noopener noreferrer" class="btn-action btn-blue" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px; padding:6px 10px; font-size:11px;">
+                            📁 Buka G-Drive
+                        </a>
+                        ${(role === 'guru' || role === 'admin') ? `
+                            <button onclick="window.bukaModalValidasiLaporanGuru(${originalIdx})" class="btn-action btn-emerald" style="padding:6px 10px; font-size:11px;">
+                                ✓ Validasi
+                            </button>
+                        ` : ''}
+                    </td>
                 </tr>`;
             });
 
@@ -4728,30 +5107,242 @@
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
-                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MONITORING KARYA TULIS PKL</div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MONITORING & PENGESAHAN KARYA TULIS PKL</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📄 Pantau Laporan Akhir PKL</h3>
-                        <p style="font-size:11px; color:#64748b;">Daftar pengajuan laporan akhir PKL yang diunggah siswa.</p>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">${subTitleDesc}</p>
                     </div>
+                    ${actionHeaderBtn}
                 </div>
 
                 <div class="table-wrap">
                     <table>
                         <thead>
                             <tr>
-                                <th>No</th>
-                                <th>Nama Siswa</th>
-                                <th>Judul Laporan</th>
+                                <th style="width:36px;">No</th>
+                                <th>Nama Siswa & Jurusan</th>
+                                <th>Judul Laporan & Guru Tujuan</th>
                                 <th>Tanggal</th>
                                 <th>Status</th>
-                                <th>Aksi</th>
+                                <th style="width:170px;">Tautan & Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada laporan akhir yang diunggah siswa</td></tr>'}
+                            ${rows || `<tr><td colspan="6" class="empty-placeholder">${role === 'siswa' ? 'Anda belum mengirimkan tautan laporan akhir PKL. Klik tombol "+ Kirim Laporan Akhir (G-Drive)" di atas.' : 'Belum ada berkas laporan akhir yang masuk.'}</td></tr>`}
                         </tbody>
                     </table>
                 </div>
             </div>`;
+        };
+
+        window.updateGuruJurusanSelect = function(jurusanSelected) {
+            const selectGuru = document.getElementById("lapGuruJurusanSelect");
+            if (!selectGuru) return;
+
+            const allGuru = window.cloudState.guru || [];
+            if (allGuru.length === 0) {
+                selectGuru.innerHTML = '<option value="">Belum ada data guru terdaftar</option>';
+                return;
+            }
+
+            const jurClean = (jurusanSelected || "").toLowerCase().trim();
+            // Ambil singkatan di dalam tanda kurung, misal (TJKT) -> tjkt
+            const matchCode = jurClean.match(/\(([^)]+)\)/);
+            const jurCode = matchCode ? matchCode[1].toLowerCase() : "";
+
+            // Filter guru yang bidang atau mapel-nya cocok dengan jurusan yang dipilih
+            let matchingGuru = allGuru.filter(g => {
+                const mapel = (g.mapel || "").toLowerCase();
+                if (!mapel) return false;
+                if (mapel.includes(jurClean)) return true;
+                if (jurCode && mapel.includes(jurCode)) return true;
+                return false;
+            });
+
+            // Jika tidak ada guru yang cocok secara spesifik, tampilkan seluruh guru sebagai opsi
+            if (matchingGuru.length === 0) {
+                matchingGuru = allGuru;
+            }
+
+            let optsHtml = "";
+            matchingGuru.forEach(g => {
+                optsHtml += `<option value="${g.nama}">${g.nama} (${g.mapel || 'Guru Pembimbing'})</option>`;
+            });
+
+            selectGuru.innerHTML = optsHtml;
+        };
+
+        window.bukaModalKirimLaporanAkhir = function() {
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const siswaData = (window.cloudState.siswa || []).find(s => s.nama.toLowerCase().trim() === profile.nama.toLowerCase().trim());
+            const defKelas = siswaData ? siswaData.kelas : DAFTAR_JURUSAN_SMKN1[0];
+
+            let jurOptions = "";
+            DAFTAR_JURUSAN_SMKN1.forEach(j => {
+                jurOptions += `<option value="${j}" ${j === defKelas ? 'selected' : ''}>${j}</option>`;
+            });
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">📄 Kirim Laporan Akhir PKL (Google Drive)</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:14px;">Unggah naskah laporan Anda ke Google Drive lalu cantumkan tautan berbagi di bawah ini.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Nama Siswa Pengirim:</label>
+                    <input type="text" class="form-control" value="${profile.nama}" readonly style="background:#f1f5f9; font-weight:800; color:#0f172a;">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Pilih Konsentrasi Keahlian / Jurusan:</label>
+                    <select id="lapJurusanSelect" class="form-control" style="font-weight:750; color:#0369a1;" onchange="window.updateGuruJurusanSelect(this.value)">
+                        ${jurOptions}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Pilih Guru Pembimbing Jurusan:</label>
+                    <select id="lapGuruJurusanSelect" class="form-control" style="font-weight:750; color:#0284c7;">
+                        <!-- Otomatis disaring berdasarkan jurusan -->
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Judul Lengkap Laporan Akhir:</label>
+                    <input type="text" id="lapJudulInput" class="form-control" placeholder="Contoh: Laporan Praktik Kerja Lapangan di PT. Telkom Marisa">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Tautan / Link Google Drive Berkas Laporan (PDF / DOC):</label>
+                    <input type="url" id="lapLinkGdriveInput" class="form-control" placeholder="https://drive.google.com/file/d/... atau https://drive.google.com/drive/folders/..." required>
+                    <div style="font-size:10px; color:#475569; margin-top:4px; line-height:1.4;">
+                        ℹ️ <b>Penting:</b> Pastikan akses link di Google Drive disetel ke <i>"Siapa saja yang memiliki link (Anyone with the link can view)"</i> agar Bapak/Ibu Guru dapat membaca laporan Anda.
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Unggah Berkas Tambahan / Backup (Opsional):</label>
+                    <input type="file" id="lapFileBackupInput" class="form-control" accept=".pdf, .doc, .docx" onchange="window.handlePreviewLaporanFile(this)">
+                    <div id="lapBackupFileName" style="font-size:10.5px; color:#10b981; font-weight:750; margin-top:3px;"></div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanKirimLaporanAkhirSiswa()" class="btn-action btn-blue" style="font-weight:900; padding:10px 18px;">
+                        🚀 Kirim Laporan ke Guru Jurusan
+                    </button>
+                </div>
+            `);
+
+            // Panggil sekali untuk mengisi daftar guru berdasarkan jurusan default
+            setTimeout(() => {
+                window.updateGuruJurusanSelect(defKelas);
+            }, 50);
+        };
+
+        window.tempBackupLaporanFileName = null;
+        window.handlePreviewLaporanFile = function(inputEl) {
+            if (inputEl.files && inputEl.files[0]) {
+                const f = inputEl.files[0];
+                window.tempBackupLaporanFileName = f.name;
+                const txt = document.getElementById("lapBackupFileName");
+                if (txt) txt.innerText = `✓ Berkas terlampir: ${f.name} (${Math.round(f.size / 1024)} KB)`;
+            }
+        };
+
+        window.simpanKirimLaporanAkhirSiswa = function() {
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const jurusan = document.getElementById("lapJurusanSelect")?.value;
+            const guruTujuan = document.getElementById("lapGuruJurusanSelect")?.value;
+            const judul = document.getElementById("lapJudulInput")?.value.trim();
+            const linkGdrive = document.getElementById("lapLinkGdriveInput")?.value.trim();
+
+            if (!judul) return window.showModalInfo("Judul Kosong", "Silakan masukkan judul laporan akhir PKL Anda!");
+            if (!guruTujuan) return window.showModalInfo("Pilih Guru", "Silakan pilih guru pembimbing jurusan yang dituju!");
+            if (!linkGdrive) return window.showModalInfo("Tautan Kosong", "Silakan masukkan link Google Drive laporan Anda!");
+
+            if (!linkGdrive.startsWith("http://") && !linkGdrive.startsWith("https://")) {
+                return window.showModalInfo("Tautan Tidak Valid", "Pastikan tautan diawali dengan <b>https://drive.google.com/...</b>");
+            }
+
+            if (!Array.isArray(window.cloudState.laporanAkhir)) window.cloudState.laporanAkhir = [];
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            const itemLaporan = {
+                id: "lap_" + Date.now(),
+                siswa: profile.nama,
+                user_id: profile.identitas || profile.nama,
+                jurusan: jurusan,
+                guru_tujuan: guruTujuan,
+                judul: judul,
+                link_gdrive: linkGdrive,
+                file_url: linkGdrive,
+                nama_berkas_cadangan: window.tempBackupLaporanFileName || null,
+                tanggal: todayStr,
+                status: "Menunggu Verifikasi",
+                catatan_guru: ""
+            };
+
+            window.cloudState.laporanAkhir.unshift(itemLaporan);
+            window.simpanDatabasePersisten(true);
+
+            window.closeDynamicModal();
+            window.showModalInfo(
+                "Laporan Terkirim 🚀",
+                `Laporan akhir PKL atas nama <b>${profile.nama}</b> berhasil dikirimkan kepada <b>${guruTujuan}</b>.<br><br>Guru pembimbing akan memeriksa berkas di Google Drive Anda dan memberikan pengesahan.`
+            );
+            window.openFeature("laporan", "Pantau Laporan Akhir PKL");
+        };
+
+        window.bukaModalValidasiLaporanGuru = function(originalIdx) {
+            const item = window.cloudState.laporanAkhir[originalIdx];
+            if (!item) return;
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">✓ Validasi Laporan Akhir Siswa</h3>
+                <div style="font-size:11px; color:#64748b; margin-bottom:12px;">Siswa: <b>${item.siswa}</b> (${item.jurusan})</div>
+
+                <div style="background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:14px; padding:12px; margin-bottom:12px;">
+                    <div style="font-size:10px; font-weight:800; color:#64748b;">JUDUL LAPORAN:</div>
+                    <div style="font-size:13px; font-weight:900; color:#0f172a; margin-top:2px;">${item.judul}</div>
+                    <div style="margin-top:8px;">
+                        <a href="${item.link_gdrive || item.file_url}" target="_blank" rel="noopener noreferrer" class="btn-action btn-blue" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px; font-size:11px;">
+                            📁 Buka Berkas di Google Drive ↗
+                        </a>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Keputusan Status Laporan:</label>
+                    <select id="valStatusLaporan" class="form-control" style="font-weight:800; color:#0284c7;">
+                        <option value="Disetujui" ${item.status === 'Disetujui' ? 'selected' : ''}>✅ Disetujui (Laporan Sah & Lengkap)</option>
+                        <option value="Perlu Revisi" ${item.status === 'Perlu Revisi' ? 'selected' : ''}>⚠️ Perlu Revisi (Ada Catatan Koreksi)</option>
+                        <option value="Menunggu Verifikasi" ${item.status === 'Menunggu Verifikasi' ? 'selected' : ''}>⏳ Menunggu Verifikasi</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Catatan / Koreksi Pembimbing:</label>
+                    <textarea id="valCatatanLaporan" class="form-control" style="height:75px;" placeholder="Tuliskan catatan revisi atau instruksi lanjutan untuk siswa...">${item.catatan_guru || ''}</textarea>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanValidasiLaporanGuru(${originalIdx})" class="btn-action btn-emerald" style="font-weight:900;">💾 Simpan Keputusan</button>
+                </div>
+            `);
+        };
+
+        window.simpanValidasiLaporanGuru = function(originalIdx) {
+            const status = document.getElementById("valStatusLaporan")?.value;
+            const catatan = document.getElementById("valCatatanLaporan")?.value.trim();
+
+            if (!window.cloudState.laporanAkhir[originalIdx]) return;
+
+            window.cloudState.laporanAkhir[originalIdx].status = status;
+            window.cloudState.laporanAkhir[originalIdx].catatan_guru = catatan;
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Validasi Tersimpan ✅", "Status laporan akhir siswa dan catatan koreksi berhasil diperbarui.");
+            window.openFeature("laporan", "Pantau Laporan Akhir PKL");
         };
 
         window.renderPengaduanMasalah = function() {
