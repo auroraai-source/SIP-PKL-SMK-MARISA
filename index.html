@@ -1300,6 +1300,31 @@
         window.terapkanDataRealtime = function(cloudData) {
             if (!cloudData || typeof cloudData !== 'object') return;
 
+            // Cegah re-render dan pergeseran layar jika data cloud identik dengan data lokal
+            const currentPayloadStr = JSON.stringify(window.getSanitizedCloudPayload());
+            const incomingPayloadStr = JSON.stringify({
+                registeredUsers: cloudData.registeredUsers || [],
+                siswa: cloudData.siswa || [],
+                guru: cloudData.guru || [],
+                industri: cloudData.industri || [],
+                penempatan: cloudData.penempatan || [],
+                penugasanMonitoring: cloudData.penugasanMonitoring || [],
+                absensi: cloudData.absensi || [],
+                jurnal: cloudData.jurnal || [],
+                dokumen: cloudData.dokumen || [],
+                nilai: cloudData.nilai || [],
+                agendaKunjungan: cloudData.agendaKunjungan || [],
+                laporanAkhir: cloudData.laporanAkhir || [],
+                pengaduan: cloudData.pengaduan || [],
+                bannerSliderImages: cloudData.bannerSliderImages || DEFAULT_BANNER_IMAGES,
+                pklConfig: cloudData.pklConfig || DEFAULT_PKL_CONFIG,
+                jamConfig: cloudData.jamConfig || { masuk: "08:00", pulang: "16:00", toleransi: 15 }
+            });
+
+            if (currentPayloadStr === incomingPayloadStr) {
+                return; // Data sama persis, hentikan eksekusi agar layar tidak berkedip atau bergeser!
+            }
+
             // KUNCI UTAMA: Simpan dan amankan sesi login serta role milik HP ini!
             const myUser = window.cloudState.userProfile;
             const myRole = window.cloudState.activeRole;
@@ -1333,15 +1358,16 @@
                 localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(window.getSanitizedCloudPayload())); 
             } catch(e) {}
 
-            // Update UI secara halus tanpa me-reset peran atau mengganggu input form
+            // Update UI secara halus tanpa me-reset peran atau menggeser layar saat pengguna berinteraksi
             const activeEl = document.activeElement;
             const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
             const isModalOpen = (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex');
 
             if (!isTyping && !isModalOpen && window.cloudState.userProfile && window.cloudState.currentFeature) {
-                const scrollY = window.scrollY;
+                const scrollX = window.scrollX || window.pageXOffset || 0;
+                const scrollY = window.scrollY || window.pageYOffset || 0;
                 window.openFeature(window.cloudState.currentFeature, undefined, true);
-                window.scrollTo({ top: scrollY, behavior: 'instant' });
+                window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
             }
         };
 
@@ -2325,8 +2351,16 @@
             window.openFeature("kelola-akun", "Buat Akun & Kredensial");
         };
 
+        const roleConfigMeta = {
+            siswa: { label: "Siswa", namaKolomId: "NIS Siswa", fileSuffix: "Siswa", defaultPass: "siswa123" },
+            guru: { label: "Guru", namaKolomId: "NIP Guru", fileSuffix: "Guru", defaultPass: "guru123" },
+            industri: { label: "Industri (DUDI)", namaKolomId: "ID/Username Mitra", fileSuffix: "Industri_DUDI", defaultPass: "dudi123" },
+            admin: { label: "Admin / Panitia", namaKolomId: "Username Panitia", fileSuffix: "Admin_Panitia", defaultPass: "admin123" }
+        };
+
         window.renderKelolaAkunPengguna = function() {
             const tab = window.activeCredentialTab || "siswa";
+            const meta = roleConfigMeta[tab] || roleConfigMeta.siswa;
             const users = (window.cloudState.registeredUsers || []).filter(u => u.role === tab);
 
             let rows = "";
@@ -2350,12 +2384,12 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MANAJEMEN KREDENSIAL LOGIN MANDIRI</div>
-                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🔑 Buat Akun & Kredensial</h3>
-                        <p style="font-size:11px; color:#64748b;">Database akun berdiri sendiri dan terpisah dari master data siswa/guru/industri.</p>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🔑 Akun & Kredensial: ${meta.label}</h3>
+                        <p style="font-size:11px; color:#64748b;">Template dan impor Excel dipisah per kategori peran agar database tertata rapi.</p>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                        <button onclick="window.unduhTemplateExcelAkun()" class="btn-action btn-emerald">📄 Template Akun</button>
-                        <button onclick="window.bukaModalUploadExcelAkun()" class="btn-action btn-blue">📥 Impor Excel Akun</button>
+                        <button onclick="window.unduhTemplateExcelAkunPeran('${tab}')" class="btn-action btn-emerald">📄 Template Akun ${meta.label}</button>
+                        <button onclick="window.bukaModalUploadExcelAkunPeran('${tab}')" class="btn-action btn-blue">📥 Impor Excel ${meta.label}</button>
                         <button onclick="window.bukaModalTambahKredensial('${tab}')" class="btn-action btn-blue">+ Tambah Akun</button>
                         <button onclick="window.hapusMasalAkun()" class="btn-action btn-red">🗑️ Hapus</button>
                     </div>
@@ -2375,51 +2409,75 @@
                                 <th style="width:36px;"><input type="checkbox" onchange="window.toggleAllCheckboxes('akun', this.checked)"></th>
                                 <th style="width:40px;">No</th>
                                 <th>Nama Lengkap</th>
-                                <th>Username</th>
-                                <th>Password</th>
+                                <th>Username / ${meta.namaKolomId}</th>
+                                <th>Kata Sandi</th>
                                 <th style="width:110px;">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada akun terdaftar untuk kategori ini (Silakan impor atau tambah akun)</td></tr>'}
+                            ${rows || `<tr><td colspan="6" class="empty-placeholder">Belum ada akun ${meta.label} terdaftar (Silakan unduh template & impor Excel akun ${meta.label})</td></tr>`}
                         </tbody>
                     </table>
                 </div>
             </div>`;
         };
 
-        window.unduhTemplateExcelAkun = function() {
+        window.unduhTemplateExcelAkunPeran = function(role) {
             if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
-            const data = [
-                ["Nama Lengkap", "Username", "Password", "Peran"],
-                ["Ahmad Dani", "1001", "siswa123", "siswa"],
-                ["Wilasia S. Talaa, S.ST", "198501012010012001", "guru123", "guru"],
-                ["PT. Telkom Marisa", "telkom_marisa", "dudi123", "industri"]
-            ];
+            const meta = roleConfigMeta[role] || roleConfigMeta.siswa;
+            let data = [];
+
+            if (role === 'siswa') {
+                data = [
+                    ["Nama Siswa", "NIS / Username", "Password"],
+                    ["Ahmad Dani", "1001", "siswa123"],
+                    ["Nurul Hidayah", "1002", "siswa123"]
+                ];
+            } else if (role === 'guru') {
+                data = [
+                    ["Nama Guru & Gelar", "NIP / Username", "Password"],
+                    ["Wilasia S. Talaa, S.ST", "198501012010012001", "guru123"]
+                ];
+            } else if (role === 'industri') {
+                data = [
+                    ["Nama Perusahaan / DUDI", "Username Mitra", "Password"],
+                    ["PT. Telkom Marisa", "telkom_marisa", "dudi123"]
+                ];
+            } else if (role === 'admin') {
+                data = [
+                    ["Nama Lengkap Panitia", "Username Admin", "Password"],
+                    ["Panitia PKL 2026", "Panitia PKL", "SMKBisa2000"]
+                ];
+            }
+
             const ws = XLSX.utils.aoa_to_sheet(data);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Master Akun");
-            XLSX.writeFile(wb, "Template_Master_Akun_Kredensial_SMKN1.xlsx");
+            XLSX.utils.book_append_sheet(wb, ws, `Akun ${meta.label}`);
+            XLSX.writeFile(wb, `Template_Akun_${meta.fileSuffix}_SMKN1_Marisa.xlsx`);
         };
 
-        window.bukaModalUploadExcelAkun = function() {
+        window.bukaModalUploadExcelAkunPeran = function(role) {
+            const meta = roleConfigMeta[role] || roleConfigMeta.siswa;
             window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:8px;">📥 Impor Berkas Excel Akun & Kredensial</h3>
-                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Format kolom: <b>Nama Lengkap, Username, Password, Peran</b> (siswa/guru/industri/admin).</p>
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:8px;">📥 Impor Excel Akun: ${meta.label}</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">
+                    Berkas ini khusus didaftarkan untuk peran <b>${meta.label.toUpperCase()}</b>. Format kolom: <b>Nama, Username (${meta.namaKolomId}), Password</b>.
+                </p>
                 <div class="form-group">
-                    <input type="file" id="fileExcelAkunInput" class="form-control" accept=".xlsx, .xls">
+                    <input type="file" id="fileExcelAkunRoleInput" class="form-control" accept=".xlsx, .xls">
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
                     <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.prosesFileExcelUploadAkun()" class="btn-action btn-blue">Unggah & Simpan Akun</button>
+                    <button onclick="window.prosesFileExcelUploadAkunPeran('${role}')" class="btn-action btn-blue">Unggah & Simpan Akun ${meta.label}</button>
                 </div>
             `);
         };
 
-        window.prosesFileExcelUploadAkun = function() {
-            const fileInput = document.getElementById("fileExcelAkunInput");
+        window.prosesFileExcelUploadAkunPeran = function(targetRole) {
+            const fileInput = document.getElementById("fileExcelAkunRoleInput");
             if (!fileInput || !fileInput.files[0]) return window.showModalInfo("Pilih Berkas", "Silakan pilih berkas Excel kredensial terlebih dahulu!");
 
+            const meta = roleConfigMeta[targetRole] || roleConfigMeta.siswa;
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
@@ -2434,26 +2492,25 @@
                     let updatedCount = 0;
 
                     json.forEach(row => {
-                        const nama = (row['Nama Lengkap'] || row['nama'] || row['Nama'] || row['NAMA'] || '').toString().trim();
-                        const username = (row['Username'] || row['username'] || row['USERNAME'] || row['NIS'] || row['NIP'] || '').toString().trim();
-                        const pass = (row['Password'] || row['pass'] || row['Kata Sandi'] || '123456').toString().trim();
-                        let role = (row['Peran'] || row['role'] || row['PERAN'] || row['Role'] || 'siswa').toString().trim().toLowerCase();
+                        const nama = (row['Nama Siswa'] || row['Nama Guru & Gelar'] || row['Nama Perusahaan / DUDI'] || row['Nama Lengkap Panitia'] || row['Nama Lengkap'] || row['nama'] || row['Nama'] || row['NAMA'] || '').toString().trim();
+                        const username = (row['NIS / Username'] || row['NIP / Username'] || row['Username Mitra'] || row['Username Admin'] || row['Username'] || row['username'] || row['USERNAME'] || row['NIS'] || row['NIP'] || '').toString().trim();
+                        const pass = (row['Password'] || row['pass'] || row['Kata Sandi'] || meta.defaultPass).toString().trim();
 
                         if (!username || !nama) return;
-                        if (!['siswa', 'guru', 'industri', 'admin'].includes(role)) {
-                            role = 'siswa';
-                        }
 
-                        const existingIdx = window.cloudState.registeredUsers.findIndex(u => u.username.toLowerCase() === username.toLowerCase());
+                        const existingIdx = window.cloudState.registeredUsers.findIndex(u => 
+                            u.username.toLowerCase() === username.toLowerCase() && u.role === targetRole
+                        );
+
                         if (existingIdx !== -1) {
                             window.cloudState.registeredUsers[existingIdx].nama = nama;
                             window.cloudState.registeredUsers[existingIdx].pass = pass;
-                            window.cloudState.registeredUsers[existingIdx].role = role;
+                            window.cloudState.registeredUsers[existingIdx].role = targetRole;
                             window.cloudState.registeredUsers[existingIdx].identitas = username;
                             updatedCount++;
                         } else {
                             window.cloudState.registeredUsers.push({
-                                role: role,
+                                role: targetRole,
                                 nama: nama,
                                 username: username,
                                 pass: pass,
@@ -2466,8 +2523,8 @@
                     window.simpanDatabasePersisten(true);
                     window.closeDynamicModal();
                     window.showModalInfo(
-                        "Impor Kredensial Berhasil 🔑",
-                        `• <b>${addedCount} Akun Baru</b> ditambahkan.<br>• <b>${updatedCount} Akun Lama</b> diperbarui tanpa duplikasi!`
+                        `Impor Akun ${meta.label} Berhasil 🔑`,
+                        `• <b>${addedCount} Akun ${meta.label} Baru</b> ditambahkan.<br>• <b>${updatedCount} Akun Lama</b> diperbarui tanpa duplikasi dan database tetap terisolasi.`
                     );
                     window.openFeature("kelola-akun", "Buat Akun & Kredensial");
                 } catch(err) {
@@ -2475,6 +2532,102 @@
                 }
             };
             reader.readAsArrayBuffer(fileInput.files[0]);
+        };
+
+        window.bukaModalTambahKredensial = function(role) {
+            const meta = roleConfigMeta[role] || roleConfigMeta.siswa;
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">🔑 Tambah Akun Manual: ${meta.label}</h3>
+                <div class="form-group">
+                    <label class="form-label">Nama Lengkap:</label>
+                    <input type="text" id="addAkunNama" class="form-control" placeholder="Nama pemilik akun">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Username / ${meta.namaKolomId}:</label>
+                    <input type="text" id="addAkunUsername" class="form-control" placeholder="Masukkan username resmi">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kata Sandi (Password):</label>
+                    <input type="text" id="addAkunPass" class="form-control" value="${meta.defaultPass}">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanKredensialManual('${role}')" class="btn-action btn-blue">💾 Simpan Akun</button>
+                </div>
+            `);
+        };
+
+        window.simpanKredensialManual = function(role) {
+            const nama = document.getElementById("addAkunNama")?.value.trim();
+            const username = document.getElementById("addAkunUsername")?.value.trim();
+            const pass = document.getElementById("addAkunPass")?.value.trim();
+
+            if (!nama || !username || !pass) return window.showModalInfo("Lengkapi Data", "Semua kolom wajib diisi!");
+
+            const existing = window.cloudState.registeredUsers.find(u => u.username.toLowerCase() === username.toLowerCase() && u.role === role);
+            if (existing) return window.showModalInfo("Username Sudah Digunakan", `Username <b>${username}</b> sudah terdaftar untuk peran ini.`);
+
+            window.cloudState.registeredUsers.push({
+                role: role,
+                nama: nama,
+                username: username,
+                pass: pass,
+                identitas: username
+            });
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.openFeature("kelola-akun", "Buat Akun & Kredensial");
+        };
+
+        window.bukaModalEditKredensial = function(idx) {
+            const user = window.cloudState.registeredUsers[idx];
+            if (!user) return;
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">✏️ Edit Akun Kredensial</h3>
+                <div class="form-group">
+                    <label class="form-label">Nama Lengkap:</label>
+                    <input type="text" id="editAkunNama" class="form-control" value="${user.nama}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Username (ID):</label>
+                    <input type="text" id="editAkunUsername" class="form-control" value="${user.username}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kata Sandi (Password):</label>
+                    <input type="text" id="editAkunPass" class="form-control" value="${user.pass}">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanEditKredensial(${idx})" class="btn-action btn-blue">💾 Update Akun</button>
+                </div>
+            `);
+        };
+
+        window.simpanEditKredensial = function(idx) {
+            const nama = document.getElementById("editAkunNama")?.value.trim();
+            const username = document.getElementById("editAkunUsername")?.value.trim();
+            const pass = document.getElementById("editAkunPass")?.value.trim();
+
+            if (!nama || !username || !pass) return window.showModalInfo("Lengkapi Data", "Semua kolom wajib diisi!");
+
+            window.cloudState.registeredUsers[idx].nama = nama;
+            window.cloudState.registeredUsers[idx].username = username;
+            window.cloudState.registeredUsers[idx].pass = pass;
+            window.cloudState.registeredUsers[idx].identitas = username;
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.openFeature("kelola-akun", "Buat Akun & Kredensial");
+        };
+
+        window.konfirmasiHapusKredensial = function(idx) {
+            const user = window.cloudState.registeredUsers[idx];
+            window.showConfirmDialog("Hapus Akun", `Hapus akun <b>${user.nama}</b> (${user.username})?`, () => {
+                window.cloudState.registeredUsers.splice(idx, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("kelola-akun", "Buat Akun & Kredensial");
+            });
         };
 
         window.hapusMasalAkun = function() {
