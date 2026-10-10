@@ -2333,6 +2333,7 @@
             users.forEach((u) => {
                 const originalIdx = (window.cloudState.registeredUsers || []).indexOf(u);
                 rows += `<tr>
+                    <td><input type="checkbox" class="cb-akun" value="${originalIdx}"></td>
                     <td>${originalIdx + 1}</td>
                     <td><b>${u.nama}</b></td>
                     <td><code style="color:#0284c7; font-weight:800;">${u.username}</code></td>
@@ -2348,13 +2349,16 @@
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
-                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MANAJEMEN KREDENSIAL LOGIN</div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MANAJEMEN KREDENSIAL LOGIN MANDIRI</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🔑 Buat Akun & Kredensial</h3>
-                        <p style="font-size:11px; color:#64748b;">Pengaturan akun terpisah rapi dari tabel data master.</p>
+                        <p style="font-size:11px; color:#64748b;">Database akun berdiri sendiri dan terpisah dari master data siswa/guru/industri.</p>
                     </div>
-                    <button onclick="window.bukaModalTambahKredensial('${tab}')" class="btn-action btn-blue" style="padding:8px 14px;">
-                        + Tambah Akun ${tab.toUpperCase()}
-                    </button>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.unduhTemplateExcelAkun()" class="btn-action btn-emerald">📄 Template Akun</button>
+                        <button onclick="window.bukaModalUploadExcelAkun()" class="btn-action btn-blue">📥 Impor Excel Akun</button>
+                        <button onclick="window.bukaModalTambahKredensial('${tab}')" class="btn-action btn-blue">+ Tambah Akun</button>
+                        <button onclick="window.hapusMasalAkun()" class="btn-action btn-red">🗑️ Hapus</button>
+                    </div>
                 </div>
 
                 <div style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1.5px solid #bfdbfe; padding-bottom:8px; overflow-x:auto;">
@@ -2368,6 +2372,7 @@
                     <table>
                         <thead>
                             <tr>
+                                <th style="width:36px;"><input type="checkbox" onchange="window.toggleAllCheckboxes('akun', this.checked)"></th>
                                 <th style="width:40px;">No</th>
                                 <th>Nama Lengkap</th>
                                 <th>Username</th>
@@ -2376,105 +2381,113 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada akun terdaftar untuk kategori ini</td></tr>'}
+                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada akun terdaftar untuk kategori ini (Silakan impor atau tambah akun)</td></tr>'}
                         </tbody>
                     </table>
                 </div>
             </div>`;
         };
 
-        window.bukaModalTambahKredensial = function(role) {
+        window.unduhTemplateExcelAkun = function() {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+            const data = [
+                ["Nama Lengkap", "Username", "Password", "Peran"],
+                ["Ahmad Dani", "1001", "siswa123", "siswa"],
+                ["Wilasia S. Talaa, S.ST", "198501012010012001", "guru123", "guru"],
+                ["PT. Telkom Marisa", "telkom_marisa", "dudi123", "industri"]
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Master Akun");
+            XLSX.writeFile(wb, "Template_Master_Akun_Kredensial_SMKN1.xlsx");
+        };
+
+        window.bukaModalUploadExcelAkun = function() {
             window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">🔑 Tambah Akun ${role.toUpperCase()} Baru</h3>
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:8px;">📥 Impor Berkas Excel Akun & Kredensial</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Format kolom: <b>Nama Lengkap, Username, Password, Peran</b> (siswa/guru/industri/admin).</p>
                 <div class="form-group">
-                    <label class="form-label">Nama Lengkap Pengguna:</label>
-                    <input type="text" id="addAccNama" class="form-control" placeholder="Nama lengkap pengguna">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Username:</label>
-                    <input type="text" id="addAccUsername" class="form-control" placeholder="Contoh: NIS / NIP / ID Perusahaan">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Kata Sandi (Password):</label>
-                    <input type="text" id="addAccPass" class="form-control" value="${role}123">
+                    <input type="file" id="fileExcelAkunInput" class="form-control" accept=".xlsx, .xls">
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
                     <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanKredensialManual('${role}')" class="btn-action btn-blue">💾 Simpan Akun</button>
+                    <button onclick="window.prosesFileExcelUploadAkun()" class="btn-action btn-blue">Unggah & Simpan Akun</button>
                 </div>
             `);
         };
 
-        window.simpanKredensialManual = function(role) {
-            const nama = document.getElementById("addAccNama")?.value.trim();
-            const username = document.getElementById("addAccUsername")?.value.trim();
-            const pass = document.getElementById("addAccPass")?.value.trim();
+        window.prosesFileExcelUploadAkun = function() {
+            const fileInput = document.getElementById("fileExcelAkunInput");
+            if (!fileInput || !fileInput.files[0]) return window.showModalInfo("Pilih Berkas", "Silakan pilih berkas Excel kredensial terlebih dahulu!");
 
-            if (!nama || !username || !pass) return window.showModalInfo("Lengkapi Data", "Semua kolom akun wajib diisi!");
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(sheet);
 
-            if (window.cloudState.registeredUsers.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-                return window.showModalInfo("Username Duplikat", "Username tersebut sudah terdaftar di sistem!");
-            }
+                    if (json.length === 0) return window.showModalInfo("Berkas Kosong", "Data akun pada Excel tidak ditemukan!");
 
-            window.cloudState.registeredUsers.unshift({
-                role: role,
-                nama: nama,
-                username: username,
-                pass: pass,
-                identitas: username
-            });
+                    let addedCount = 0;
+                    let updatedCount = 0;
 
-            window.simpanDatabasePersisten(true);
-            window.closeDynamicModal();
-            window.openFeature("kelola-akun", "Buat Akun & Kredensial");
-        };
+                    json.forEach(row => {
+                        const nama = (row['Nama Lengkap'] || row['nama'] || row['Nama'] || row['NAMA'] || '').toString().trim();
+                        const username = (row['Username'] || row['username'] || row['USERNAME'] || row['NIS'] || row['NIP'] || '').toString().trim();
+                        const pass = (row['Password'] || row['pass'] || row['Kata Sandi'] || '123456').toString().trim();
+                        let role = (row['Peran'] || row['role'] || row['PERAN'] || row['Role'] || 'siswa').toString().trim().toLowerCase();
 
-        window.bukaModalEditKredensial = function(idx) {
-            const u = window.cloudState.registeredUsers[idx];
-            window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">✏️ Edit Kredensial Akun</h3>
-                <div class="form-group">
-                    <label class="form-label">Nama Lengkap:</label>
-                    <input type="text" id="editAccNama" class="form-control" value="${u.nama}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Username:</label>
-                    <input type="text" id="editAccUsername" class="form-control" value="${u.username}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Kata Sandi (Password):</label>
-                    <input type="text" id="editAccPass" class="form-control" value="${u.pass}">
-                </div>
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanEditKredensial(${idx})" class="btn-action btn-blue">💾 Update Akun</button>
-                </div>
-            `);
-        };
+                        if (!username || !nama) return;
+                        if (!['siswa', 'guru', 'industri', 'admin'].includes(role)) {
+                            role = 'siswa';
+                        }
 
-        window.simpanEditKredensial = function(idx) {
-            const nama = document.getElementById("editAccNama")?.value.trim();
-            const username = document.getElementById("editAccUsername")?.value.trim();
-            const pass = document.getElementById("editAccPass")?.value.trim();
+                        const existingIdx = window.cloudState.registeredUsers.findIndex(u => u.username.toLowerCase() === username.toLowerCase());
+                        if (existingIdx !== -1) {
+                            window.cloudState.registeredUsers[existingIdx].nama = nama;
+                            window.cloudState.registeredUsers[existingIdx].pass = pass;
+                            window.cloudState.registeredUsers[existingIdx].role = role;
+                            window.cloudState.registeredUsers[existingIdx].identitas = username;
+                            updatedCount++;
+                        } else {
+                            window.cloudState.registeredUsers.push({
+                                role: role,
+                                nama: nama,
+                                username: username,
+                                pass: pass,
+                                identitas: username
+                            });
+                            addedCount++;
+                        }
+                    });
 
-            if (!nama || !username || !pass) return window.showModalInfo("Lengkapi Data", "Semua kolom wajib diisi!");
-
-            window.cloudState.registeredUsers[idx] = {
-                ...window.cloudState.registeredUsers[idx],
-                nama,
-                username,
-                pass,
-                identitas: username
+                    window.simpanDatabasePersisten(true);
+                    window.closeDynamicModal();
+                    window.showModalInfo(
+                        "Impor Kredensial Berhasil 🔑",
+                        `• <b>${addedCount} Akun Baru</b> ditambahkan.<br>• <b>${updatedCount} Akun Lama</b> diperbarui tanpa duplikasi!`
+                    );
+                    window.openFeature("kelola-akun", "Buat Akun & Kredensial");
+                } catch(err) {
+                    window.showModalInfo("Gagal Membaca Berkas", "Terjadi kesalahan saat memproses file Excel: " + err.message);
+                }
             };
-
-            window.simpanDatabasePersisten(true);
-            window.closeDynamicModal();
-            window.openFeature("kelola-akun", "Buat Akun & Kredensial");
+            reader.readAsArrayBuffer(fileInput.files[0]);
         };
 
-        window.konfirmasiHapusKredensial = function(idx) {
-            window.showConfirmDialog("Hapus Akun", `Hapus kredensial login untuk <b>${window.cloudState.registeredUsers[idx].nama}</b>?`, () => {
-                window.cloudState.registeredUsers.splice(idx, 1);
+        window.hapusMasalAkun = function() {
+            const cbs = document.querySelectorAll('.cb-akun:checked');
+            if (cbs.length === 0) return window.showModalInfo("Pilih Akun", "Centang minimal 1 akun yang ingin dihapus!");
+
+            window.showConfirmDialog("Hapus Akun Terpilih", `Yakin ingin menghapus <b>${cbs.length} akun</b> terpilih?`, () => {
+                const indices = Array.from(cbs).map(c => parseInt(c.value)).sort((a,b) => b - a);
+                indices.forEach(idx => {
+                    if (window.cloudState.registeredUsers[idx]?.role !== 'admin') {
+                        window.cloudState.registeredUsers.splice(idx, 1);
+                    }
+                });
                 window.simpanDatabasePersisten(true);
                 window.openFeature("kelola-akun", "Buat Akun & Kredensial");
             });
@@ -2580,25 +2593,14 @@
 
         window.simpanSiswaManual = function() {
             const nama = document.getElementById("addSiswaNama")?.value.trim();
-            const nis = document.getElementById("addSiswaNis")?.value.trim();
+            const nis = document.getElementById("addSiswaNis")?.value.trim() || "-";
             const jk = document.getElementById("addSiswaJk")?.value || "L";
             const kelas = document.getElementById("addSiswaKelas")?.value;
             const noHp = document.getElementById("addSiswaNoHp")?.value.trim() || "-";
 
-            if (!nama || !nis) return window.showModalInfo("Lengkapi Data", "Nama Siswa dan NIS wajib diisi!");
+            if (!nama || !kelas) return window.showModalInfo("Lengkapi Data", "Nama Siswa dan Kelas/Jurusan wajib diisi!");
 
             window.cloudState.siswa.unshift({ nama, nis, jk, kelas, noHp });
-
-            if (!window.cloudState.registeredUsers.some(u => u.username === nis && u.role === 'siswa')) {
-                window.cloudState.registeredUsers.unshift({
-                    role: "siswa",
-                    nama: nama,
-                    username: nis,
-                    pass: "siswa123",
-                    identitas: nis
-                });
-            }
-
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
             window.openFeature("master-siswa", "Data Siswa");
@@ -2751,24 +2753,13 @@
 
         window.simpanGuruManual = function() {
             const nama = document.getElementById("addGuruNama")?.value.trim();
-            const nip = document.getElementById("addGuruNip")?.value.trim();
-            const mapel = document.getElementById("addGuruMapel")?.value.trim() || "Guru Pembimbing";
+            const nip = document.getElementById("addGuruNip")?.value.trim() || "-";
+            const mapel = document.getElementById("addGuruMapel")?.value.trim();
             const noHp = document.getElementById("addGuruNoHp")?.value.trim() || "-";
 
-            if (!nama || !nip) return window.showModalInfo("Lengkapi Data", "Nama Guru dan NIP wajib diisi!");
+            if (!nama || !mapel) return window.showModalInfo("Lengkapi Data", "Nama Guru dan Bidang/Mapel wajib diisi!");
 
             window.cloudState.guru.unshift({ nama, nip, mapel, noHp });
-
-            if (!window.cloudState.registeredUsers.some(u => u.username === nip && u.role === 'guru')) {
-                window.cloudState.registeredUsers.unshift({
-                    role: "guru",
-                    nama: nama,
-                    username: nip,
-                    pass: "guru123",
-                    identitas: nip
-                });
-            }
-
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
             window.openFeature("master-guru", "Data Guru");
@@ -2909,10 +2900,10 @@
         window.simpanIndustriManual = function() {
             const nama = document.getElementById("addIndNama")?.value.trim();
             const alamat = document.getElementById("addIndAlamat")?.value.trim() || "-";
-            const pimpinan = document.getElementById("addIndPimpinan")?.value.trim() || "HRD";
+            const pimpinan = document.getElementById("addIndPimpinan")?.value.trim();
             const noWa = document.getElementById("addIndNoWa")?.value.trim() || "-";
 
-            if (!nama) return window.showModalInfo("Lengkapi Data", "Nama Perusahaan wajib diisi!");
+            if (!nama || !pimpinan) return window.showModalInfo("Lengkapi Data", "Nama Perusahaan dan Pimpinan/HRD wajib diisi!");
 
             window.cloudState.industri.unshift({
                 id: "ind_" + Date.now(),
@@ -2926,17 +2917,6 @@
                 lat: "0.45612",
                 lng: "121.94210"
             });
-
-            const defaultUname = nama.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 14);
-            if (!window.cloudState.registeredUsers.some(u => u.username === defaultUname && u.role === 'industri')) {
-                window.cloudState.registeredUsers.unshift({
-                    role: "industri",
-                    nama: nama,
-                    username: defaultUname,
-                    pass: "dudi123",
-                    identitas: defaultUname
-                });
-            }
 
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
@@ -4500,30 +4480,16 @@
                             const jk = (row['JK'] || row['jk'] || 'L').toString().trim().toUpperCase();
                             const noHp = (row['No HP'] || row['no_hp'] || row['No. HP'] || row['No WhatsApp'] || '-').toString().trim();
 
-                            // Pencocokan cerdas berdasarkan nama (case-insensitive) untuk mencegah data ganda
                             const existingIdx = window.cloudState.siswa.findIndex(s => s.nama.toLowerCase().trim() === nama.toLowerCase());
                             if (existingIdx !== -1) {
-                                // Perbarui kolom data yang ada tanpa menduplikasi baris
                                 if (kelas && kelas !== '-') window.cloudState.siswa[existingIdx].kelas = kelas;
                                 if (nis && nis !== '-') window.cloudState.siswa[existingIdx].nis = nis;
                                 if (jk && jk !== '-') window.cloudState.siswa[existingIdx].jk = jk;
                                 if (noHp && noHp !== '-') window.cloudState.siswa[existingIdx].noHp = noHp;
                                 updatedCount++;
                             } else {
-                                // Tambahkan sebagai siswa baru
                                 window.cloudState.siswa.push({ nama, nis, jk, kelas, noHp });
                                 addedCount++;
-
-                                const uname = (nis !== "-") ? nis : nama.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10);
-                                if (uname && !window.cloudState.registeredUsers.some(u => u.username === uname)) {
-                                    window.cloudState.registeredUsers.push({
-                                        role: "siswa",
-                                        nama: nama,
-                                        username: uname,
-                                        pass: "siswa123",
-                                        identitas: uname
-                                    });
-                                }
                             }
                         });
                         window.openFeature("master-siswa", "Data Siswa");
@@ -4545,17 +4511,6 @@
                             } else {
                                 window.cloudState.guru.push({ nama, nip, mapel, noHp });
                                 addedCount++;
-
-                                const uname = (nip !== "-") ? nip : nama.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10);
-                                if (uname && !window.cloudState.registeredUsers.some(u => u.username === uname)) {
-                                    window.cloudState.registeredUsers.push({
-                                        role: "guru",
-                                        nama: nama,
-                                        username: uname,
-                                        pass: "guru123",
-                                        identitas: uname
-                                    });
-                                }
                             }
                         });
                         window.openFeature("master-guru", "Data Guru");
