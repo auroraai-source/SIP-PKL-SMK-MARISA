@@ -1088,7 +1088,23 @@
             const rawStored = localStorage.getItem(STORAGE_KEY_DB);
             if (rawStored) {
                 const parsed = JSON.parse(rawStored);
+                // Pastikan variabel sesi lokal tidak terkontaminasi dari data tersimpan
+                delete parsed.userProfile;
+                delete parsed.activeRole;
+                delete parsed.currentFeature;
                 Object.assign(window.cloudState, parsed);
+            }
+        } catch(e) {}
+
+        // Pulihkan sesi akun perangkat ini dari STORAGE_KEY_SESSION mandiri
+        try {
+            const rawSession = localStorage.getItem(STORAGE_KEY_SESSION);
+            if (rawSession) {
+                const parsedSession = JSON.parse(rawSession);
+                if (parsedSession && parsedSession.role) {
+                    window.cloudState.userProfile = parsedSession;
+                    window.cloudState.activeRole = parsedSession.role;
+                }
             }
         } catch(e) {}
 
@@ -1115,12 +1131,35 @@
             if (!Array.isArray(window.cloudState.nilai)) window.cloudState.nilai = [];
         };
 
+        // Filter payload murni data bisnis (HAPUS SESI USER dari data yang diunggah ke cloud)
+        window.getSanitizedCloudPayload = function() {
+            return {
+                registeredUsers: window.cloudState.registeredUsers || [],
+                siswa: window.cloudState.siswa || [],
+                guru: window.cloudState.guru || [],
+                industri: window.cloudState.industri || [],
+                penempatan: window.cloudState.penempatan || [],
+                penugasanMonitoring: window.cloudState.penugasanMonitoring || [],
+                absensi: window.cloudState.absensi || [],
+                jurnal: window.cloudState.jurnal || [],
+                dokumen: window.cloudState.dokumen || [],
+                nilai: window.cloudState.nilai || [],
+                agendaKunjungan: window.cloudState.agendaKunjungan || [],
+                laporanAkhir: window.cloudState.laporanAkhir || [],
+                pengaduan: window.cloudState.pengaduan || [],
+                bannerSliderImages: window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES,
+                pklConfig: window.cloudState.pklConfig || DEFAULT_PKL_CONFIG,
+                jamConfig: window.cloudState.jamConfig || { masuk: "08:00", pulang: "16:00", toleransi: 15 }
+            };
+        };
+
         window.simpanDatabasePersisten = function(pushToCloud = true) {
+            const payload = window.getSanitizedCloudPayload();
             try {
-                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(window.cloudState));
+                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(payload));
             } catch(e) {}
             if (pushToCloud && typeof window.kirimSnapshotKeSupabase === 'function') {
-                window.kirimSnapshotKeSupabase(window.cloudState, true);
+                window.kirimSnapshotKeSupabase(payload, true);
             }
         };
 
@@ -1162,15 +1201,16 @@
         window.kirimSnapshotKeSupabase = async function(payload, silent = false) {
             if (!window.supabaseClient) return false;
             try {
+                const cleanData = window.getSanitizedCloudPayload();
                 let ok = false;
                 const resState = await window.supabaseClient
                     .from('app_state')
-                    .upsert({ id: 1, payload: payload }, { onConflict: 'id' });
+                    .upsert({ id: 1, payload: cleanData }, { onConflict: 'id' });
                 if (!resState.error) ok = true;
 
                 const resCloud = await window.supabaseClient
                     .from('app_cloud_db')
-                    .upsert({ id: 'master', payload: payload }, { onConflict: 'id' });
+                    .upsert({ id: 'master', payload: cleanData }, { onConflict: 'id' });
                 if (!resCloud.error) ok = true;
 
                 if (ok) {
@@ -1207,12 +1247,7 @@
                 }
 
                 if (cloudPayload) {
-                    Object.assign(window.cloudState, cloudPayload);
-                    window.sinkronisasiRelasionalEkosistemGlobal();
-                    try { localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cloudPayload)); } catch(e) {}
-                    if (window.cloudState.userProfile && window.cloudState.currentFeature) {
-                        window.openFeature(window.cloudState.currentFeature, undefined, true);
-                    }
+                    window.terapkanDataRealtime(cloudPayload);
                     window.isCloudConnected = true;
                     return true;
                 }
@@ -1263,10 +1298,42 @@
         };
 
         window.terapkanDataRealtime = function(cloudData) {
-            Object.assign(window.cloudState, cloudData);
-            window.sinkronisasiRelasionalEkosistemGlobal();
-            try { localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cloudData)); } catch(e) {}
+            if (!cloudData || typeof cloudData !== 'object') return;
 
+            // KUNCI UTAMA: Simpan dan amankan sesi login serta role milik HP ini!
+            const myUser = window.cloudState.userProfile;
+            const myRole = window.cloudState.activeRole;
+            const myFeature = window.cloudState.currentFeature;
+
+            // Terapkan hanya data master & transaksi (jangan sentuh userProfile / activeRole)
+            if (Array.isArray(cloudData.registeredUsers)) window.cloudState.registeredUsers = cloudData.registeredUsers;
+            if (Array.isArray(cloudData.siswa)) window.cloudState.siswa = cloudData.siswa;
+            if (Array.isArray(cloudData.guru)) window.cloudState.guru = cloudData.guru;
+            if (Array.isArray(cloudData.industri)) window.cloudState.industri = cloudData.industri;
+            if (Array.isArray(cloudData.penempatan)) window.cloudState.penempatan = cloudData.penempatan;
+            if (Array.isArray(cloudData.penugasanMonitoring)) window.cloudState.penugasanMonitoring = cloudData.penugasanMonitoring;
+            if (Array.isArray(cloudData.absensi)) window.cloudState.absensi = cloudData.absensi;
+            if (Array.isArray(cloudData.jurnal)) window.cloudState.jurnal = cloudData.jurnal;
+            if (Array.isArray(cloudData.dokumen)) window.cloudState.dokumen = cloudData.dokumen;
+            if (Array.isArray(cloudData.nilai)) window.cloudState.nilai = cloudData.nilai;
+            if (Array.isArray(cloudData.agendaKunjungan)) window.cloudState.agendaKunjungan = cloudData.agendaKunjungan;
+            if (Array.isArray(cloudData.laporanAkhir)) window.cloudState.laporanAkhir = cloudData.laporanAkhir;
+            if (Array.isArray(cloudData.pengaduan)) window.cloudState.pengaduan = cloudData.pengaduan;
+            if (Array.isArray(cloudData.bannerSliderImages)) window.cloudState.bannerSliderImages = cloudData.bannerSliderImages;
+            if (cloudData.pklConfig) window.cloudState.pklConfig = cloudData.pklConfig;
+            if (cloudData.jamConfig) window.cloudState.jamConfig = cloudData.jamConfig;
+
+            // Kembalikan identitas asli perangkat HP saat ini
+            window.cloudState.userProfile = myUser;
+            window.cloudState.activeRole = myRole;
+            window.cloudState.currentFeature = myFeature;
+
+            window.sinkronisasiRelasionalEkosistemGlobal();
+            try { 
+                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(window.getSanitizedCloudPayload())); 
+            } catch(e) {}
+
+            // Update UI secara halus tanpa me-reset peran atau mengganggu input form
             const activeEl = document.activeElement;
             const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
             const isModalOpen = (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex');
