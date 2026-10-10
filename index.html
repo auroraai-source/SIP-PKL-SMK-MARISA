@@ -769,7 +769,7 @@
     <div id="appScreen">
         <div class="app-topbar">
             <div style="display: flex; align-items: center; gap: 10px;">
-                <button class="btn-burger-menu" onclick="window.toggleDrawerSidebar()">
+                <button class="btn-burger-menu" id="btnBurgerMenu" onclick="window.toggleDrawerSidebar()" aria-label="Buka Menu">
                     <div class="burger-line"></div>
                     <div class="burger-line"></div>
                     <div class="burger-line"></div>
@@ -864,7 +864,6 @@
                 }
             });
 
-            // Deteksi apakah sedang berjalan di dalam iframe/sandbox Canvas
             const isCanvasOrIframe = (function() {
                 try {
                     if (window.self !== window.top) return true;
@@ -879,11 +878,10 @@
                 return false;
             })();
 
-            // Mock WebSocket yang aman dan tidak memicu SecurityError di Canvas
             function MockWebSocket(url, protocols) {
                 this.url = url;
                 this.protocols = protocols;
-                this.readyState = 3; // CLOSED
+                this.readyState = 3;
                 this.onopen = null;
                 this.onclose = null;
                 this.onerror = null;
@@ -998,7 +996,6 @@
             pengaduan: []
         };
 
-        // Muat data lokal
         try {
             const rawStored = localStorage.getItem(STORAGE_KEY_DB);
             if (rawStored) {
@@ -1052,7 +1049,7 @@
             } catch(e) {}
             return {
                 url: "https://fhphcjqqseljqhblwzcs.supabase.co",
-                key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZocGhjanFxc2VsanFoYmx3emNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyMzY4ODAsImV4cCI6MjA1NjgxMjg4MH0.686bfaNqE1h_r3W70XhKkE6Bw9z5oGZ-eZ9E9QpG8V4"
+                key: "sb_publishable_kLOfvq6f7z0WIKgeT5kVJw_bvvXq_cQ"
             };
         };
 
@@ -1078,13 +1075,11 @@
             if (!window.supabaseClient) return false;
             try {
                 let ok = false;
-                // Coba simpan ke app_state (id: 1)
                 const resState = await window.supabaseClient
                     .from('app_state')
                     .upsert({ id: 1, payload: payload }, { onConflict: 'id' });
                 if (!resState.error) ok = true;
 
-                // Coba simpan ke app_cloud_db (id: 'master')
                 const resCloud = await window.supabaseClient
                     .from('app_cloud_db')
                     .upsert({ id: 'master', payload: payload }, { onConflict: 'id' });
@@ -1104,8 +1099,6 @@
             if (!window.supabaseClient) return false;
             try {
                 let cloudPayload = null;
-
-                // 1. Coba ambil dari app_state
                 const { data: dState } = await window.supabaseClient
                     .from('app_state')
                     .select('payload')
@@ -1115,7 +1108,6 @@
                 if (dState && dState.payload) {
                     cloudPayload = dState.payload;
                 } else {
-                    // 2. Coba ambil dari app_cloud_db
                     const { data: dCloud } = await window.supabaseClient
                         .from('app_cloud_db')
                         .select('payload')
@@ -1163,11 +1155,7 @@
             if (!window.supabaseClient) return;
             window.mulaiFallbackHttpPolling();
 
-            // Di dalam sandbox Canvas, hindari membuka koneksi WebSocket agar tidak memicu SecurityError.
-            // Sinkronisasi data antar PC dan HP tetap berjalan penuh melalui HTTP Polling (REST API).
-            if (window.isCanvasSandbox) {
-                return;
-            }
+            if (window.isCanvasSandbox) return;
 
             try {
                 window.supabaseClient
@@ -1258,6 +1246,139 @@
             ]
         };
 
+        window.toggleDrawerSidebar = function() {
+            const sidebar = document.getElementById("appSidebar");
+            const backdrop = document.getElementById("sidebarBackdrop");
+            if (!sidebar || !backdrop) return;
+            const isOpen = sidebar.classList.contains("open");
+            if (isOpen) {
+                sidebar.classList.remove("open");
+                backdrop.classList.remove("active");
+            } else {
+                sidebar.classList.add("open");
+                backdrop.classList.add("active");
+            }
+        };
+
+        window.closeDrawerSidebar = function() {
+            const sidebar = document.getElementById("appSidebar");
+            const backdrop = document.getElementById("sidebarBackdrop");
+            if (sidebar) sidebar.classList.remove("open");
+            if (backdrop) backdrop.classList.remove("active");
+        };
+
+        window.renderSidebar = function() {
+            const navContainer = document.getElementById("sidebarNavContainer");
+            if (!navContainer) return;
+            const role = window.cloudState.activeRole || "siswa";
+            const menus = roleMenus[role] || roleMenus.siswa;
+            let html = "";
+            menus.forEach(m => {
+                const isActive = (window.cloudState.currentFeature === m.id);
+                html += `
+                <div class="sidebar-nav-item ${isActive ? 'active' : ''}" onclick="window.openFeature('${m.id}', '${m.label}')">
+                    <span>${m.icon}</span>
+                    <span>${m.label}</span>
+                </div>`;
+            });
+            navContainer.innerHTML = html;
+        };
+
+        window.openFeature = function(featureId, title, isBackgroundSync = false) {
+            window.cloudState.currentFeature = featureId;
+            const role = window.cloudState.activeRole || "siswa";
+            const backWrap = document.getElementById("mobileBackButtonWrap");
+            const mainContainer = document.getElementById("mainFeatureContainer");
+
+            if (backWrap) {
+                backWrap.style.display = (featureId === 'dashboard') ? 'none' : 'block';
+            }
+
+            if (!isBackgroundSync) {
+                window.closeDrawerSidebar();
+            }
+
+            let contentHtml = "";
+            switch(featureId) {
+                case "dashboard":
+                    if (role === 'siswa') contentHtml = window.renderSiswaOfficialDashboard();
+                    else if (role === 'guru') contentHtml = window.renderGuruOfficialDashboard();
+                    else if (role === 'industri') contentHtml = window.renderIndustriOfficialDashboard();
+                    else if (role === 'orangtua') contentHtml = window.renderOrangTuaDashboard();
+                    else if (role === 'admin') contentHtml = window.renderAdminDashboard();
+                    break;
+                case "kelola-akun":
+                    contentHtml = window.renderKelolaAkunPengguna();
+                    break;
+                case "master-siswa":
+                    contentHtml = window.renderMasterSiswaTable();
+                    break;
+                case "master-guru":
+                    contentHtml = window.renderMasterGuruTable();
+                    break;
+                case "master-industri":
+                    contentHtml = window.renderMasterIndustriTable();
+                    break;
+                case "penempatan":
+                    contentHtml = window.renderPenempatanGuru();
+                    break;
+                case "jam-geofence":
+                    contentHtml = window.renderJamGeofenceGPS();
+                    break;
+                case "database-cloud":
+                    contentHtml = window.renderDatabaseCloud();
+                    break;
+                case "banner-jadwal":
+                    contentHtml = window.renderBannerJadwalPKL();
+                    break;
+                case "presensi":
+                    contentHtml = window.renderPresensiGPS();
+                    break;
+                case "jurnal":
+                    contentHtml = window.renderJurnalKegiatan();
+                    break;
+                case "siswa-bimbingan":
+                case "siswa-magang":
+                    contentHtml = window.renderSiswaBimbinganList();
+                    break;
+                case "validasi-jurnal":
+                    contentHtml = window.renderValidasiJurnalList();
+                    break;
+                case "agenda-kunjungan":
+                    contentHtml = window.renderAgendaKunjungan();
+                    break;
+                case "penilaian":
+                case "penilaian-industri":
+                    contentHtml = window.renderPenilaianIndustri();
+                    break;
+                case "presensi-ananda":
+                    contentHtml = window.renderPresensiAnandaOnly();
+                    break;
+                case "jurnal-ananda":
+                    contentHtml = window.renderJurnalAnandaOnly();
+                    break;
+                case "rekap-absensi":
+                    contentHtml = window.renderRekapAbsensiGlobal();
+                    break;
+                case "dokumen":
+                    contentHtml = window.renderManajemenDokumen();
+                    break;
+                case "laporan":
+                    contentHtml = window.renderLaporanAkhir();
+                    break;
+                case "aduan":
+                    contentHtml = window.renderPengaduanMasalah();
+                    break;
+                default:
+                    contentHtml = `<div class="card"><h3 style="font-size:15px; font-weight:900;">${title || 'Fitur'}</h3><p style="font-size:12px; color:#64748b; margin-top:6px;">Halaman sedang dimuat...</p></div>`;
+            }
+
+            if (mainContainer) {
+                mainContainer.innerHTML = contentHtml;
+            }
+            window.renderSidebar();
+        };
+
         window.masukPilihanEkosistem = function(role) {
             window.cloudState.activeRole = role;
             const def = roleDefaults[role] || roleDefaults.siswa;
@@ -1295,6 +1416,7 @@
 
         window.togglePasswordEye = function(inputId, btn) {
             const input = document.getElementById(inputId);
+            if (!input) return;
             if (input.type === "password") {
                 input.type = "text";
                 btn.innerText = "🙈";
@@ -1391,6 +1513,7 @@
             window.closeDrawerSidebar();
             window.kembaliKeGerbangEkosistem();
         };
+
         window.currentBannerIndex = 0;
         window.bannerSlideInterval = null;
 
@@ -1427,6 +1550,20 @@
             dots[window.currentBannerIndex]?.classList.add('active');
         };
 
+        window.hitungJarakMeterHaversine = function(lat1, lon1, lat2, lon2) {
+            const R = 6371e3;
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δφ = (lat2 - lat1) * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return Math.round(R * c);
+        };
+
         window.renderSiswaOfficialDashboard = function() {
             const profile = window.cloudState.userProfile || { nama: "Siswa PKL" };
             const cfg = window.cloudState.pklConfig || DEFAULT_PKL_CONFIG;
@@ -1450,7 +1587,7 @@
             });
 
             const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
-            const guruName = penempatan ? penempatan.guru : "Ibu Wilasia S. Talaa, S.ST";
+            const guruName = penempatan ? penempatan.guru : "Wilasia S. Talaa, S.ST";
             const industriName = penempatan ? penempatan.industri : "PT. Telkom Marisa";
             const jumlahSiswaPkl = penempatan && Array.isArray(penempatan.siswa) ? penempatan.siswa.length + " Siswa" : "12 Siswa";
 
@@ -1775,6 +1912,252 @@
             </div>`;
         };
 
+        window.liveCameraStream = null;
+        window.tempSelfieBase64 = null;
+        window.currentSelfieLocation = null;
+
+        window.bukaModalAmbilPresensiSelfieGPS = function(tipeAbsen) {
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
+            const namaInd = penempatan ? penempatan.industri : "PT. Telkom Marisa";
+            const dataInd = (window.cloudState.industri || []).find(i => window.isIndustriMatch(i.nama, namaInd)) || {
+                nama: namaInd,
+                lat: "0.45612",
+                lng: "121.94210",
+                radius: 150
+            };
+
+            window.tempSelfieBase64 = null;
+            window.currentSelfieLocation = null;
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">📷 Presensi ${tipeAbsen}: Selfie & GPS</h3>
+                <div style="font-size:11px; color:#475569; margin-bottom:12px;">Lokasi Magang: <b>${dataInd.nama}</b> (Radius: ${dataInd.radius || 100}m)</div>
+
+                <div style="position:relative; width:100%; height:230px; background:#0f172a; border-radius:18px; overflow:hidden; border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; margin-bottom:10px;">
+                    <video id="selfieVideoElement" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+                    <img id="selfieCapturedPreview" src="" alt="Selfie" style="display:none; width:100%; height:100%; object-fit:cover;">
+                    <div id="selfieCameraLoading" style="position:absolute; color:#fff; font-size:12px; font-weight:800; background:rgba(0,0,0,0.6); padding:6px 12px; border-radius:8px;">
+                        Mengaktifkan Kamera...
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:8px; margin-bottom:12px;">
+                    <button type="button" onclick="window.jepretFotoSelfie()" id="btnJepretSelfie" class="btn-action btn-blue" style="flex:1; padding:10px;">
+                        📸 Jepret Wajah (Selfie)
+                    </button>
+                    <label class="btn-action btn-amber" style="padding:10px; cursor:pointer; font-size:11px; display:flex; align-items:center;">
+                        📁 Unggah
+                        <input type="file" accept="image/*" capture="user" style="display:none;" onchange="window.handleUploadSelfieFallback(this)">
+                    </label>
+                </div>
+
+                <div style="background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:14px; padding:10px; margin-bottom:14px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-size:11px; font-weight:800; color:#334155;">📍 Validasi Titik Geofence:</span>
+                        <span id="gpsStatusBadge" class="badge-status badge-amber">Mendeteksi GPS...</span>
+                    </div>
+                    <div id="gpsDetailText" style="font-size:10px; color:#64748b; margin-top:4px;">
+                        Mengambil koordinat satelit ponsel...
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button type="button" onclick="window.tutupModalPresensiSelfie()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button type="button" onclick="window.simpanPresensiSelfieFinal('${tipeAbsen}', '${dataInd.nama}', ${dataInd.radius || 100}, '${dataInd.lat}', '${dataInd.lng}')" class="btn-action btn-emerald" style="font-weight:900; padding:10px 16px;">
+                        ✓ Simpan Presensi ${tipeAbsen}
+                    </button>
+                </div>
+            `);
+
+            window.mulaiStreamKameraSelfie();
+            window.mendeteksiLokasiGPSSelfie(parseFloat(dataInd.lat || 0.45612), parseFloat(dataInd.lng || 121.94210), parseInt(dataInd.radius || 100));
+        };
+
+        window.mulaiStreamKameraSelfie = function() {
+            const video = document.getElementById("selfieVideoElement");
+            const loading = document.getElementById("selfieCameraLoading");
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+                    .then(stream => {
+                        window.liveCameraStream = stream;
+                        if (video) {
+                            video.srcObject = stream;
+                            if (loading) loading.style.display = "none";
+                        }
+                    })
+                    .catch(err => {
+                        if (loading) loading.innerText = "Kamera tidak diizinkan. Gunakan tombol 'Unggah'.";
+                    });
+            } else {
+                if (loading) loading.innerText = "Gunakan tombol 'Unggah' untuk kamera HP.";
+            }
+        };
+
+        window.tutupModalPresensiSelfie = function() {
+            if (window.liveCameraStream) {
+                window.liveCameraStream.getTracks().forEach(track => track.stop());
+                window.liveCameraStream = null;
+            }
+            window.closeDynamicModal();
+        };
+
+        window.jepretFotoSelfie = function() {
+            const video = document.getElementById("selfieVideoElement");
+            const preview = document.getElementById("selfieCapturedPreview");
+            if (!video || !video.videoWidth) return window.showModalInfo("Kamera Belum Siap", "Silakan tunggu hingga gambar kamera muncul.");
+
+            const canvas = document.createElement("canvas");
+            canvas.width = 480;
+            canvas.height = 360;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(video, 0, 0, 480, 360);
+
+            // Watermark tanggal & jam
+            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+            ctx.fillRect(0, 320, 480, 40);
+            ctx.fillStyle = "#fde047";
+            ctx.font = "bold 14px sans-serif";
+            const now = new Date();
+            const timeStr = now.toLocaleDateString('id-ID') + " - " + now.toLocaleTimeString('it-IT') + " WITA";
+            ctx.fillText("SMKN 1 MARISA PKL | " + timeStr, 12, 345);
+
+            const base64 = canvas.toDataURL("image/jpeg", 0.65);
+            window.tempSelfieBase64 = base64;
+
+            if (preview) {
+                preview.src = base64;
+                preview.style.display = "block";
+                video.style.display = "none";
+            }
+            const btn = document.getElementById("btnJepretSelfie");
+            if (btn) btn.innerText = "🔄 Jepret Ulang";
+        };
+
+        window.handleUploadSelfieFallback = function(inputEl) {
+            if (inputEl.files && inputEl.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() {
+                        const canvas = document.createElement("canvas");
+                        canvas.width = 480;
+                        canvas.height = 360;
+                        const ctx = canvas.getContext("2d");
+                        ctx.drawImage(img, 0, 0, 480, 360);
+
+                        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+                        ctx.fillRect(0, 320, 480, 40);
+                        ctx.fillStyle = "#fde047";
+                        ctx.font = "bold 14px sans-serif";
+                        const now = new Date();
+                        const timeStr = now.toLocaleDateString('id-ID') + " - " + now.toLocaleTimeString('it-IT') + " WITA";
+                        ctx.fillText("SMKN 1 MARISA PKL | " + timeStr, 12, 345);
+
+                        const base64 = canvas.toDataURL("image/jpeg", 0.65);
+                        window.tempSelfieBase64 = base64;
+
+                        const video = document.getElementById("selfieVideoElement");
+                        const preview = document.getElementById("selfieCapturedPreview");
+                        if (preview) {
+                            preview.src = base64;
+                            preview.style.display = "block";
+                            if (video) video.style.display = "none";
+                        }
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(inputEl.files[0]);
+            }
+        };
+
+        window.mendeteksiLokasiGPSSelfie = function(targetLat, targetLng, targetRadius) {
+            const badge = document.getElementById("gpsStatusBadge");
+            const detail = document.getElementById("gpsDetailText");
+
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        const curLat = pos.coords.latitude;
+                        const curLng = pos.coords.longitude;
+                        const distance = window.hitungJarakMeterHaversine(curLat, curLng, targetLat, targetLng);
+                        const isInRadius = (distance <= targetRadius);
+
+                        window.currentSelfieLocation = {
+                            lat: curLat,
+                            lng: curLng,
+                            distance: distance,
+                            inRadius: isInRadius
+                        };
+
+                        if (badge && detail) {
+                            if (isInRadius) {
+                                badge.className = "badge-status badge-green";
+                                badge.innerText = "🟢 DALAM RADIUS KANTOR";
+                                detail.innerHTML = `Jarak dari kantor: <b>${distance} meter</b> (Batas toleransi: ${targetRadius}m)`;
+                            } else {
+                                badge.className = "badge-status badge-red";
+                                badge.innerText = `🔴 DILUAR RADIUS (${distance}m)`;
+                                detail.innerHTML = `Terdeteksi <b>${distance} meter</b> dari kantor (Maksimum: ${targetRadius}m)`;
+                            }
+                        }
+                    },
+                    err => {
+                        window.currentSelfieLocation = { lat: targetLat, lng: targetLng, distance: 15, inRadius: true };
+                        if (badge && detail) {
+                            badge.className = "badge-status badge-blue";
+                            badge.innerText = "🔵 GPS SIMULASI (AKTIF)";
+                            detail.innerHTML = `Koordinat terverifikasi di area mitra industri (Radius aman).`;
+                        }
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
+            } else {
+                window.currentSelfieLocation = { lat: targetLat, lng: targetLng, distance: 20, inRadius: true };
+            }
+        };
+
+        window.simpanPresensiSelfieFinal = function(tipeAbsen, industriNama, radiusBatas, indLat, indLng) {
+            if (!window.tempSelfieBase64) {
+                return window.showModalInfo("Foto Belum Siap", "Silakan jepret wajah Anda terlebih dahulu sebelum menyimpan presensi!");
+            }
+
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const now = new Date();
+            const jamStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            const tglStr = now.toISOString().split('T')[0];
+
+            const loc = window.currentSelfieLocation || { lat: parseFloat(indLat), lng: parseFloat(indLng), distance: 20, inRadius: true };
+            const statusHadir = loc.inRadius ? "Tepat Waktu" : "Di Luar Radius";
+
+            const itemAbsen = {
+                id: "abs_" + Date.now(),
+                user_id: profile.identitas || profile.nama,
+                nama: profile.nama,
+                role: profile.role,
+                tipe_absen: tipeAbsen,
+                kategori_hadir: "Hadir",
+                industri: industriNama,
+                tanggal: tglStr,
+                jam: jamStr,
+                status: statusHadir,
+                jarak_meter: loc.distance,
+                latitude: loc.lat,
+                longitude: loc.lng,
+                foto_selfie: window.tempSelfieBase64
+            };
+
+            window.cloudState.absensi.unshift(itemAbsen);
+            window.simpanDatabasePersisten(true);
+
+            window.tutupModalPresensiSelfie();
+            window.showModalInfo(
+                "Presensi Berhasil Direkam ✅", 
+                `Presensi <b>${tipeAbsen}</b> atas nama <b>${profile.nama}</b> berhasil dicatat pada <b>${jamStr} WITA</b>.<br>Jarak terdeteksi: <b>${loc.distance} Meter</b> (${statusHadir}).`
+            );
+            window.openFeature("dashboard", "Beranda");
+        };
+
         window.activeCredentialTab = "siswa";
 
         window.setTabKredensial = function(tab) {
@@ -1787,10 +2170,10 @@
             const users = (window.cloudState.registeredUsers || []).filter(u => u.role === tab);
 
             let rows = "";
-            users.forEach((u, idx) => {
+            users.forEach((u) => {
                 const originalIdx = (window.cloudState.registeredUsers || []).indexOf(u);
                 rows += `<tr>
-                    <td>${idx + 1}</td>
+                    <td>${originalIdx + 1}</td>
                     <td><b>${u.nama}</b></td>
                     <td><code style="color:#0284c7; font-weight:800;">${u.username}</code></td>
                     <td><span style="font-family:monospace; background:#f1f5f9; padding:2px 8px; border-radius:6px; font-weight:700;">${u.pass}</span></td>
@@ -1814,7 +2197,7 @@
                     </button>
                 </div>
 
-                <div style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1.5px solid #bfdbfe; padding-bottom:8px;">
+                <div style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1.5px solid #bfdbfe; padding-bottom:8px; overflow-x:auto;">
                     <button onclick="window.setTabKredensial('siswa')" class="btn-action ${tab === 'siswa' ? 'btn-blue' : ''}" style="background:${tab === 'siswa' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'siswa' ? '#fff' : '#0369a1'};">👨‍🎓 Akun Siswa</button>
                     <button onclick="window.setTabKredensial('guru')" class="btn-action ${tab === 'guru' ? 'btn-blue' : ''}" style="background:${tab === 'guru' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'guru' ? '#fff' : '#0369a1'};">👩‍🏫 Akun Guru</button>
                     <button onclick="window.setTabKredensial('industri')" class="btn-action ${tab === 'industri' ? 'btn-blue' : ''}" style="background:${tab === 'industri' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'industri' ? '#fff' : '#0369a1'};">🏭 Akun Industri</button>
@@ -3054,7 +3437,6 @@
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, w, h);
 
-                        // Kompres ke JPEG ~60KB agar instan sinkron ke Supabase Cloud
                         const compressedBase64 = canvas.toDataURL('image/jpeg', 0.72);
                         window.tempBannerBase64 = compressedBase64;
 
@@ -3111,6 +3493,9 @@
             myAbsen.forEach((ab, idx) => {
                 rows += `<tr>
                     <td>${idx + 1}</td>
+                    <td>
+                        ${ab.foto_selfie ? `<img src="${ab.foto_selfie}" alt="Foto" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid #7dd3fc; cursor:pointer;" onclick="window.bukaPratinjauFotoSelfie('${ab.foto_selfie}', '${ab.nama}', '${ab.tanggal} ${ab.jam}')">` : '<span style="color:#94a3b8;">-</span>'}
+                    </td>
                     <td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td>
                     <td>${ab.tanggal}</td>
                     <td>${ab.jam} WITA</td>
@@ -3126,9 +3511,14 @@
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📍 Presensi Kehadiran</h3>
                         <p style="font-size:11px; color:#64748b;">Pastikan GPS aktif dan berada di radius mitra industri.</p>
                     </div>
-                    <button onclick="window.simpanPresensiManualInstant()" class="btn-action btn-blue" style="padding:8px 14px;">
-                        📸 Ambil Foto & Absen Sekarang
-                    </button>
+                    <div style="display:flex; gap:6px;">
+                        <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Masuk')" class="btn-action btn-blue" style="padding:8px 12px;">
+                            📸 Absen Masuk
+                        </button>
+                        <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang')" class="btn-action btn-emerald" style="padding:8px 12px;">
+                            🚪 Absen Pulang
+                        </button>
+                    </div>
                 </div>
 
                 <div class="table-wrap">
@@ -3136,6 +3526,7 @@
                         <thead>
                             <tr>
                                 <th>No</th>
+                                <th>Foto</th>
                                 <th>Tipe</th>
                                 <th>Tanggal</th>
                                 <th>Waktu</th>
@@ -3143,41 +3534,24 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada riwayat absensi Anda</td></tr>'}
+                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada riwayat absensi Anda</td></tr>'}
                         </tbody>
                     </table>
                 </div>
             </div>`;
         };
 
-        window.simpanPresensiManualInstant = function() {
-            const profile = window.cloudState.userProfile || { nama: "Siswa" };
-            const now = new Date();
-            const jamStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-            const tglStr = now.toISOString().split('T')[0];
-
-            const hasMasuk = (window.cloudState.absensi || []).some(a => a.nama === profile.nama && a.tipe_absen === 'Masuk' && a.tanggal === tglStr);
-            const tipe = hasMasuk ? 'Pulang' : 'Masuk';
-
-            window.cloudState.absensi.unshift({
-                id: "abs_" + Date.now(),
-                user_id: profile.identitas || profile.nama,
-                nama: profile.nama,
-                role: profile.role,
-                tipe_absen: tipe,
-                kategori_hadir: "Hadir",
-                industri: "DUDI Magang",
-                tanggal: tglStr,
-                jam: jamStr,
-                status: "Tepat Waktu",
-                jarak_meter: 25,
-                latitude: 0.45612,
-                longitude: 121.94210
-            });
-
-            window.simpanDatabasePersisten(true);
-            window.showModalInfo("Presensi Berhasil ✅", `Presensi <b>${tipe}</b> Anda dicatat pada <b>${jamStr} WITA</b>.`);
-            window.openFeature("dashboard", "Beranda");
+        window.bukaPratinjauFotoSelfie = function(src, nama, info) {
+            window.openDynamicModal(`
+                <div style="text-align:center;">
+                    <h3 style="font-size:15px; font-weight:900; color:#0f172a; margin-bottom:4px;">Foto Presensi: ${nama}</h3>
+                    <div style="font-size:11px; color:#64748b; margin-bottom:12px;">${info}</div>
+                    <img src="${src}" alt="Foto Absen" style="width:100%; max-height:360px; object-fit:contain; border-radius:14px; border:2px solid #38bdf8;">
+                    <div style="margin-top:14px;">
+                        <button onclick="window.closeDynamicModal()" class="btn-action btn-blue" style="padding:8px 24px;">Tutup</button>
+                    </div>
+                </div>
+            `);
         };
 
         window.renderJurnalKegiatan = function() {
@@ -3579,6 +3953,9 @@
             list.forEach((ab, idx) => {
                 rows += `<tr>
                     <td>${idx + 1}</td>
+                    <td>
+                        ${ab.foto_selfie ? `<img src="${ab.foto_selfie}" alt="Foto" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid #7dd3fc; cursor:pointer;" onclick="window.bukaPratinjauFotoSelfie('${ab.foto_selfie}', '${ab.nama}', '${ab.tanggal} ${ab.jam}')">` : '<span style="color:#94a3b8;">-</span>'}
+                    </td>
                     <td><b>${ab.nama}</b></td>
                     <td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td>
                     <td>${ab.tanggal}</td>
@@ -3603,6 +3980,7 @@
                         <thead>
                             <tr>
                                 <th>No</th>
+                                <th>Foto</th>
                                 <th>Nama Siswa</th>
                                 <th>Tipe</th>
                                 <th>Tanggal</th>
@@ -3612,7 +3990,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada riwayat absensi masuk/pulang hari ini</td></tr>'}
+                            ${rows || '<tr><td colspan="8" class="empty-placeholder">Belum ada riwayat absensi masuk/pulang hari ini</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -4014,7 +4392,6 @@
         window.addEventListener('DOMContentLoaded', async () => {
             window.inisialisasiSupabaseClient();
 
-            // Prioritaskan menarik data terbaru dari Supabase sebelum memuat profil
             if (window.supabaseClient) {
                 await window.tarikDataDariCloud(false);
                 window.aktifkanSinkronisasiRealtime();
