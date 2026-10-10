@@ -219,22 +219,22 @@
         }
         .app-topbar {
             background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%);
-            padding: 10px 16px;
-            display: flex;
-            justify-content: space-between;
+            padding: 14px 16px 16px;
+            display: grid;
+            grid-template-columns: 44px 1fr 70px;
             align-items: center;
             position: sticky;
             top: 0;
             z-index: 50;
             box-shadow: 0 6px 20px rgba(15, 82, 186, 0.3);
-            gap: 10px;
+            gap: 8px;
         }
         .btn-burger-menu {
-            width: 34px;
-            height: 34px;
+            width: 38px;
+            height: 38px;
             background: rgba(255, 255, 255, 0.2);
             border: 1.5px solid rgba(255, 255, 255, 0.7);
-            border-radius: 10px;
+            border-radius: 12px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -261,32 +261,31 @@
             align-items: center;
             justify-content: center;
             text-align: center;
-            flex: 1;
-            min-width: 0;
-            padding: 0 4px;
+            width: 100%;
+            padding: 0 2px;
         }
         .topbar-center-title {
-            font-size: 18px;
+            font-size: 19px;
             font-weight: 950;
             color: #ffffff;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.8px;
             line-height: 1.1;
-            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
         }
         .topbar-center-desc {
-            font-size: 10px;
+            font-size: 10.5px;
             font-weight: 800;
             color: #fde047;
             letter-spacing: 0.3px;
-            line-height: 1.2;
-            margin-top: 1px;
-            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+            line-height: 1.25;
+            margin-top: 2px;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
         .topbar-center-school {
-            font-size: 9.5px;
+            font-size: 10px;
             font-weight: 750;
             color: #e0f2fe;
             letter-spacing: 0.3px;
@@ -297,21 +296,39 @@
         }
         .topbar-right-wrap {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 8px;
-            justify-content: flex-end;
+            justify-content: center;
             flex-shrink: 0;
+            gap: 3px;
         }
         .topbar-user-info {
             display: flex;
             flex-direction: column;
-            align-items: flex-end;
-            max-width: 120px;
+            align-items: center;
+            width: 100%;
+        }
+        .topbar-role-badge-yellow {
+            font-size: 8.5px;
+            font-weight: 950;
+            color: #0f172a;
+            background: #fde047;
+            border: 1px solid #eab308;
+            padding: 1.5px 5px;
+            border-radius: 6px;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+            text-align: center;
+            white-space: nowrap;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .topbar-logo-badge {
-            width: 50px;
-            height: 50px;
-            border-radius: 14px;
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
             background: #ffffff;
             padding: 2px;
             border: 2px solid #fde047;
@@ -491,7 +508,7 @@
         .banner-slide-overlay {
             position: absolute;
             inset: 0;
-            background: linear-gradient(180deg, rgba(15, 23, 42, 0.05) 0%, rgba(2, 44, 105, 0.85) 100%);
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0) 40%, rgba(2, 44, 105, 0.45) 100%);
         }
         .banner-slogan-wrap {
             position: relative;
@@ -502,21 +519,21 @@
             padding-bottom: 6px;
         }
         .banner-slogan-title {
-            font-size: 26px;
+            font-size: 24px;
             font-weight: 950;
             letter-spacing: 0.5px;
             line-height: 1.15;
             text-transform: uppercase;
-            text-shadow: 0 3px 10px rgba(0, 0, 0, 0.7);
+            text-shadow: 0 3px 8px rgba(0, 0, 0, 0.8), 0 1px 3px rgba(0, 0, 0, 0.9);
         }
         .banner-slogan-sub {
-            font-size: 13px;
+            font-size: 12.5px;
             font-weight: 800;
             letter-spacing: 0.5px;
             text-transform: uppercase;
             margin-top: 4px;
             color: #fde047;
-            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85);
         }
         .banner-dots-wrap {
             position: absolute;
@@ -834,7 +851,7 @@
 
     <div id="appScreen">
         <div class="app-topbar">
-            <!-- Kiri: Tombol Burger Menu yang diperkecil -->
+            <!-- Kiri: Tombol Burger Menu -->
             <div style="display: flex; align-items: center; flex-shrink: 0;">
                 <button class="btn-burger-menu" id="btnBurgerMenu" onclick="window.toggleDrawerSidebar()" aria-label="Buka Menu">
                     <div class="burger-line"></div>
@@ -843,21 +860,15 @@
                 </button>
             </div>
 
-            <!-- Tengah: SIP-PKL, Sistem Informasi Pengelolaan PKL, SMK Negeri 1 Marisa (Rata Kiri) -->
+            <!-- Tengah: SIP-PKL, Sub-Judul Presisi di antara Burger & Logo -->
             <div class="topbar-center-wrap">
                 <div class="topbar-center-title" id="topbarRoleTitle">SIP-PKL</div>
                 <div class="topbar-center-desc">Sistem Informasi Pengelolaan PKL</div>
                 <div class="topbar-center-school">SMK Negeri 1 Marisa</div>
             </div>
 
-            <!-- Kanan: Identitas User (Teks Kuning Rata Tengah Vertikal) & Logo SMK -->
+            <!-- Kanan: Logo SMK di Atas, Nama Peran Presisi di Bawah Logo -->
             <div class="topbar-right-wrap">
-                <div class="topbar-user-info">
-                    <div id="topbarUserName" style="display: none;">Pengguna</div>
-                    <div class="topbar-role-badge-yellow" id="topbarUserRoleBadge">
-                        PANITIA PKL
-                    </div>
-                </div>
                 <div class="topbar-logo-badge" title="SMK Negeri 1 Marisa">
                     <img src="Logo SMK.png" alt="Logo SMKN 1 Marisa" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
                     <svg viewBox="0 0 100 100" style="display: none; width: 100%; height: 100%;">
@@ -868,6 +879,12 @@
                         <path d="M 20 80 Q 50 74 80 80 L 76 88 Q 50 82 24 88 Z" fill="#ffffff" stroke="#ca8a04" stroke-width="1.5"/>
                         <text x="50" y="86" font-size="5.5" font-weight="900" text-anchor="middle" fill="#0f172a">SMKN 1 MARISA</text>
                     </svg>
+                </div>
+                <div class="topbar-user-info">
+                    <div id="topbarUserName" style="display: none;">Pengguna</div>
+                    <div class="topbar-role-badge-yellow" id="topbarUserRoleBadge">
+                        PANITIA PKL
+                    </div>
                 </div>
             </div>
         </div>
@@ -1052,7 +1069,16 @@
             currentFeature: "dashboard",
             bannerSliderImages: DEFAULT_BANNER_IMAGES,
             pklConfig: DEFAULT_PKL_CONFIG,
-            jamConfig: { masuk: "08:00", pulang: "16:00", toleransi: 15 },
+            jamConfig: {
+                masukMulai: "06:30",
+                masukTepatWaktu: "08:15",
+                masukBatasAkhir: "15:00",
+                pulangMulai: "16:00",
+                pulangBatasAkhir: "23:00",
+                masuk: "08:15",
+                pulang: "16:00",
+                toleransi: 0
+            },
             registeredUsers: [
                 { role: "admin", nama: "Panitia PKL SMKN 1 Marisa", username: "Panitia PKL", pass: "SMKBisa2000", identitas: "PANITIA-2026" },
                 { role: "guru", nama: "Wilasia S. Talaa, S.ST", username: "198501012010012001", pass: "guru123", identitas: "198501012010012001" },
@@ -1149,7 +1175,13 @@
                 pengaduan: window.cloudState.pengaduan || [],
                 bannerSliderImages: window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES,
                 pklConfig: window.cloudState.pklConfig || DEFAULT_PKL_CONFIG,
-                jamConfig: window.cloudState.jamConfig || { masuk: "08:00", pulang: "16:00", toleransi: 15 }
+                jamConfig: window.cloudState.jamConfig || {
+                    masukMulai: "06:30",
+                    masukTepatWaktu: "08:15",
+                    masukBatasAkhir: "15:00",
+                    pulangMulai: "16:00",
+                    pulangBatasAkhir: "23:00"
+                }
             };
         };
 
@@ -1381,49 +1413,49 @@
 
         const roleMenus = {
             siswa: [
-                { id: "dashboard", label: "📊 Beranda Siswa", icon: "📊" },
-                { id: "presensi", label: "📍 Presensi GPS & Selfie", icon: "📍" },
-                { id: "jurnal", label: "📖 Jurnal Harian PKL", icon: "📖" },
-                { id: "dokumen", label: "📁 Panduan & Dokumen", icon: "📁" },
-                { id: "laporan", label: "📄 Laporan Akhir PKL", icon: "📄" },
-                { id: "aduan", label: "⚠️ Laporkan Masalah", icon: "⚠️" }
+                { id: "dashboard", label: "Beranda Siswa", icon: "📊" },
+                { id: "presensi", label: "Presensi GPS & Selfie", icon: "📍" },
+                { id: "jurnal", label: "Jurnal Harian PKL", icon: "📖" },
+                { id: "dokumen", label: "Panduan & Dokumen", icon: "📁" },
+                { id: "laporan", label: "Laporan Akhir PKL", icon: "📄" },
+                { id: "aduan", label: "Laporkan Masalah", icon: "⚠️" }
             ],
             guru: [
-                { id: "dashboard", label: "📊 Beranda Guru", icon: "📊" },
-                { id: "siswa-bimbingan", label: "👥 Siswa Bimbingan", icon: "👥" },
-                { id: "validasi-jurnal", label: "📋 Validasi Jurnal Siswa", icon: "📋" },
-                { id: "agenda-kunjungan", label: "🚗 Agenda Kunjungan DUDI", icon: "🚗" },
-                { id: "penilaian", label: "🏆 Penilaian Bimbingan", icon: "🏆" },
-                { id: "laporan", label: "📄 Validasi Laporan Akhir", icon: "📄" },
-                { id: "dokumen", label: "📁 Dokumen PKL", icon: "📁" }
+                { id: "dashboard", label: "Beranda Guru", icon: "📊" },
+                { id: "siswa-bimbingan", label: "Siswa Bimbingan", icon: "👥" },
+                { id: "validasi-jurnal", label: "Validasi Jurnal Siswa", icon: "📋" },
+                { id: "agenda-kunjungan", label: "Agenda Kunjungan DUDI", icon: "🚗" },
+                { id: "penilaian", label: "Penilaian Bimbingan", icon: "🏆" },
+                { id: "laporan", label: "Validasi Laporan Akhir", icon: "📄" },
+                { id: "dokumen", label: "Dokumen PKL", icon: "📁" }
             ],
             admin: [
-                { id: "dashboard", label: "📊 Beranda Panitia", icon: "📊" },
-                { id: "kelola-akun", label: "🔑 Buat Akun & Kredensial", icon: "🔑" },
-                { id: "master-siswa", label: "👨‍🎓 Data Master Siswa", icon: "👨‍🎓" },
-                { id: "master-guru", label: "👩‍🏫 Data Master Guru", icon: "👩‍🏫" },
-                { id: "master-industri", label: "🏭 Mitra Industri DUDI", icon: "🏭" },
-                { id: "penempatan", label: "🔄 Alokasi Guru & Siswa", icon: "🔄" },
-                { id: "rekap-absensi", label: "📈 Rekap Presensi Global", icon: "📈" },
-                { id: "jam-geofence", label: "📍 Jam & Geofence GPS", icon: "📍" },
-                { id: "dokumen", label: "📁 Manajemen Dokumen", icon: "📁" },
-                { id: "laporan", label: "📄 Pantau Laporan Akhir", icon: "📄" },
-                { id: "aduan", label: "⚠️ Laporan Pengaduan", icon: "⚠️" },
-                { id: "database-cloud", label: "☁️ Database Cloud [Supabase]", icon: "☁️" },
-                { id: "banner-jadwal", label: "🖼️ Banner & Jadwal PKL", icon: "🖼️" }
+                { id: "dashboard", label: "Beranda Panitia", icon: "📊" },
+                { id: "kelola-akun", label: "Buat Akun & Kredensial", icon: "🔑" },
+                { id: "master-siswa", label: "Data Master Siswa", icon: "👨‍🎓" },
+                { id: "master-guru", label: "Data Master Guru", icon: "👩‍🏫" },
+                { id: "master-industri", label: "Mitra Industri DUDI", icon: "🏭" },
+                { id: "penempatan", label: "Alokasi Guru & Siswa", icon: "🔄" },
+                { id: "rekap-absensi", label: "Rekap Presensi Global", icon: "📈" },
+                { id: "jam-geofence", label: "Jam & Geofence GPS", icon: "📍" },
+                { id: "dokumen", label: "Manajemen Dokumen", icon: "📁" },
+                { id: "laporan", label: "Pantau Laporan Akhir", icon: "📄" },
+                { id: "aduan", label: "Laporan Pengaduan", icon: "⚠️" },
+                { id: "database-cloud", label: "Database Cloud [Supabase]", icon: "☁️" },
+                { id: "banner-jadwal", label: "Banner & Jadwal PKL", icon: "🖼️" }
             ],
             industri: [
-                { id: "dashboard", label: "📊 Beranda Industri", icon: "📊" },
-                { id: "siswa-magang", label: "👥 Daftar Siswa Magang", icon: "👥" },
-                { id: "validasi-jurnal", label: "📋 Pengesahan Jurnal", icon: "📋" },
-                { id: "penilaian-industri", label: "🏆 Lembar Nilai Berstempel", icon: "🏆" }
+                { id: "dashboard", label: "Beranda Industri", icon: "📊" },
+                { id: "siswa-magang", label: "Daftar Siswa Magang", icon: "👥" },
+                { id: "validasi-jurnal", label: "Pengesahan Jurnal", icon: "📋" },
+                { id: "penilaian-industri", label: "Lembar Nilai Berstempel", icon: "🏆" }
             ],
             orangtua: [
-                { id: "dashboard", label: "📊 Beranda Wali Siswa", icon: "📊" },
-                { id: "presensi-ananda", label: "📍 Presensi Harian Ananda", icon: "📍" },
-                { id: "jurnal-ananda", label: "📖 Log Jurnal Ananda", icon: "📖" },
-                { id: "dokumen", label: "📁 Panduan Resmi PKL", icon: "📁" },
-                { id: "aduan", label: "⚠️ Kontak Sekolah", icon: "⚠️" }
+                { id: "dashboard", label: "Beranda Wali Siswa", icon: "📊" },
+                { id: "presensi-ananda", label: "Presensi Harian Ananda", icon: "📍" },
+                { id: "jurnal-ananda", label: "Log Jurnal Ananda", icon: "📖" },
+                { id: "dokumen", label: "Panduan Resmi PKL", icon: "📁" },
+                { id: "aduan", label: "Kontak Sekolah", icon: "⚠️" }
             ]
         };
 
@@ -1750,9 +1782,78 @@
             return Math.round(R * c);
         };
 
+        window.cekValidasiJamPresensi = function(tipeAbsen) {
+            const jc = Object.assign({
+                masukMulai: "06:30",
+                masukTepatWaktu: "08:15",
+                masukBatasAkhir: "15:00",
+                pulangMulai: "16:00",
+                pulangBatasAkhir: "23:00"
+            }, window.cloudState.jamConfig || {});
+
+            const now = new Date();
+            const curMinutes = now.getHours() * 60 + now.getMinutes();
+
+            const parseToMin = (timeStr, fallbackMin) => {
+                if (!timeStr) return fallbackMin;
+                const parts = timeStr.split(':');
+                return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+            };
+
+            if (tipeAbsen === 'Masuk') {
+                const minMulai = parseToMin(jc.masukMulai, 6 * 60 + 30);
+                const minTepat = parseToMin(jc.masukTepatWaktu, 8 * 60 + 15);
+                const minBatas = parseToMin(jc.masukBatasAkhir, 15 * 60);
+
+                if (curMinutes < minMulai) {
+                    return {
+                        valid: false,
+                        pesan: `Presensi Masuk belum dibuka.<br><br>Presensi Masuk dapat dilakukan mulai pukul <b>${jc.masukMulai} WITA</b>.<br>Silakan kembali saat jam masuk dimulai.`
+                    };
+                }
+                if (curMinutes > minBatas) {
+                    return {
+                        valid: false,
+                        pesan: `Presensi Masuk telah ditutup.<br><br>Batas akhir presensi masuk adalah pukul <b>${jc.masukBatasAkhir} WITA</b>.<br>Silakan hubungi Guru Pembimbing jika ada kendala mendesak.`
+                    };
+                }
+
+                const status = (curMinutes <= minTepat) ? "Tepat Waktu" : "Terlambat";
+                return { valid: true, statusKehadiran: status };
+            } else if (tipeAbsen === 'Pulang') {
+                const minMulaiPulang = parseToMin(jc.pulangMulai, 16 * 60);
+                const minBatasPulang = parseToMin(jc.pulangBatasAkhir, 23 * 60);
+
+                if (curMinutes < minMulaiPulang) {
+                    return {
+                        valid: false,
+                        pesan: `Presensi Pulang belum dibuka.<br><br>Presensi Pulang dapat dilakukan mulai pukul <b>${jc.pulangMulai} WITA</b>.<br>Selesaikan tugas magang hingga jam kepulangan resmi.`
+                    };
+                }
+                if (curMinutes > minBatasPulang) {
+                    return {
+                        valid: false,
+                        pesan: `Presensi Pulang telah ditutup.<br><br>Batas akhir presensi pulang adalah pukul <b>${jc.pulangBatasAkhir} WITA</b>.`
+                    };
+                }
+
+                return { valid: true, statusKehadiran: "Tepat Waktu" };
+            }
+
+            return { valid: true, statusKehadiran: "Hadir" };
+        };
+
         window.renderSiswaOfficialDashboard = function() {
             const profile = window.cloudState.userProfile || { nama: "Siswa PKL" };
             const cfg = window.cloudState.pklConfig || DEFAULT_PKL_CONFIG;
+            const jc = Object.assign({
+                masukMulai: "06:30",
+                masukTepatWaktu: "08:15",
+                masukBatasAkhir: "15:00",
+                pulangMulai: "16:00",
+                pulangBatasAkhir: "23:00"
+            }, window.cloudState.jamConfig || {});
+
             const banners = (window.cloudState.bannerSliderImages && window.cloudState.bannerSliderImages.length > 0)
                 ? window.cloudState.bannerSliderImages
                 : DEFAULT_BANNER_IMAGES;
@@ -1793,7 +1894,12 @@
 
             <div class="absensi-digital-card">
                 <div class="absensi-header-wrap">
-                    <div class="absensi-title-main">ABSENSI DIGITAL</div>
+                    <div>
+                        <div class="absensi-title-main">ABSENSI DIGITAL</div>
+                        <div style="font-size: 10px; color: #0284c7; font-weight: 800; margin-top: 2px;">
+                            ⏰ Masuk: ${jc.masukMulai} - ${jc.masukBatasAkhir} WITA &bull; Pulang: ${jc.pulangMulai} - ${jc.pulangBatasAkhir} WITA
+                        </div>
+                    </div>
                     <div class="absensi-status-badge">${absenMasuk ? 'SUDAH ABSEN HARI INI' : 'BELUM ABSEN HARI INI'}</div>
                 </div>
                 <div class="absensi-btn-grid">
@@ -1801,14 +1907,14 @@
                         <div class="btn-absensi-icon-wrap">${absenMasuk ? '✅' : '📷'}</div>
                         <div>
                             <div class="btn-absensi-text">PRESENSI MASUK</div>
-                            <div style="font-size: 10px; color: #475569; font-weight: 700; margin-top: 2px;">${absenMasuk ? absenMasuk.jam + ' WITA' : 'Tekan untuk Masuk'}</div>
+                            <div style="font-size: 10px; color: #475569; font-weight: 700; margin-top: 2px;">${absenMasuk ? absenMasuk.jam + ' WITA (' + (absenMasuk.status || 'Hadir') + ')' : `${jc.masukMulai} - ${jc.masukBatasAkhir}`}</div>
                         </div>
                     </div>
                     <div class="btn-absensi-box ${absenPulang ? 'done-card' : ''}" onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang')">
                         <div class="btn-absensi-icon-wrap">${absenPulang ? '✅' : '🚪'}</div>
                         <div>
                             <div class="btn-absensi-text">PRESENSI PULANG</div>
-                            <div style="font-size: 10px; color: #475569; font-weight: 700; margin-top: 2px;">${absenPulang ? absenPulang.jam + ' WITA' : 'Tekan saat Pulang'}</div>
+                            <div style="font-size: 10px; color: #475569; font-weight: 700; margin-top: 2px;">${absenPulang ? absenPulang.jam + ' WITA' : `${jc.pulangMulai} - ${jc.pulangBatasAkhir}`}</div>
                         </div>
                     </div>
                 </div>
@@ -2101,8 +2207,14 @@
         window.liveCameraStream = null;
         window.tempSelfieBase64 = null;
         window.currentSelfieLocation = null;
+        window.selectedKategoriKehadiran = "hadir_lokasi";
 
         window.bukaModalAmbilPresensiSelfieGPS = function(tipeAbsen) {
+            const validasiJam = window.cekValidasiJamPresensi(tipeAbsen);
+            if (!validasiJam.valid) {
+                return window.showModalInfo("Jam Presensi Tidak Sesuai ⏰", validasiJam.pesan);
+            }
+
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
             const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
             const namaInd = penempatan ? penempatan.industri : "PT. Telkom Marisa";
@@ -2110,17 +2222,32 @@
                 nama: namaInd,
                 lat: "0.45612",
                 lng: "121.94210",
-                radius: 150
+                radius: 50
             };
 
+            const settingRadius = 50; // Seting wajib presisi 50 meter untuk hadir di lokasi
             window.tempSelfieBase64 = null;
             window.currentSelfieLocation = null;
+            window.selectedKategoriKehadiran = "hadir_lokasi";
 
             window.openDynamicModal(`
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">📷 Presensi ${tipeAbsen}: Selfie & GPS</h3>
-                <div style="font-size:11px; color:#475569; margin-bottom:12px;">Lokasi Magang: <b>${dataInd.nama}</b> (Radius: ${dataInd.radius || 100}m)</div>
+                <div style="font-size:11px; color:#475569; margin-bottom:10px;">Lokasi Magang: <b>${dataInd.nama}</b></div>
 
-                <div style="position:relative; width:100%; height:230px; background:#0f172a; border-radius:18px; overflow:hidden; border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; margin-bottom:10px;">
+                <!-- Pilihan Kategori Kehadiran -->
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label class="form-label" style="font-weight:800; color:#0f172a;">Kategori Kehadiran:</label>
+                    <select id="presensiKategoriSelect" class="form-control" style="font-weight:750; color:#0284c7;" onchange="window.handleKategoriKehadiranChange('${dataInd.lat}', '${dataInd.lng}', ${settingRadius})">
+                        <option value="hadir_lokasi">🏢 Hadir di Lokasi Industri (Radius 50m Kantor)</option>
+                        <option value="tugas_luar">🚗 Tugas Luar / Dinas Lapangan (Koordinat Penugasan)</option>
+                        <option value="izin_sakit">📋 Izin / Sakit Resmi (Koordinat Posisi Siswa)</option>
+                    </select>
+                    <div id="kategoriHelpText" style="font-size:10px; color:#64748b; margin-top:4px;">
+                        Wajib berada di radius maksimal 50 meter dari titik koordinat industri magang.
+                    </div>
+                </div>
+
+                <div style="position:relative; width:100%; height:210px; background:#0f172a; border-radius:18px; overflow:hidden; border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; margin-bottom:10px;">
                     <video id="selfieVideoElement" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
                     <img id="selfieCapturedPreview" src="" alt="Selfie" style="display:none; width:100%; height:100%; object-fit:cover;">
                     <div id="selfieCameraLoading" style="position:absolute; color:#fff; font-size:12px; font-weight:800; background:rgba(0,0,0,0.6); padding:6px 12px; border-radius:8px;">
@@ -2150,14 +2277,32 @@
 
                 <div style="display:flex; justify-content:flex-end; gap:8px;">
                     <button type="button" onclick="window.tutupModalPresensiSelfie()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button type="button" onclick="window.simpanPresensiSelfieFinal('${tipeAbsen}', '${dataInd.nama}', ${dataInd.radius || 100}, '${dataInd.lat}', '${dataInd.lng}')" class="btn-action btn-emerald" style="font-weight:900; padding:10px 16px;">
+                    <button type="button" id="btnSimpanPresensiAction" onclick="window.simpanPresensiSelfieFinal('${tipeAbsen}', '${dataInd.nama}', ${settingRadius}, '${dataInd.lat}', '${dataInd.lng}')" class="btn-action btn-emerald" style="font-weight:900; padding:10px 16px;">
                         ✓ Simpan Presensi ${tipeAbsen}
                     </button>
                 </div>
             `);
 
             window.mulaiStreamKameraSelfie();
-            window.mendeteksiLokasiGPSSelfie(parseFloat(dataInd.lat || 0.45612), parseFloat(dataInd.lng || 121.94210), parseInt(dataInd.radius || 100));
+            window.mendeteksiLokasiGPSSelfie(parseFloat(dataInd.lat || 0.45612), parseFloat(dataInd.lng || 121.94210), settingRadius);
+        };
+
+        window.handleKategoriKehadiranChange = function(targetLat, targetLng, targetRadius) {
+            const selectEl = document.getElementById("presensiKategoriSelect");
+            const helpEl = document.getElementById("kategoriHelpText");
+            if (!selectEl) return;
+            const kat = selectEl.value;
+            window.selectedKategoriKehadiran = kat;
+
+            if (kat === 'hadir_lokasi') {
+                if (helpEl) helpEl.innerText = "Wajib berada di radius maksimal 50 meter dari titik koordinat industri magang.";
+            } else if (kat === 'tugas_luar') {
+                if (helpEl) helpEl.innerText = "Dapat mengambil presensi di lokasi tugas/dinas luar tempat siswa ditugaskan.";
+            } else if (kat === 'izin_sakit') {
+                if (helpEl) helpEl.innerText = "Presensi disahkan di titik koordinat keberadaan siswa.";
+            }
+
+            window.mendeteksiLokasiGPSSelfie(parseFloat(targetLat || 0.45612), parseFloat(targetLng || 121.94210), targetRadius);
         };
 
         window.mulaiStreamKameraSelfie = function() {
@@ -2260,6 +2405,7 @@
         window.mendeteksiLokasiGPSSelfie = function(targetLat, targetLng, targetRadius) {
             const badge = document.getElementById("gpsStatusBadge");
             const detail = document.getElementById("gpsDetailText");
+            const kat = window.selectedKategoriKehadiran || "hadir_lokasi";
 
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition(
@@ -2277,14 +2423,24 @@
                         };
 
                         if (badge && detail) {
-                            if (isInRadius) {
-                                badge.className = "badge-status badge-green";
-                                badge.innerText = "🟢 DALAM RADIUS KANTOR";
-                                detail.innerHTML = `Jarak dari kantor: <b>${distance} meter</b> (Batas toleransi: ${targetRadius}m)`;
+                            if (kat === 'hadir_lokasi') {
+                                if (isInRadius) {
+                                    badge.className = "badge-status badge-green";
+                                    badge.innerText = `🟢 DALAM RADIUS KANTOR (${distance}m)`;
+                                    detail.innerHTML = `Jarak dari kantor: <b>${distance} meter</b> (Maksimal: ${targetRadius}m). Sesuai aturan.`;
+                                } else {
+                                    badge.className = "badge-status badge-red";
+                                    badge.innerText = `🔴 DILUAR RADIUS (${distance}m)`;
+                                    detail.innerHTML = `Terdeteksi <b>${distance} meter</b> dari kantor. Wajib berada dalam radius <b>${targetRadius} meter</b>.`;
+                                }
+                            } else if (kat === 'tugas_luar') {
+                                badge.className = "badge-status badge-blue";
+                                badge.innerText = "🚗 TITIK TUGAS LUAR (VALID)";
+                                detail.innerHTML = `Koordinat tercatat: <b>${curLat.toFixed(5)}, ${curLng.toFixed(5)}</b> (Dinas luar diizinkan di lokasi Anda).`;
                             } else {
-                                badge.className = "badge-status badge-red";
-                                badge.innerText = `🔴 DILUAR RADIUS (${distance}m)`;
-                                detail.innerHTML = `Terdeteksi <b>${distance} meter</b> dari kantor (Maksimum: ${targetRadius}m)`;
+                                badge.className = "badge-status badge-blue";
+                                badge.innerText = "📋 LOKASI IZIN/SAKIT (VALID)";
+                                detail.innerHTML = `Koordinat tercatat: <b>${curLat.toFixed(5)}, ${curLng.toFixed(5)}</b> (Presensi izin/sakit mandiri).`;
                             }
                         }
                     },
@@ -2293,7 +2449,7 @@
                         if (badge && detail) {
                             badge.className = "badge-status badge-blue";
                             badge.innerText = "🔵 GPS SIMULASI (AKTIF)";
-                            detail.innerHTML = `Koordinat terverifikasi di area mitra industri (Radius aman).`;
+                            detail.innerHTML = `Koordinat terverifikasi di area aman.`;
                         }
                     },
                     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -2304,8 +2460,24 @@
         };
 
         window.simpanPresensiSelfieFinal = function(tipeAbsen, industriNama, radiusBatas, indLat, indLng) {
+            const validasiJam = window.cekValidasiJamPresensi(tipeAbsen);
+            if (!validasiJam.valid) {
+                return window.showModalInfo("Jam Presensi Tidak Sesuai ⏰", validasiJam.pesan);
+            }
+
             if (!window.tempSelfieBase64) {
                 return window.showModalInfo("Foto Belum Siap", "Silakan jepret wajah Anda terlebih dahulu sebelum menyimpan presensi!");
+            }
+
+            const kat = window.selectedKategoriKehadiran || "hadir_lokasi";
+            const loc = window.currentSelfieLocation || { lat: parseFloat(indLat), lng: parseFloat(indLng), distance: 20, inRadius: true };
+
+            // Validasi aturan radius 50m hanya jika memilih 'hadir_lokasi'
+            if (kat === 'hadir_lokasi' && !loc.inRadius) {
+                return window.showModalInfo(
+                    "Di Luar Radius Kantor ❌",
+                    `Anda berada <b>${loc.distance} meter</b> dari titik industri magang.<br><br>Untuk kategori <b>Hadir di Lokasi Industri</b>, Anda wajib berada maksimal <b>50 meter</b> dari titik kantor.<br><br>Jika Anda sedang ditugaskan di luar atau sakit, silakan ganti kategori kehadiran menjadi <b>Tugas Luar</b> atau <b>Izin/Sakit</b>.`
+                );
             }
 
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
@@ -2313,8 +2485,15 @@
             const jamStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
             const tglStr = now.toISOString().split('T')[0];
 
-            const loc = window.currentSelfieLocation || { lat: parseFloat(indLat), lng: parseFloat(indLng), distance: 20, inRadius: true };
-            const statusHadir = loc.inRadius ? "Tepat Waktu" : "Di Luar Radius";
+            let kategoriText = "Hadir di Lokasi";
+            let statusHadir = validasiJam.statusKehadiran || "Tepat Waktu";
+            if (kat === 'tugas_luar') {
+                kategoriText = "Tugas Luar / Dinas";
+                statusHadir = "Tugas Luar";
+            } else if (kat === 'izin_sakit') {
+                kategoriText = "Izin / Sakit";
+                statusHadir = "Izin / Sakit";
+            }
 
             const itemAbsen = {
                 id: "abs_" + Date.now(),
@@ -2322,7 +2501,7 @@
                 nama: profile.nama,
                 role: profile.role,
                 tipe_absen: tipeAbsen,
-                kategori_hadir: "Hadir",
+                kategori_hadir: kategoriText,
                 industri: industriNama,
                 tanggal: tglStr,
                 jam: jamStr,
@@ -2339,7 +2518,7 @@
             window.tutupModalPresensiSelfie();
             window.showModalInfo(
                 "Presensi Berhasil Direkam ✅", 
-                `Presensi <b>${tipeAbsen}</b> atas nama <b>${profile.nama}</b> berhasil dicatat pada <b>${jamStr} WITA</b>.<br>Jarak terdeteksi: <b>${loc.distance} Meter</b> (${statusHadir}).`
+                `Presensi <b>${tipeAbsen}</b> [${kategoriText}] atas nama <b>${profile.nama}</b> berhasil dicatat pada <b>${jamStr} WITA</b> dengan status <b>${statusHadir}</b>.`
             );
             window.openFeature("dashboard", "Beranda");
         };
@@ -3384,14 +3563,21 @@
         };
 
         window.renderJamGeofenceGPS = function() {
-            const jc = window.cloudState.jamConfig || { masuk: "08:00", pulang: "16:00", toleransi: 15 };
+            const jc = Object.assign({
+                masukMulai: "06:30",
+                masukTepatWaktu: "08:15",
+                masukBatasAkhir: "15:00",
+                pulangMulai: "16:00",
+                pulangBatasAkhir: "23:00"
+            }, window.cloudState.jamConfig || {});
+
             let indRows = "";
             (window.cloudState.industri || []).forEach((ind, idx) => {
                 indRows += `<tr>
                     <td>${idx + 1}</td>
                     <td><b>${ind.nama}</b><div style="font-size:10px; color:#64748b;">${ind.alamat || '-'}</div></td>
                     <td><code>${ind.lat || '0.45612'}, ${ind.lng || '121.94210'}</code></td>
-                    <td><span class="badge-status badge-blue">${ind.radius || 100} meter</span></td>
+                    <td><span class="badge-status badge-blue">${ind.radius || 50} meter</span></td>
                     <td>${ind.masuk || '08:00'} - ${ind.pulang || '16:00'}</td>
                     <td>
                         <button onclick="window.bukaModalEditGeofenceInd(${idx})" class="btn-action btn-amber" style="padding:4px 8px; font-size:11px;">Edit Titik GPS</button>
@@ -3405,25 +3591,56 @@
                     <div>
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">PENGATURAN WAKTU PRESENSI (WITA)</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📍 Jam & Geofence GPS</h3>
-                        <p style="font-size:11px; color:#64748b;">Atur jam standar datang/pulang serta toleransi keterlambatan siswa PKL.</p>
+                        <p style="font-size:11px; color:#64748b;">Sinkronisasi otomatis dengan batas pembukaan dan penutupan presensi di dashboard siswa.</p>
                     </div>
                     <button onclick="window.simpanJamOperasionalGlobal()" class="btn-action btn-blue" style="padding:8px 16px;">
-                        💾 Simpan Jam Standar
+                        💾 Simpan Pengaturan Jam
                     </button>
                 </div>
 
-                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:14px; padding:12px;">
-                    <div class="form-group" style="margin-bottom:0;">
-                        <label class="form-label">Jam Masuk Standar:</label>
-                        <input type="time" id="cfgJamMasuk" class="form-control" value="${jc.masuk}">
+                <!-- Blok Pengaturan Presensi Masuk -->
+                <div style="background:#f0f9ff; border:1.5px solid #7dd3fc; border-radius:16px; padding:14px; margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="font-size:12px; font-weight:900; color:#0369a1;">🌅 SESI PRESENSI MASUK</span>
+                        <span class="badge-status badge-blue">Otomatis Terlambat jika &gt; 08:15</span>
                     </div>
-                    <div class="form-group" style="margin-bottom:0;">
-                        <label class="form-label">Jam Pulang Standar:</label>
-                        <input type="time" id="cfgJamPulang" class="form-control" value="${jc.pulang}">
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label" style="font-size:10px;">Mulai Dibuka Absen:</label>
+                            <input type="time" id="cfgJamMasukMulai" class="form-control" value="${jc.masukMulai || '06:30'}">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label" style="font-size:10px;">Batas Tepat Waktu:</label>
+                            <input type="time" id="cfgJamMasukTepat" class="form-control" value="${jc.masukTepatWaktu || '08:15'}">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label" style="font-size:10px;">Batas Akhir Absen Masuk:</label>
+                            <input type="time" id="cfgJamMasukBatas" class="form-control" value="${jc.masukBatasAkhir || '15:00'}">
+                        </div>
                     </div>
-                    <div class="form-group" style="margin-bottom:0;">
-                        <label class="form-label">Toleransi Terlambat (Menit):</label>
-                        <input type="number" id="cfgJamToleransi" class="form-control" value="${jc.toleransi || 15}" min="0">
+                    <div style="font-size:10px; color:#64748b; margin-top:6px;">
+                        ℹ️ <b>06:30 - 08:15</b>: Tepat Waktu | <b>08:16 - 15:00</b>: Terlambat | <b>&gt; 15:00</b>: Presensi Masuk Ditutup.
+                    </div>
+                </div>
+
+                <!-- Blok Pengaturan Presensi Pulang -->
+                <div style="background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:16px; padding:14px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="font-size:12px; font-weight:900; color:#0f172a;">🌆 SESI PRESENSI PULANG</span>
+                        <span class="badge-status badge-green">Kepulangan Resmi</span>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label" style="font-size:10px;">Mulai Dibuka Absen Pulang:</label>
+                            <input type="time" id="cfgJamPulangMulai" class="form-control" value="${jc.pulangMulai || '16:00'}">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label" style="font-size:10px;">Batas Akhir Absen Pulang:</label>
+                            <input type="time" id="cfgJamPulangBatas" class="form-control" value="${jc.pulangBatasAkhir || '23:00'}">
+                        </div>
+                    </div>
+                    <div style="font-size:10px; color:#64748b; margin-top:6px;">
+                        ℹ️ <b>&lt; 16:00</b>: Belum dibuka | <b>16:00 - 23:00</b>: Presensi Pulang Dibuka | <b>&gt; 23:00</b>: Presensi Pulang Ditutup.
                     </div>
                 </div>
             </div>
@@ -3458,62 +3675,28 @@
         };
 
         window.simpanJamOperasionalGlobal = function() {
-            const masuk = document.getElementById("cfgJamMasuk")?.value || "08:00";
-            const pulang = document.getElementById("cfgJamPulang")?.value || "16:00";
-            const toleransi = parseInt(document.getElementById("cfgJamToleransi")?.value) || 15;
+            const masukMulai = document.getElementById("cfgJamMasukMulai")?.value || "06:30";
+            const masukTepatWaktu = document.getElementById("cfgJamMasukTepat")?.value || "08:15";
+            const masukBatasAkhir = document.getElementById("cfgJamMasukBatas")?.value || "15:00";
+            const pulangMulai = document.getElementById("cfgJamPulangMulai")?.value || "16:00";
+            const pulangBatasAkhir = document.getElementById("cfgJamPulangBatas")?.value || "23:00";
 
-            window.cloudState.jamConfig = { masuk, pulang, toleransi };
+            window.cloudState.jamConfig = {
+                masukMulai,
+                masukTepatWaktu,
+                masukBatasAkhir,
+                pulangMulai,
+                pulangBatasAkhir,
+                masuk: masukTepatWaktu,
+                pulang: pulangMulai,
+                toleransi: 0
+            };
+
             window.simpanDatabasePersisten(true);
-            window.showModalInfo("Pengaturan Jam Disimpan ⏰", `Jam Masuk: <b>${masuk} WITA</b><br>Jam Pulang: <b>${pulang} WITA</b><br>Toleransi: <b>${toleransi} Menit</b>`);
-        };
-
-        window.bukaModalEditGeofenceInd = function(idx) {
-            const ind = window.cloudState.industri[idx];
-            window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">📍 Atur Geofence: ${ind.nama}</h3>
-                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Pastikan koordinat akurat agar GPS siswa mendeteksi radius kantor.</p>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                    <div class="form-group">
-                        <label class="form-label">Latitude:</label>
-                        <input type="text" id="geoLat" class="form-control" value="${ind.lat || '0.45612'}">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Longitude:</label>
-                        <input type="text" id="geoLng" class="form-control" value="${ind.lng || '121.94210'}">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Radius Toleransi Geofence (Meter):</label>
-                    <input type="number" id="geoRadius" class="form-control" value="${ind.radius || 100}" min="20" max="2000">
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                    <div class="form-group">
-                        <label class="form-label">Jam Masuk:</label>
-                        <input type="time" id="geoMasuk" class="form-control" value="${ind.masuk || '08:00'}">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Jam Pulang:</label>
-                        <input type="time" id="geoPulang" class="form-control" value="${ind.pulang || '16:00'}">
-                    </div>
-                </div>
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanEditGeofenceInd(${idx})" class="btn-action btn-blue">💾 Update Geofence</button>
-                </div>
-            `);
-        };
-
-        window.simpanEditGeofenceInd = function(idx) {
-            const lat = document.getElementById("geoLat")?.value.trim() || "0.45612";
-            const lng = document.getElementById("geoLng")?.value.trim() || "121.94210";
-            const radius = parseInt(document.getElementById("geoRadius")?.value) || 100;
-            const masuk = document.getElementById("geoMasuk")?.value || "08:00";
-            const pulang = document.getElementById("geoPulang")?.value || "16:00";
-
-            window.cloudState.industri[idx] = { ...window.cloudState.industri[idx], lat, lng, radius, masuk, pulang };
-            window.simpanDatabasePersisten(true);
-            window.closeDynamicModal();
-            window.showModalInfo("Geofence Diperbarui ✅", `Koordinat dan radius ${window.cloudState.industri[idx].nama} berhasil diperbarui.`);
+            window.showModalInfo(
+                "Pengaturan Jam Disimpan ⏰", 
+                `Pengaturan waktu presensi berhasil diperbarui & disinkronkan:<br><br>• <b>Absen Masuk</b>: ${masukMulai} s/d ${masukBatasAkhir} WITA (Batas Tepat Waktu: ${masukTepatWaktu})<br>• <b>Absen Pulang</b>: ${pulangMulai} s/d ${pulangBatasAkhir} WITA`
+            );
             window.openFeature("jam-geofence", "Jam & Geofence GPS");
         };
 
@@ -3849,6 +4032,7 @@
                         ${ab.foto_selfie ? `<img src="${ab.foto_selfie}" alt="Foto" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid #7dd3fc; cursor:pointer;" onclick="window.bukaPratinjauFotoSelfie('${ab.foto_selfie}', '${ab.nama}', '${ab.tanggal} ${ab.jam}')">` : '<span style="color:#94a3b8;">-</span>'}
                     </td>
                     <td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td>
+                    <td><span class="badge-status badge-blue">${ab.kategori_hadir || 'Hadir di Lokasi'}</span></td>
                     <td>${ab.tanggal}</td>
                     <td>${ab.jam} WITA</td>
                     <td><span class="badge-status ${ab.status === 'Tepat Waktu' ? 'badge-green' : 'badge-amber'}">${ab.status || 'Hadir'}</span></td>
@@ -3880,25 +4064,26 @@
                                 <th>No</th>
                                 <th>Foto</th>
                                 <th>Tipe</th>
+                                <th>Kategori</th>
                                 <th>Tanggal</th>
                                 <th>Waktu</th>
-                                <th>Status</th>
+                                <th>Keterangan</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada riwayat absensi Anda</td></tr>'}
+                            ${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada riwayat presensi</td></tr>'}
                         </tbody>
                     </table>
                 </div>
             </div>`;
         };
 
-        window.bukaPratinjauFotoSelfie = function(src, nama, info) {
+        window.bukaPratinjauFotoSelfie = function(imgSrc, nama, waktu) {
             window.openDynamicModal(`
                 <div style="text-align:center;">
-                    <h3 style="font-size:15px; font-weight:900; color:#0f172a; margin-bottom:4px;">Foto Presensi: ${nama}</h3>
-                    <div style="font-size:11px; color:#64748b; margin-bottom:12px;">${info}</div>
-                    <img src="${src}" alt="Foto Absen" style="width:100%; max-height:360px; object-fit:contain; border-radius:14px; border:2px solid #38bdf8;">
+                    <h3 style="font-size:15px; font-weight:900; color:#0284c7; margin-bottom:4px;">Foto Presensi: ${nama}</h3>
+                    <div style="font-size:11px; color:#64748b; margin-bottom:12px;">Waktu: ${waktu}</div>
+                    <img src="${imgSrc}" alt="Selfie Presensi" style="width:100%; max-height:360px; object-fit:contain; border-radius:14px; border:2px solid #38bdf8;">
                     <div style="margin-top:14px;">
                         <button onclick="window.closeDynamicModal()" class="btn-action btn-blue" style="padding:8px 24px;">Tutup</button>
                     </div>
@@ -3910,12 +4095,14 @@
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
             const myJurnal = (window.cloudState.jurnal || []).filter(j => j.siswa === profile.nama);
             let rows = "";
-            myJurnal.forEach((j, idx) => {
+            myJurnal.forEach((jur, idx) => {
                 rows += `<tr>
                     <td>${idx + 1}</td>
-                    <td><b>${j.tanggal}</b></td>
-                    <td style="white-space:normal; min-width:180px;">${j.kegiatan}</td>
-                    <td><span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span></td>
+                    <td>${jur.tanggal}</td>
+                    <td style="white-space:normal; min-width:160px;"><b>${jur.kegiatan}</b><div style="font-size:10px; color:#64748b;">Kendala: ${jur.kendala || '-'}</div></td>
+                    <td>${jur.guru_pembimbing || '-'}</td>
+                    <td>${jur.file_bukti ? `<a href="${jur.file_bukti}" target="_blank" class="btn-action btn-blue" style="text-decoration:none; padding:3px 8px; font-size:10px;">📎 Lihat Bukti</a>` : '<span style="color:#94a3b8;">-</span>'}</td>
+                    <td><span class="badge-status ${jur.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${jur.status || 'Menunggu'}</span></td>
                 </tr>`;
             });
 
@@ -3923,9 +4110,9 @@
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
-                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">LOGBOOK HARIAN MAGANG</div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">LOG AKTIVITAS PKL</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📖 Jurnal Harian PKL</h3>
-                        <p style="font-size:11px; color:#64748b;">Catat setiap tugas yang Anda kerjakan di tempat industri.</p>
+                        <p style="font-size:11px; color:#64748b;">Catat pekerjaan harian dan kirimkan ke pembimbing.</p>
                     </div>
                     <button onclick="window.bukaModalTambahJurnal()" class="btn-action btn-blue" style="padding:8px 14px;">
                         + Tulis Jurnal Baru
@@ -3938,34 +4125,84 @@
                             <tr>
                                 <th>No</th>
                                 <th>Tanggal</th>
-                                <th>Deskripsi Kegiatan</th>
-                                <th>Status Validasi</th>
+                                <th>Uraian Kegiatan</th>
+                                <th>Pembimbing</th>
+                                <th>Bukti File</th>
+                                <th>Status</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="4" class="empty-placeholder">Belum ada jurnal yang ditulis</td></tr>'}
+                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada jurnal kegiatan yang dikirimkan</td></tr>'}
                         </tbody>
                     </table>
                 </div>
             </div>`;
         };
 
+        window.tempJurnalFile = null;
+
         window.bukaModalTambahJurnal = function() {
             const todayStr = new Date().toISOString().split('T')[0];
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            window.tempJurnalFile = null;
+
+            // Dapatkan guru pembimbing siswa
+            const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
+            const defGuru = penempatan ? penempatan.guru : ((window.cloudState.guru && window.cloudState.guru[0]) ? window.cloudState.guru[0].nama : "Wilasia S. Talaa, S.ST");
+
+            let guruOptions = "";
+            (window.cloudState.guru || []).forEach(g => {
+                guruOptions += `<option value="${g.nama}" ${g.nama === defGuru ? 'selected' : ''}>${g.nama} (${g.mapel || 'Guru'})</option>`;
+            });
+
+            let panitiaOptions = "";
+            const adminUsers = (window.cloudState.registeredUsers || []).filter(u => u.role === 'admin');
+            if (adminUsers.length > 0) {
+                adminUsers.forEach(a => {
+                    panitiaOptions += `<option value="${a.nama}">${a.nama}</option>`;
+                });
+            } else {
+                panitiaOptions = `<option value="Panitia PKL SMKN 1 Marisa">Panitia PKL SMKN 1 Marisa</option>`;
+            }
+
             window.openDynamicModal(`
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">📖 Tulis Jurnal Harian PKL</h3>
                 <div class="form-group">
                     <label class="form-label">Tanggal Kegiatan:</label>
                     <input type="date" id="jurTanggal" class="form-control" value="${todayStr}">
                 </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div class="form-group">
+                        <label class="form-label">Guru Pembimbing:</label>
+                        <select id="jurGuruPembimbing" class="form-control" style="font-weight:700; color:#0369a1;">
+                            ${guruOptions || '<option>Wilasia S. Talaa, S.ST</option>'}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Panitia PKL / Admin:</label>
+                        <select id="jurPanitiaAdmin" class="form-control" style="font-weight:700; color:#0369a1;">
+                            ${panitiaOptions}
+                        </select>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label class="form-label">Uraian Pekerjaan / Kegiatan:</label>
-                    <textarea id="jurKegiatan" class="form-control" style="height:80px;" placeholder="Tuliskan tugas atau pekerjaan yang Anda selesaikan hari ini..."></textarea>
+                    <textarea id="jurKegiatan" class="form-control" style="height:75px;" placeholder="Tuliskan tugas atau pekerjaan yang Anda selesaikan hari ini..."></textarea>
                 </div>
+
                 <div class="form-group">
                     <label class="form-label">Kendala & Pemecahan Masalah (Opsional):</label>
                     <input type="text" id="jurKendala" class="form-control" placeholder="Tuliskan kendala dan solusinya...">
                 </div>
+
+                <div class="form-group">
+                    <label class="form-label">Unggah Foto / Bukti Jurnal (Opsional):</label>
+                    <input type="file" id="jurFileBukti" class="form-control" accept="image/*, .pdf" onchange="window.handleUploadBuktiJurnal(this)">
+                    <div id="jurFilePreviewName" style="font-size:10.5px; color:#10b981; font-weight:750; margin-top:4px;"></div>
+                </div>
+
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
                     <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
                     <button onclick="window.simpanJurnalBaru()" class="btn-action btn-blue">💾 Kirim Jurnal</button>
@@ -3973,9 +4210,28 @@
             `);
         };
 
+        window.handleUploadBuktiJurnal = function(inputEl) {
+            if (inputEl.files && inputEl.files[0]) {
+                const file = inputEl.files[0];
+                const prev = document.getElementById("jurFilePreviewName");
+                if (prev) prev.innerText = `✓ Berkas siap: ${file.name} (${Math.round(file.size / 1024)} KB)`;
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    window.tempJurnalFile = {
+                        namaBerkas: file.name,
+                        data: e.target.result
+                    };
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+
         window.simpanJurnalBaru = function() {
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
             const tgl = document.getElementById("jurTanggal")?.value;
+            const guru = document.getElementById("jurGuruPembimbing")?.value;
+            const panitia = document.getElementById("jurPanitiaAdmin")?.value;
             const kegiatan = document.getElementById("jurKegiatan")?.value.trim();
             const kendala = document.getElementById("jurKendala")?.value.trim() || "-";
 
@@ -3985,16 +4241,20 @@
                 id: "jur_" + Date.now(),
                 user_id: profile.identitas || profile.nama,
                 siswa: profile.nama,
+                guru_pembimbing: guru,
+                panitia_admin: panitia,
                 industri: "DUDI Magang",
                 tanggal: tgl,
                 kegiatan: kegiatan,
                 kendala: kendala,
+                file_bukti: window.tempJurnalFile ? window.tempJurnalFile.data : null,
+                nama_file_bukti: window.tempJurnalFile ? window.tempJurnalFile.namaBerkas : null,
                 status: "Menunggu Verifikasi"
             });
 
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
-            window.showModalInfo("Jurnal Terkirim 📖", "Jurnal harian Anda telah tersimpan dan siap divalidasi.");
+            window.showModalInfo("Jurnal Terkirim 📖", `Jurnal harian Anda berhasil disimpan dan ditujukan kepada <b>${guru}</b> serta <b>${panitia}</b>.`);
             window.openFeature("jurnal", "Jurnal Harian");
         };
 
@@ -4496,14 +4756,17 @@
 
         window.renderPengaduanMasalah = function() {
             const list = window.cloudState.pengaduan || [];
+            const role = window.cloudState.activeRole || "siswa";
             let rows = "";
             list.forEach((ad, idx) => {
                 rows += `<tr>
                     <td>${idx + 1}</td>
-                    <td><b>${ad.pelapor}</b> <span class="badge-status badge-blue">${ad.role}</span></td>
+                    <td><b>${ad.pelapor}</b> <span class="badge-status badge-blue">${ad.role || 'Siswa'}</span></td>
+                    <td><b>${ad.tujuan || 'Panitia PKL'}</b></td>
                     <td>${ad.tanggal}</td>
-                    <td>${ad.isi}</td>
-                    <td><span class="badge-status badge-amber">${ad.status || 'Diproses'}</span></td>
+                    <td style="white-space:normal; min-width:180px;">${ad.isi}</td>
+                    <td><span class="badge-status ${ad.status === 'Selesai' ? 'badge-green' : 'badge-amber'}">${ad.status || 'Diproses'}</span></td>
+                    ${(role === 'admin' || role === 'guru') ? `<td><button onclick="window.tanganiPengaduanMasalah(${idx})" class="btn-action btn-emerald" style="padding:4px 8px; font-size:10px;">Tanggapi</button></td>` : ''}
                 </tr>`;
             });
 
@@ -4513,8 +4776,11 @@
                     <div>
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">LAYANAN PENGADUAN & KENDALA</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">⚠️ Laporan Pengaduan Masalah</h3>
-                        <p style="font-size:11px; color:#64748b;">Pengaduan dari siswa atau orang tua terkait kendala di tempat magang.</p>
+                        <p style="font-size:11px; color:#64748b;">Kirimkan laporan kendala atau masalah di tempat industri kepada Guru Pembimbing atau Panitia PKL.</p>
                     </div>
+                    <button onclick="window.bukaModalKirimAduanMasalah()" class="btn-action btn-amber" style="padding:8px 14px; font-size:12px;">
+                        ⚠️ + Kirim Laporan Masalah
+                    </button>
                 </div>
 
                 <div class="table-wrap">
@@ -4523,17 +4789,101 @@
                             <tr>
                                 <th>No</th>
                                 <th>Pelapor</th>
+                                <th>Tujuan Aduan</th>
                                 <th>Tanggal</th>
                                 <th>Rincian Kendala</th>
                                 <th>Status</th>
+                                ${(role === 'admin' || role === 'guru') ? '<th>Aksi</th>' : ''}
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada pengaduan kendala masuk</td></tr>'}
+                            ${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada pengaduan kendala yang dikirimkan</td></tr>'}
                         </tbody>
                     </table>
                 </div>
             </div>`;
+        };
+
+        window.bukaModalKirimAduanMasalah = function() {
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            let guruOptions = "";
+            (window.cloudState.guru || []).forEach(g => {
+                guruOptions += `<option value="Guru: ${g.nama}">Guru: ${g.nama}</option>`;
+            });
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#ef4444; margin-bottom:6px;">⚠️ Kirim Laporan Masalah / Kendala PKL</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Aduan ini akan diteruskan dan ditangani oleh pihak berwenang.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Tujuan Laporan Aduan:</label>
+                    <select id="aduanTujuanSelect" class="form-control" style="font-weight:750; color:#0369a1;">
+                        <option value="Panitia PKL / Admin">👨‍💼 Panitia PKL / Admin (Sekolah)</option>
+                        ${guruOptions || '<option value="Guru Pembimbing">👩‍🏫 Guru Pembimbing Lapangan</option>'}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Kategori Kendala:</label>
+                    <select id="aduanKategoriSelect" class="form-control">
+                        <option value="Kendala Teknis Magang">Kendala Teknis / Pekerjaan Magang</option>
+                        <option value="Presensi / Kehadiran">Masalah Presensi / Lokasi GPS</option>
+                        <option value="Kondisi Lingkungan Kerja">Kondisi / Hubungan di Tempat Industri</option>
+                        <option value="Kesehatan / Keadaan Darurat">Kesehatan / Masalah Mendesak</option>
+                        <option value="Lainnya">Kendala Lainnya</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Uraian Masalah / Kendala yang Dialami:</label>
+                    <textarea id="aduanIsiText" class="form-control" style="height:90px;" placeholder="Jelaskan secara jelas kendala atau masalah yang Anda hadapi..."></textarea>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.prosesSimpanAduanMasalah()" class="btn-action btn-red" style="font-weight:900;">⚡ Kirim Aduan Sekarang</button>
+                </div>
+            `);
+        };
+
+        window.prosesSimpanAduanMasalah = function() {
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const tujuan = document.getElementById("aduanTujuanSelect")?.value;
+            const kategori = document.getElementById("aduanKategoriSelect")?.value;
+            const isi = document.getElementById("aduanIsiText")?.value.trim();
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            if (!isi) return window.showModalInfo("Lengkapi Aduan", "Silakan ketik uraian kendala atau masalah Anda!");
+
+            if (!Array.isArray(window.cloudState.pengaduan)) window.cloudState.pengaduan = [];
+
+            window.cloudState.pengaduan.unshift({
+                id: "adu_" + Date.now(),
+                pelapor: profile.nama,
+                role: profile.role || "Siswa",
+                tujuan: tujuan,
+                kategori: kategori,
+                isi: `[${kategori}] ${isi}`,
+                tanggal: todayStr,
+                status: "Diproses"
+            });
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Laporan Terkirim ⚠️", `Laporan masalah Anda berhasil disampaikan kepada <b>${tujuan}</b> dan segera ditindaklanjuti.`);
+            window.openFeature("aduan", "Laporkan Masalah");
+        };
+
+        window.tanganiPengaduanMasalah = function(idx) {
+            window.showConfirmDialog("Tanggapi Aduan", "Tandai laporan pengaduan ini telah selesai ditangani?", () => {
+                if (window.cloudState.pengaduan[idx]) {
+                    window.cloudState.pengaduan[idx].status = "Selesai";
+                    window.simpanDatabasePersisten(true);
+                    window.openFeature("aduan", "Laporkan Masalah");
+                }
+            });
         };
 
         window.toggleAllCheckboxes = function(type, isChecked) {
