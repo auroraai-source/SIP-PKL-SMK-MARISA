@@ -219,7 +219,7 @@
         }
         .app-topbar {
             background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%);
-            padding: 14px 18px;
+            padding: 10px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -227,35 +227,101 @@
             top: 0;
             z-index: 50;
             box-shadow: 0 6px 20px rgba(15, 82, 186, 0.3);
+            gap: 10px;
         }
         .btn-burger-menu {
-            width: 44px;
-            height: 44px;
+            width: 34px;
+            height: 34px;
             background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.7);
-            border-radius: 12px;
+            border: 1.5px solid rgba(255, 255, 255, 0.7);
+            border-radius: 10px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 5px;
+            gap: 4px;
             cursor: pointer;
             transition: all 0.2s ease;
             backdrop-filter: blur(8px);
             flex-shrink: 0;
         }
+        .btn-burger-menu:hover, .btn-burger-menu:active {
+            background: rgba(255, 255, 255, 0.32);
+            transform: scale(0.96);
+        }
         .burger-line {
-            width: 22px;
-            height: 3px;
+            width: 18px;
+            height: 2.2px;
             background-color: #ffffff;
             border-radius: 2px;
         }
+        .topbar-center-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            flex: 1;
+            min-width: 0;
+            padding: 0 4px;
+        }
         .topbar-center-title {
-            font-size: 19px;
+            font-size: 18px;
             font-weight: 950;
             color: #ffffff;
             letter-spacing: 0.5px;
+            line-height: 1.1;
             text-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+        }
+        .topbar-center-desc {
+            font-size: 10px;
+            font-weight: 800;
+            color: #fde047;
+            letter-spacing: 0.3px;
+            line-height: 1.2;
+            margin-top: 1px;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .topbar-center-school {
+            font-size: 9.5px;
+            font-weight: 750;
+            color: #e0f2fe;
+            letter-spacing: 0.3px;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .topbar-right-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: flex-end;
+            flex-shrink: 0;
+        }
+        .topbar-user-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            max-width: 120px;
+        }
+        .topbar-logo-badge {
+            width: 50px;
+            height: 50px;
+            border-radius: 14px;
+            background: #ffffff;
+            padding: 2px;
+            border: 2px solid #fde047;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            flex-shrink: 0;
+            overflow: hidden;
+            transition: transform 0.2s ease;
         }
 
         .app-sidebar-backdrop {
@@ -754,33 +820,57 @@
                 </div>
 
                 <button type="submit" id="btnSubmitLoginAction" class="btn-action-primary" style="margin-top: 6px;">
-                    MASUK KE ROOM SEKARANG ⚡
-                </button>
-            </form>
+            MASUK KE ROOM SEKARANG ⚡
+        </button>
+    </form>
 
-            <div id="linkLupaSandiWrap" style="text-align: center; margin-top: 14px;">
-                <button type="button" onclick="window.bukaModalLupaPassword()" style="background: none; border: none; color: #0284c7; font-size: 11px; font-weight: 800; cursor: pointer;">
-                    Lupa Kata Sandi? Hubungi Panitia
-                </button>
-            </div>
-        </div>
+    <div id="linkLupaSandiWrap" style="text-align: center; margin-top: 14px;">
+        <button type="button" onclick="window.bukaModalLupaPassword()" style="background: none; border: none; color: #0284c7; font-size: 11px; font-weight: 800; cursor: pointer;">
+            Lupa Kata Sandi? Hubungi Panitia
+        </button>
     </div>
+</div>
+</div>
 
     <div id="appScreen">
         <div class="app-topbar">
-            <div style="display: flex; align-items: center; gap: 10px;">
+            <!-- Kiri: Tombol Burger Menu yang diperkecil -->
+            <div style="display: flex; align-items: center; flex-shrink: 0;">
                 <button class="btn-burger-menu" id="btnBurgerMenu" onclick="window.toggleDrawerSidebar()" aria-label="Buka Menu">
                     <div class="burger-line"></div>
                     <div class="burger-line"></div>
                     <div class="burger-line"></div>
                 </button>
-                <div style="width: 38px; height: 38px; border-radius: 12px; background: #ffffff; padding: 2px; border: 1.5px solid #fde047; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.2); flex-shrink: 0;">
-                    <img src="Logo SMK.png" alt="Logo SMKN 1 Marisa" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.style.display='none';">
-                </div>
             </div>
-            <div class="topbar-center-title" id="topbarRoleTitle">SIP-PKL</div>
-            <div style="font-size: 11px; color: #e0f2fe; font-weight: 800; max-width: 140px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" id="topbarUserName">
-                Pengguna
+
+            <!-- Tengah: SIP-PKL, Sistem Informasi Pengelolaan PKL, SMK Negeri 1 Marisa -->
+            <div class="topbar-center-wrap">
+                <div class="topbar-center-title" id="topbarRoleTitle">SIP-PKL</div>
+                <div class="topbar-center-desc">Sistem Informasi Pengelolaan PKL</div>
+                <div class="topbar-center-school">SMK Negeri 1 Marisa</div>
+            </div>
+
+            <!-- Kanan: Identitas User & Logo SMK yang lebih besar dari burger -->
+            <div class="topbar-right-wrap">
+                <div class="topbar-user-info">
+                    <div style="font-size: 11px; color: #ffffff; font-weight: 850; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; text-align: right;" id="topbarUserName">
+                        Pengguna
+                    </div>
+                    <div style="font-size: 9px; color: #fde047; font-weight: 800; text-transform: uppercase;" id="topbarUserRoleBadge">
+                        PANITIA PKL
+                    </div>
+                </div>
+                <div class="topbar-logo-badge" title="SMK Negeri 1 Marisa">
+                    <img src="Logo SMK.png" alt="Logo SMKN 1 Marisa" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                    <svg viewBox="0 0 100 100" style="display: none; width: 100%; height: 100%;">
+                        <path d="M 50 5 Q 85 10 90 35 Q 90 70 50 95 Q 10 70 10 35 Q 15 10 50 5 Z" fill="#facc15" stroke="#dc2626" stroke-width="4"/>
+                        <circle cx="50" cy="42" r="18" fill="#0284c7" stroke="#0f172a" stroke-width="2"/>
+                        <circle cx="50" cy="42" r="9" fill="#f8fafc"/>
+                        <path d="M 28 62 Q 50 56 50 66 Q 50 56 72 62 L 70 73 Q 50 67 50 76 Q 50 67 30 73 Z" fill="#16a34a" stroke="#ca8a04" stroke-width="2"/>
+                        <path d="M 20 80 Q 50 74 80 80 L 76 88 Q 50 82 24 88 Z" fill="#ffffff" stroke="#ca8a04" stroke-width="1.5"/>
+                        <text x="50" y="86" font-size="5.5" font-weight="900" text-anchor="middle" fill="#0f172a">SMKN 1 MARISA</text>
+                    </svg>
+                </div>
             </div>
         </div>
 
