@@ -1141,6 +1141,12 @@
 
         window.isIndustriMatch = function(a, b) {
             if (!a || !b) return false;
+            if (Array.isArray(a)) {
+                return a.some(item => item && item.toLowerCase().trim() === b.toLowerCase().trim());
+            }
+            if (typeof a === 'string' && a.includes(',')) {
+                return a.split(',').some(item => item && item.toLowerCase().trim() === b.toLowerCase().trim());
+            }
             return a.toLowerCase().trim() === b.toLowerCase().trim();
         };
 
@@ -3649,10 +3655,15 @@
             let rowsPembimbing = ""; 
             (window.cloudState.penempatan || []).forEach((p, idx) => { 
                 const sList = Array.isArray(p.siswa) ? p.siswa.join(", ") : (p.siswa || "-"); 
+                const indList = Array.isArray(p.industri) 
+                    ? p.industri 
+                    : (typeof p.industri === 'string' && p.industri.includes(',') ? p.industri.split(',').map(x => x.trim()) : [p.industri || '-']);
+                const indBadges = indList.map(i => `<span style="background:#e0f2fe; border:1px solid #7dd3fc; color:#0369a1; padding:2px 6px; border-radius:5px; font-size:10px; font-weight:800; display:inline-block; margin:2px;">🏢 ${i}</span>`).join(' ');
+
                 rowsPembimbing += `<tr>
                     <td>${idx + 1}</td>
                     <td><b>${p.guru}</b></td>
-                    <td><b>${p.industri}</b></td>
+                    <td>${indBadges}</td>
                     <td>${sList}</td>
                     <td><button onclick="window.konfirmasiHapusPenempatan(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td>
                 </tr>`; 
@@ -3662,11 +3673,18 @@
             (window.cloudState.penugasanMonitoring || []).forEach((m, idx) => {
                 const listDudi = Array.isArray(m.industriList) ? m.industriList : [m.industriList];
                 const dudiBadges = listDudi.map(d => `<span style="background:#e0f2fe; border:1px solid #7dd3fc; color:#0369a1; padding:2px 6px; border-radius:5px; font-size:10px; font-weight:800; display:inline-block; margin:2px;">🏢 ${d}</span>`).join(' ');
+                
+                const listSiswa = Array.isArray(m.siswaList) ? m.siswaList : (m.siswaList ? [m.siswaList] : []);
+                const siswaBadges = listSiswa.length > 0
+                    ? listSiswa.map(s => `<span style="background:#f0fdf4; border:1px solid #86efac; color:#15803d; padding:2px 6px; border-radius:5px; font-size:10px; font-weight:800; display:inline-block; margin:2px;">👨‍🎓 ${s}</span>`).join(' ')
+                    : '<span style="font-size:10px; color:#94a3b8;">Semua Siswa Terkait</span>';
+
                 rowsMonitoring += `<tr>
                     <td>${idx + 1}</td>
                     <td><b>${m.guru}</b><div style="font-size:10px; color:#15803d; font-weight:800;">GURU MONITORING</div></td>
                     <td><b>${m.judulTugas || 'Monitoring DUDI'}</b><div style="font-size:10px; color:#64748b;">${m.tanggalMulai || '-'} s/d ${m.tanggalSelesai || '-'}</div></td>
                     <td>${dudiBadges || '-'}</td>
+                    <td>${siswaBadges}</td>
                     <td><button onclick="window.konfirmasiHapusTugasMonitoring(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button></td>
                 </tr>`;
             });
@@ -3678,7 +3696,7 @@
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">📍 SURAT TUGAS & JADWAL KUNJUNGAN</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🚗 Alokasi Guru Monitoring (Kunjungan Multi-Industri)</h3>
                         <p style="font-size:11px; color:#475569; margin-top:2px;">
-                            Bagi dan kelompokkan guru monitoring yang akan turun ke lapangan. Satu guru dapat ditugaskan ke lebih dari 1 industri.
+                            Bagi dan kelompokkan guru monitoring yang akan turun ke lapangan beserta daftar industri dan siswa yang dikunjungi.
                         </p>
                     </div>
                     <button onclick="window.bukaModalAlokasiMonitoring()" class="btn-action btn-emerald" style="padding:8px 16px; font-size:12px;">
@@ -3694,11 +3712,12 @@
                                 <th>Nama Guru Monitoring</th>
                                 <th>Agenda / Periode</th>
                                 <th>Daftar Industri yang Dikunjungi</th>
+                                <th>Siswa yang Dimonitoring</th>
                                 <th>Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rowsMonitoring || '<tr><td colspan="5" class="empty-placeholder">Belum ada penugasan guru monitoring yang dibuat</td></tr>'}
+                            ${rowsMonitoring || '<tr><td colspan="6" class="empty-placeholder">Belum ada penugasan guru monitoring yang dibuat</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -3724,7 +3743,7 @@
                             <tr>
                                 <th>No</th>
                                 <th>Guru Pembimbing</th>
-                                <th>Industri</th>
+                                <th>Industri Magang</th>
                                 <th>Siswa Bimbingan</th>
                                 <th>Aksi</th>
                             </tr>
@@ -3755,11 +3774,23 @@
                 </label>`;
             });
 
+            let sCheckboxes = "";
+            (window.cloudState.siswa || []).forEach((s) => {
+                sCheckboxes += `
+                <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; cursor:pointer; font-size:12px;">
+                    <input type="checkbox" name="selSiswaMonitoring" value="${s.nama}" style="width:16px; height:16px; accent-color:#0284c7;">
+                    <div>
+                        <b>👨‍🎓 ${s.nama}</b>
+                        <div style="font-size:10px; color:#64748b;">${s.kelas || '-'}</div>
+                    </div>
+                </label>`;
+            });
+
             const todayStr = new Date().toISOString().split('T')[0];
 
             window.openDynamicModal(`
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">🚗 Penugasan Guru Monitoring DUDI</h3>
-                <p style="font-size:11px; color:#64748b; margin-bottom:14px;">Tentukan nama guru dan centang satu atau beberapa industri yang wajib dikunjungi.</p>
+                <p style="font-size:11px; color:#64748b; margin-bottom:14px;">Tentukan nama guru dan centang satu atau beberapa industri serta siswa yang wajib dikunjungi.</p>
                 
                 <div class="form-group">
                     <label class="form-label">Pilih Guru Monitoring:</label>
@@ -3789,8 +3820,18 @@
                         <label class="form-label" style="margin-bottom:0;">Centang Mitra Industri yang Dikunjungi:</label>
                         <span style="font-size:10px; color:#0284c7; font-weight:800;">Pilih &gt; 1 Industri</span>
                     </div>
-                    <div style="max-height:160px; overflow-y:auto; background:#f8fafc; padding:8px; border-radius:10px; border:1.5px solid #bfdbfe;">
+                    <div style="max-height:130px; overflow-y:auto; background:#f8fafc; padding:8px; border-radius:10px; border:1.5px solid #bfdbfe;">
                         ${indCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada data industri terdaftar</span>'}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label class="form-label" style="margin-bottom:0;">Centang Nama Siswa yang Dimonitoring:</label>
+                        <span style="font-size:10px; color:#15803d; font-weight:800;">Pilih Siswa Terkait</span>
+                    </div>
+                    <div style="max-height:130px; overflow-y:auto; background:#f8fafc; padding:8px; border-radius:10px; border:1.5px solid #bfdbfe;">
+                        ${sCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada data siswa terdaftar</span>'}
                     </div>
                 </div>
 
@@ -3817,6 +3858,10 @@
             const selectedInd = [];
             cbs.forEach(c => selectedInd.push(c.value));
 
+            const cbsSiswa = document.querySelectorAll('input[name="selSiswaMonitoring"]:checked');
+            const selectedSiswa = [];
+            cbsSiswa.forEach(c => selectedSiswa.push(c.value));
+
             if (!guru) return window.showModalInfo("Pilih Guru", "Nama guru monitoring wajib dipilih!");
             if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Pilih minimal 1 mitra industri yang akan dikunjungi!");
 
@@ -3827,12 +3872,13 @@
                 tanggalMulai: tglMulai,
                 tanggalSelesai: tglSelesai,
                 industriList: selectedInd,
+                siswaList: selectedSiswa,
                 catatan
             });
 
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
-            window.showModalInfo("Surat Tugas Diterbitkan 🚗", `Guru <b>${guru}</b> telah resmi ditugaskan untuk monitoring ke <b>${selectedInd.length} Industri</b>.`);
+            window.showModalInfo("Surat Tugas Diterbitkan 🚗", `Guru <b>${guru}</b> telah resmi ditugaskan untuk monitoring ke <b>${selectedInd.length} Industri</b> dan <b>${selectedSiswa.length} Siswa</b>.`);
             window.openFeature("penempatan", "Alokasi Guru & Siswa");
         };
 
@@ -3846,13 +3892,27 @@
 
         window.bukaModalAlokasiPenempatan = function() {
             let gOpts = ""; (window.cloudState.guru || []).forEach(g => gOpts += `<option value="${g.nama}">${g.nama}</option>`);
-            let indOpts = ""; (window.cloudState.industri || []).forEach(i => indOpts += `<option value="${i.nama}">${i.nama}</option>`);
+
+            let indCheckboxes = "";
+            (window.cloudState.industri || []).forEach((ind) => {
+                indCheckboxes += `
+                <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; cursor:pointer; font-size:12px;">
+                    <input type="checkbox" name="selIndPenempatan" value="${ind.nama}" style="width:16px; height:16px; accent-color:#0284c7;">
+                    <div>
+                        <b>🏢 ${ind.nama}</b>
+                        <div style="font-size:10px; color:#64748b;">${ind.alamat || '-'} &bull; Radius: ${ind.radius || 100}m</div>
+                    </div>
+                </label>`;
+            });
 
             let sCheckboxes = "";
             (window.cloudState.siswa || []).forEach((s) => {
-                sCheckboxes += `<label style="display:flex; align-items:center; gap:8px; padding:4px 6px; font-size:11px; cursor:pointer;">
-                    <input type="checkbox" name="selSiswaPenempatan" value="${s.nama}" style="accent-color:#0284c7;">
-                    <span><b>${s.nama}</b> (${s.kelas})</span>
+                sCheckboxes += `<label style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; font-size:12px; cursor:pointer;">
+                    <input type="checkbox" name="selSiswaPenempatan" value="${s.nama}" style="width:16px; height:16px; accent-color:#0284c7;">
+                    <div>
+                        <b>👨‍🎓 ${s.nama}</b>
+                        <div style="font-size:10px; color:#64748b;">${s.kelas || '-'}</div>
+                    </div>
                 </label>`;
             });
 
@@ -3860,38 +3920,60 @@
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">🔄 Alokasi Guru Pembimbing Siswa</h3>
                 <div class="form-group">
                     <label class="form-label">Pilih Guru Pembimbing:</label>
-                    <select id="penGuru" class="form-control">${gOpts || '<option>Belum ada guru</option>'}</select>
+                    <select id="penGuru" class="form-control" style="font-weight:800; color:#0369a1;">${gOpts || '<option>Belum ada guru</option>'}</select>
                 </div>
+                
                 <div class="form-group">
-                    <label class="form-label">Pilih Mitra Industri Magang:</label>
-                    <select id="penInd" class="form-control">${indOpts || '<option>Belum ada industri</option>'}</select>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label class="form-label" style="margin-bottom:0;">Pilih Mitra Industri Magang (Centang):</label>
+                        <span style="font-size:10px; color:#0284c7; font-weight:800;">Bisa &gt; 1 Industri</span>
+                    </div>
+                    <div style="max-height:140px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
+                        ${indCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada industri terdaftar</span>'}
+                    </div>
                 </div>
+
                 <div class="form-group">
-                    <label class="form-label">Pilih Siswa yang Ditempatkan:</label>
-                    <div style="max-height:140px; overflow-y:auto; background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label class="form-label" style="margin-bottom:0;">Pilih Siswa yang Ditempatkan (Centang):</label>
+                        <span style="font-size:10px; color:#0284c7; font-weight:800;">Centang Siswa</span>
+                    </div>
+                    <div style="max-height:140px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
                         ${sCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada siswa terdaftar</span>'}
                     </div>
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
                     <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanAlokasiPembimbingManual()" class="btn-action btn-blue">💾 Simpan Alokasi</button>
+                    <button onclick="window.simpanAlokasiPembimbingManual()" class="btn-action btn-blue" style="font-weight:900;">💾 Simpan Alokasi</button>
                 </div>
             `);
         };
 
         window.simpanAlokasiPembimbingManual = function() {
             const guru = document.getElementById("penGuru")?.value;
-            const ind = document.getElementById("penInd")?.value;
-            const cbs = document.querySelectorAll('input[name="selSiswaPenempatan"]:checked');
+            
+            const cbsInd = document.querySelectorAll('input[name="selIndPenempatan"]:checked');
+            const selectedInd = [];
+            cbsInd.forEach(c => selectedInd.push(c.value));
+
+            const cbsSiswa = document.querySelectorAll('input[name="selSiswaPenempatan"]:checked');
             const selectedS = [];
-            cbs.forEach(c => selectedS.push(c.value));
+            cbsSiswa.forEach(c => selectedS.push(c.value));
 
-            if (!guru || !ind) return window.showModalInfo("Lengkapi Data", "Guru dan Industri wajib dipilih!");
-            if (selectedS.length === 0) return window.showModalInfo("Pilih Siswa", "Pilih minimal 1 siswa bimbingan!");
+            if (!guru) return window.showModalInfo("Lengkapi Data", "Guru pembimbing wajib dipilih!");
+            if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Centang minimal 1 mitra industri magang!");
+            if (selectedS.length === 0) return window.showModalInfo("Pilih Siswa", "Centang minimal 1 siswa bimbingan!");
 
-            window.cloudState.penempatan.unshift({ id: "pen_" + Date.now(), guru, industri: ind, siswa: selectedS });
+            window.cloudState.penempatan.unshift({ 
+                id: "pen_" + Date.now(), 
+                guru, 
+                industri: selectedInd.length === 1 ? selectedInd[0] : selectedInd, 
+                siswa: selectedS 
+            });
+            
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
+            window.showModalInfo("Alokasi Tersimpan 🔄", `Guru <b>${guru}</b> telah dialokasikan membimbing <b>${selectedS.length} Siswa</b> pada <b>${selectedInd.length} Industri</b>.`);
             window.openFeature("penempatan", "Alokasi Guru & Siswa");
         };
 
@@ -4711,6 +4793,9 @@
                 const listDudi = Array.isArray(m.industriList) ? m.industriList : [m.industriList];
                 const dudiBadges = listDudi.map(d => `<span style="background:#ffffff; border:1px solid #7dd3fc; color:#0369a1; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:800; display:inline-block; margin:2px;">🏢 ${d}</span>`).join(' ');
 
+                const listSiswa = Array.isArray(m.siswaList) ? m.siswaList : (m.siswaList ? [m.siswaList] : []);
+                const siswaBadges = listSiswa.map(s => `<span style="background:#f0fdf4; border:1px solid #86efac; color:#15803d; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:800; display:inline-block; margin:2px;">👨‍🎓 ${s}</span>`).join(' ');
+
                 cards += `
                 <div style="background:#f8fafc; border:1.5px solid #38bdf8; border-radius:14px; padding:12px; margin-bottom:10px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -4722,6 +4807,10 @@
                     <div style="margin-top:8px;">
                         <div style="font-size:10px; font-weight:800; color:#475569; margin-bottom:4px;">DAFTAR DUDI TARGET KUNJUNGAN:</div>
                         ${dudiBadges}
+                    </div>
+                    <div style="margin-top:8px;">
+                        <div style="font-size:10px; font-weight:800; color:#475569; margin-bottom:4px;">DAFTAR SISWA YANG DIMONITORING:</div>
+                        ${siswaBadges || '<span style="font-size:11px; color:#94a3b8;">Semua siswa magang di industri terkait</span>'}
                     </div>
                 </div>`;
             });
