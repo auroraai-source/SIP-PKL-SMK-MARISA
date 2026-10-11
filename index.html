@@ -221,7 +221,7 @@
             background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%);
             padding: 14px 16px 16px;
             display: grid;
-            grid-template-columns: 44px 1fr 70px;
+            grid-template-columns: 44px 1fr 82px;
             align-items: center;
             position: sticky;
             top: 0;
@@ -324,6 +324,21 @@
             width: 100%;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+        .topbar-user-name-text {
+            font-size: 9.5px;
+            font-weight: 850;
+            color: #ffffff;
+            letter-spacing: 0.2px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            max-width: 80px;
+            margin-top: 2.5px;
+            line-height: 1.15;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
         }
         .topbar-logo-badge {
             width: 44px;
@@ -881,10 +896,10 @@
                     </svg>
                 </div>
                 <div class="topbar-user-info">
-                    <div id="topbarUserName" style="display: none;">Pengguna</div>
                     <div class="topbar-role-badge-yellow" id="topbarUserRoleBadge">
                         PANITIA PKL
                     </div>
+                    <div id="topbarUserName" class="topbar-user-name-text" title="Nama Pengguna">Pengguna</div>
                 </div>
             </div>
         </div>
@@ -1489,6 +1504,42 @@
             if (backdrop) backdrop.classList.remove("active");
         };
 
+        window.isGpsDudiUnlocked = false;
+
+        window.bukaModalOtorisasiGPS = function() {
+            window.openDynamicModal(`
+                <div style="text-align:center;">
+                    <div style="font-size:34px; margin-bottom:8px;">📌</div>
+                    <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">Otorisasi Kunci Titik GPS DUDI</h3>
+                    <p style="font-size:11px; color:#64748b; margin-bottom:14px;">Fitur ini dilindungi. Masukkan kode sandi otorisasi resmi untuk menandai titik geofence GPS industri:</p>
+                    
+                    <div class="form-group" style="text-align:left;">
+                        <label class="form-label">Kode Sandi Akses GPS:</label>
+                        <div class="form-control-wrap">
+                            <input type="password" id="inputSandiAksesGPS" class="form-control" placeholder="Masukkan kode sandi..." autofocus>
+                            <button type="button" class="btn-eye-toggle" onclick="window.togglePasswordEye('inputSandiAksesGPS', this)">👁️</button>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; justify-content:center; gap:8px; margin-top:16px;">
+                        <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff; padding:10px 18px;">Batal</button>
+                        <button onclick="window.verifikasiSandiAksesGPS()" class="btn-action btn-blue" style="padding:10px 22px; font-weight:900;">Buka Fitur GPS 🔓</button>
+                    </div>
+                </div>
+            `);
+        };
+
+        window.verifikasiSandiAksesGPS = function() {
+            const val = document.getElementById("inputSandiAksesGPS")?.value?.trim();
+            if (val === "GPS1980") {
+                window.isGpsDudiUnlocked = true;
+                window.closeDynamicModal();
+                window.openFeature('tag-lokasi-dudi', 'Koleksi Titik GPS DUDI');
+            } else {
+                window.showModalInfo("Akses Ditolak ❌", "Kode sandi GPS yang Anda masukkan salah. Hubungi Panitia PKL untuk mendapatkan kode akses resmi.");
+            }
+        };
+
         window.renderSidebar = function() {
             const navContainer = document.getElementById("sidebarNavContainer");
             if (!navContainer) return;
@@ -1507,6 +1558,13 @@
         };
 
         window.openFeature = function(featureId, title, isBackgroundSync = false) {
+            // Otorisasi kata sandi khusus untuk fitur Kunci Titik GPS DUDI (GPS1980)
+            if (featureId === 'tag-lokasi-dudi' && !window.isGpsDudiUnlocked && !isBackgroundSync) {
+                window.closeDrawerSidebar();
+                window.bukaModalOtorisasiGPS();
+                return;
+            }
+
             window.cloudState.currentFeature = featureId;
             const role = window.cloudState.activeRole || "siswa";
             const backWrap = document.getElementById("mobileBackButtonWrap");
@@ -1728,7 +1786,11 @@
             document.getElementById("appScreen").style.display = "flex";
 
             document.getElementById("topbarRoleTitle").innerText = "SIP-PKL";
-            document.getElementById("topbarUserName").innerText = `${profile.nama}`;
+            const userNameEl = document.getElementById("topbarUserName");
+            if (userNameEl) {
+                userNameEl.innerText = `${profile.nama}`;
+                userNameEl.title = profile.nama;
+            }
             const roleBadge = document.getElementById("topbarUserRoleBadge");
             if (roleBadge) {
                 const roleLabels = { siswa: "SISWA PKL", guru: "GURU PEMBIMBING", industri: "MITRA DUDI", orangtua: "WALI MURID", admin: "PANITIA PKL" };
@@ -5223,14 +5285,27 @@
             const list = window.cloudState.jurnal || [];
             let rows = "";
             list.forEach((j, idx) => {
+                const adaBukti = !!j.file_bukti;
                 rows += `<tr>
                     <td>${idx + 1}</td>
                     <td><b>${j.siswa}</b></td>
                     <td>${j.tanggal}</td>
-                    <td style="white-space:normal; min-width:180px;">${j.kegiatan}</td>
+                    <td style="white-space:normal; min-width:160px;">${j.kegiatan}</td>
+                    <td>
+                        ${adaBukti ? `
+                            <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;">
+                                <button onclick="window.bukaPratinjauBuktiJurnal(${idx})" class="btn-action btn-blue" style="padding:4px 8px; font-size:10.5px; display:inline-flex; align-items:center; gap:4px;">
+                                    📷 Lihat/Unduh
+                                </button>
+                                <button onclick="window.konfirmasiHapusFileBuktiJurnal(${idx})" class="btn-action btn-red" style="padding:2px 6px; font-size:9.5px;" title="Hapus foto/file bukti agar memori aplikasi ringan">
+                                    🗑️ Hapus Bukti
+                                </button>
+                            </div>
+                        ` : `<span style="font-size:10px; color:#94a3b8;">(Tidak ada / Terhapus)</span>`}
+                    </td>
                     <td><span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span></td>
                     <td>
-                        ${j.status !== 'Disetujui' ? `<button onclick="window.sahkanJurnalSiswa(${idx})" class="btn-action btn-emerald" style="padding:4px 8px;">✓ Sahkan</button>` : '<span style="color:#15803d; font-weight:800; font-size:11px;">Tervalidasi</span>'}
+                        ${j.status !== 'Disetujui' ? `<button onclick="window.sahkanJurnalSiswa(${idx})" class="btn-action btn-emerald" style="padding:5px 9px; font-size:11px;">✓ Sahkan</button>` : '<span style="color:#15803d; font-weight:800; font-size:11px;">Tervalidasi</span>'}
                     </td>
                 </tr>`;
             });
@@ -5241,6 +5316,7 @@
                     <div>
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">EVALUASI LOGBOOK HARIAN</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📋 Validasi & Pengesahan Jurnal Siswa</h3>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Periksa kegiatan, verifikasi foto bukti praktik industri, dan bersihkan file jika sudah diverifikasi agar memori tetap hemat.</p>
                     </div>
                 </div>
 
@@ -5252,16 +5328,71 @@
                                 <th>Nama Siswa</th>
                                 <th>Tanggal</th>
                                 <th>Uraian Kegiatan</th>
+                                <th>Bukti Praktik</th>
                                 <th>Status</th>
                                 <th>Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada jurnal siswa yang masuk</td></tr>'}
+                            ${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada jurnal siswa yang masuk</td></tr>'}
                         </tbody>
                     </table>
                 </div>
             </div>`;
+        };
+
+        window.bukaPratinjauBuktiJurnal = function(idx) {
+            const j = window.cloudState.jurnal[idx];
+            if (!j || !j.file_bukti) return;
+            const namaFile = j.nama_file_bukti || `Bukti_Jurnal_${j.siswa}_${j.tanggal}.jpg`;
+            const isImage = j.file_bukti.startsWith('data:image') || j.file_bukti.includes('image');
+
+            window.openDynamicModal(`
+                <div style="text-align:center;">
+                    <h3 style="font-size:15px; font-weight:900; color:#0284c7; margin-bottom:4px;">Bukti Praktik Siswa di Industri</h3>
+                    <div style="font-size:11px; color:#475569; margin-bottom:12px;">Siswa: <b>${j.siswa}</b> &bull; Tanggal: <b>${j.tanggal}</b></div>
+                    
+                    ${isImage ? `
+                        <div style="max-height:340px; overflow:hidden; border-radius:14px; border:2px solid #38bdf8; margin-bottom:12px; background:#0f172a; display:flex; align-items:center; justify-content:center;">
+                            <img src="${j.file_bukti}" alt="Bukti Praktik" style="width:100%; max-height:340px; object-fit:contain;">
+                        </div>
+                    ` : `
+                        <div style="padding:24px; background:#f0f9ff; border:1.5px dashed #7dd3fc; border-radius:14px; margin-bottom:12px;">
+                            <div style="font-size:32px;">📄</div>
+                            <div style="font-size:12px; font-weight:800; color:#0369a1; margin-top:4px;">${namaFile}</div>
+                        </div>
+                    `}
+
+                    <div style="display:flex; justify-content:center; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                        <a href="${j.file_bukti}" download="${namaFile}" class="btn-action btn-emerald" style="text-decoration:none; padding:8px 16px; font-weight:800; display:inline-flex; align-items:center; gap:6px;">
+                            ⬇️ Unduh Berkas
+                        </a>
+                        <button onclick="window.konfirmasiHapusFileBuktiJurnal(${idx})" class="btn-action btn-red" style="padding:8px 14px; font-weight:800;">
+                            🗑️ Hapus File (Hemat Memori)
+                        </button>
+                        <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff; padding:8px 16px;">
+                            Tutup
+                        </button>
+                    </div>
+                </div>
+            `);
+        };
+
+        window.konfirmasiHapusFileBuktiJurnal = function(idx) {
+            const j = window.cloudState.jurnal[idx];
+            if (!j) return;
+            window.showConfirmDialog(
+                "Hapus Bukti Foto Jurnal?",
+                `Hapus berkas bukti praktik siswa <b>${j.siswa}</b> pada tanggal <b>${j.tanggal}</b>?<br><br><span style="font-size:11px; color:#64748b;">Tindakan ini menghapus file/foto dari database agar kinerja aplikasi tetap ringan. Catatan jurnal kegiatan siswa tetap tersimpan.</span>`,
+                () => {
+                    j.file_bukti = null;
+                    j.nama_file_bukti = null;
+                    window.simpanDatabasePersisten(true);
+                    window.closeDynamicModal();
+                    window.showModalInfo("Bukti Berhasil Dihapus 🗑️", "Berkas foto bukti jurnal telah dibersihkan dari penyimpanan. Kinerja sistem kini lebih hemat dan ringan.");
+                    window.openFeature("validasi-jurnal", "Validasi Jurnal");
+                }
+            );
         };
 
         window.sahkanJurnalSiswa = function(idx) {
