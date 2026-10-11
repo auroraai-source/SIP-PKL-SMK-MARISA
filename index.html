@@ -3777,7 +3777,7 @@
             let sCheckboxes = "";
             (window.cloudState.siswa || []).forEach((s) => {
                 sCheckboxes += `
-                <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; cursor:pointer; font-size:12px;">
+                <label class="item-siswa-mon" data-nama="${(s.nama || '').toLowerCase()}" data-kelas="${(s.kelas || '').toLowerCase()}" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; cursor:pointer; font-size:12px;">
                     <input type="checkbox" name="selSiswaMonitoring" value="${s.nama}" style="width:16px; height:16px; accent-color:#0284c7;">
                     <div>
                         <b>👨‍🎓 ${s.nama}</b>
@@ -3830,7 +3830,10 @@
                         <label class="form-label" style="margin-bottom:0;">Centang Nama Siswa yang Dimonitoring:</label>
                         <span style="font-size:10px; color:#15803d; font-weight:800;">Pilih Siswa Terkait</span>
                     </div>
-                    <div style="max-height:130px; overflow-y:auto; background:#f8fafc; padding:8px; border-radius:10px; border:1.5px solid #bfdbfe;">
+                    <div style="margin-bottom:6px;">
+                        <input type="text" id="cariSiswaMonInput" class="form-control" style="font-size:11px; padding:7px 10px;" placeholder="🔍 Ketik nama siswa untuk mencari..." oninput="window.filterSiswaMonitoring(this.value)">
+                    </div>
+                    <div id="containerListSiswaMon" style="max-height:130px; overflow-y:auto; background:#f8fafc; padding:8px; border-radius:10px; border:1.5px solid #bfdbfe;">
                         ${sCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada data siswa terdaftar</span>'}
                     </div>
                 </div>
@@ -3845,6 +3848,20 @@
                     <button onclick="window.simpanAlokasiMonitoringBaru()" class="btn-action btn-emerald" style="font-weight:900;">💾 Terbitkan Surat Tugas</button>
                 </div>
             `);
+        };
+
+        window.filterSiswaMonitoring = function(keyword) {
+            const query = (keyword || '').toLowerCase().trim();
+            const items = document.querySelectorAll('.item-siswa-mon');
+            items.forEach(el => {
+                const nama = el.getAttribute('data-nama') || '';
+                const kelas = el.getAttribute('data-kelas') || '';
+                if (!query || nama.includes(query) || kelas.includes(query)) {
+                    el.style.display = 'flex';
+                } else {
+                    el.style.display = 'none';
+                }
+            });
         };
 
         window.simpanAlokasiMonitoringBaru = function() {
@@ -3907,7 +3924,8 @@
 
             let sCheckboxes = "";
             (window.cloudState.siswa || []).forEach((s) => {
-                sCheckboxes += `<label style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; font-size:12px; cursor:pointer;">
+                const searchKey = `${s.nama || ''} ${s.kelas || ''}`.toLowerCase();
+                sCheckboxes += `<label class="item-siswa-penempatan" data-search="${searchKey}" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; font-size:12px; cursor:pointer;">
                     <input type="checkbox" name="selSiswaPenempatan" value="${s.nama}" style="width:16px; height:16px; accent-color:#0284c7;">
                     <div>
                         <b>👨‍🎓 ${s.nama}</b>
@@ -3938,8 +3956,13 @@
                         <label class="form-label" style="margin-bottom:0;">Pilih Siswa yang Ditempatkan (Centang):</label>
                         <span style="font-size:10px; color:#0284c7; font-weight:800;">Centang Siswa</span>
                     </div>
-                    <div style="max-height:140px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
+                    <!-- Input Cari Siswa Real-time -->
+                    <div style="margin-bottom:6px;">
+                        <input type="text" id="cariInputSiswaPenempatan" class="form-control" placeholder="🔍 Ketik nama siswa untuk mencari..." oninput="window.filterSiswaPenempatan(this.value)" style="padding:8px 12px; font-size:12px; border-radius:10px; background:#ffffff; border:1.5px solid #93c5fd;">
+                    </div>
+                    <div id="boxListSiswaPenempatan" style="max-height:140px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
                         ${sCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada siswa terdaftar</span>'}
+                        <div id="pesanSiswaTidakDitemukan" style="display:none; text-align:center; padding:10px; font-size:11px; color:#94a3b8; font-weight:600;">Siswa tidak ditemukan</div>
                     </div>
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
@@ -3947,6 +3970,27 @@
                     <button onclick="window.simpanAlokasiPembimbingManual()" class="btn-action btn-blue" style="font-weight:900;">💾 Simpan Alokasi</button>
                 </div>
             `);
+        };
+
+        window.filterSiswaPenempatan = function(keyword) {
+            const query = (keyword || '').toLowerCase().trim();
+            const items = document.querySelectorAll('#boxListSiswaPenempatan .item-siswa-penempatan');
+            const pesanKosong = document.getElementById('pesanSiswaTidakDitemukan');
+            let adaYangTampil = false;
+
+            items.forEach(item => {
+                const searchTarget = item.getAttribute('data-search') || '';
+                if (!query || searchTarget.includes(query)) {
+                    item.style.display = 'flex';
+                    adaYangTampil = true;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+
+            if (pesanKosong) {
+                pesanKosong.style.display = (!adaYangTampil && items.length > 0) ? 'block' : 'none';
+            }
         };
 
         window.simpanAlokasiPembimbingManual = function() {
