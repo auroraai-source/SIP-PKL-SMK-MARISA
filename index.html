@@ -4515,32 +4515,37 @@
         };
 
         window.simpanAlokasiPenempatanBaru = function() {
-            const guru = document.getElementById("penGuru")?.value;
-            const cbsInd = document.querySelectorAll('input[name="selIndPenempatan"]:checked');
-            const selectedInd = [];
-            cbsInd.forEach(c => selectedInd.push(c.value));
+            try {
+                const guru = document.getElementById("penGuru")?.value;
+                const cbsInd = document.querySelectorAll('input[name="selIndPenempatan"]:checked');
+                const selectedInd = [];
+                cbsInd.forEach(c => selectedInd.push(c.value));
 
-            const cbsSiswa = document.querySelectorAll('input[name="selSiswaPenempatan"]:checked');
-            const selectedS = [];
-            cbsSiswa.forEach(c => selectedSiswa.push(c.value));
+                const cbsSiswa = document.querySelectorAll('input[name="selSiswaPenempatan"]:checked');
+                const selectedS = [];
+                cbsSiswa.forEach(c => selectedS.push(c.value));
 
-            if (!guru) return window.showModalInfo("Lengkapi Data", "Guru pembimbing wajib dipilih!");
-            if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Centang minimal 1 mitra industri magang!");
-            if (selectedS.length === 0) return window.showModalInfo("Pilih Siswa", "Centang minimal 1 siswa bimbingan!");
+                if (!guru) return window.showModalInfo("Lengkapi Data", "Guru pembimbing wajib dipilih!");
+                if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Centang minimal 1 mitra industri magang!");
+                if (selectedS.length === 0) return window.showModalInfo("Pilih Siswa", "Centang minimal 1 siswa bimbingan!");
 
-            if (!Array.isArray(window.cloudState.penempatan)) window.cloudState.penempatan = [];
+                if (!Array.isArray(window.cloudState.penempatan)) window.cloudState.penempatan = [];
 
-            window.cloudState.penempatan.unshift({
-                id: "pen_" + Date.now(),
-                guru,
-                industri: selectedInd.length === 1 ? selectedInd[0] : selectedInd,
-                siswa: selectedS
-            });
+                window.cloudState.penempatan.unshift({
+                    id: "pen_" + Date.now(),
+                    guru,
+                    industri: selectedInd.length === 1 ? selectedInd[0] : selectedInd,
+                    siswa: selectedS
+                });
 
-            window.simpanDatabasePersisten(true);
-            window.closeDynamicModal();
-            window.showModalInfo("Alokasi Tersimpan 🔄", `Data alokasi bimbingan untuk <b>${guru}</b> berhasil disimpan.`);
-            window.openFeature("penempatan", "Alokasi Guru & Siswa");
+                window.simpanDatabasePersisten(true);
+                window.closeDynamicModal();
+                window.showModalInfo("Alokasi Tersimpan 🔄", `Data alokasi bimbingan untuk <b>${guru}</b> berhasil disimpan.`);
+                window.openFeature("penempatan", "Alokasi Guru & Siswa");
+            } catch (err) {
+                console.error("Gagal simpan alokasi:", err);
+                window.showModalInfo("Gagal Menyimpan", "Terjadi kendala: " + err.message);
+            }
         };
 
         window.bukaModalOtorisasiSupabase = function() {
