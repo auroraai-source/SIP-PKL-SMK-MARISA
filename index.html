@@ -5700,12 +5700,24 @@
             if (role === 'siswa') {
                 filteredList = allLaporan.filter(l => l.siswa === profile.nama);
                 subTitleDesc = "Kirim tautan Google Drive laporan akhir PKL Anda langsung ke guru pembimbing jurusan.";
-                actionHeaderBtn = `<button onclick="window.bukaModalKirimLaporanAkhir()" class="btn-action btn-blue" style="padding:9px 16px; font-size:12px; font-weight:800;">+ Kirim Laporan Akhir (G-Drive)</button>`;
+                actionHeaderBtn = `
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button onclick="window.bukaModalKirimLaporanAkhir()" class="btn-action btn-blue" style="padding:9px 16px; font-size:12px; font-weight:800;">+ Kirim Laporan Akhir (G-Drive)</button>
+                    <button onclick="window.hapusMasalLaporanAkhir()" class="btn-action btn-red" style="padding:9px 14px; font-size:12px; font-weight:800;">🗑️ Hapus Terpilih</button>
+                </div>`;
             } else if (role === 'guru') {
                 filteredList = allLaporan.filter(l => window.isGuruMatch(l.guru_tujuan, profile.nama));
                 subTitleDesc = `Daftar laporan akhir siswa yang ditujukan kepada Anda (${profile.nama}) untuk diperiksa dan disahkan.`;
+                actionHeaderBtn = `
+                <div>
+                    <button onclick="window.hapusMasalLaporanAkhir()" class="btn-action btn-red" style="padding:9px 14px; font-size:12px; font-weight:800;">🗑️ Hapus Terpilih</button>
+                </div>`;
             } else {
                 subTitleDesc = "Monitoring karya tulis dan pengesahan laporan akhir seluruh siswa dari semua jurusan.";
+                actionHeaderBtn = `
+                <div>
+                    <button onclick="window.hapusMasalLaporanAkhir()" class="btn-action btn-red" style="padding:9px 14px; font-size:12px; font-weight:800;">🗑️ Hapus Terpilih</button>
+                </div>`;
             }
 
             let rows = "";
@@ -5715,7 +5727,8 @@
                 const statusBadge = lap.status === 'Disetujui' ? 'badge-green' : (lap.status === 'Perlu Revisi' ? 'badge-red' : 'badge-amber');
 
                 rows += `<tr>
-                    <td>${idx + 1}</td>
+                    <td style="text-align:center;"><input type="checkbox" class="cb-laporan-akhir" value="${originalIdx}"></td>
+                    <td style="text-align:center;">${idx + 1}</td>
                     <td>
                         <b>${lap.siswa}</b>
                         <div style="font-size:10px; color:#64748b;">${lap.jurusan || 'Jurusan Siswa'}</div>
@@ -5727,7 +5740,7 @@
                     </td>
                     <td>${lap.tanggal || '-'}</td>
                     <td><span class="badge-status ${statusBadge}">${lap.status || 'Menunggu'}</span></td>
-                    <td style="display:flex; gap:6px; align-items:center;">
+                    <td style="display:flex; gap:6px; align-items:center; flex-wrap:nowrap;">
                         <a href="${gDriveLink}" target="_blank" rel="noopener noreferrer" class="btn-action btn-blue" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px; padding:6px 10px; font-size:11px;">
                             📁 Buka G-Drive
                         </a>
@@ -5736,6 +5749,9 @@
                                 ✓ Validasi
                             </button>
                         ` : ''}
+                        <button onclick="window.konfirmasiHapusLaporanAkhir(${originalIdx})" class="btn-action btn-red" style="padding:6px 10px; font-size:11px;">
+                            🗑️ Hapus
+                        </button>
                     </td>
                 </tr>`;
             });
@@ -5755,20 +5771,48 @@
                     <table>
                         <thead>
                             <tr>
-                                <th style="width:36px;">No</th>
+                                <th style="width:36px; text-align:center;"><input type="checkbox" onchange="window.toggleAllCheckboxes('laporan-akhir', this.checked)"></th>
+                                <th style="width:36px; text-align:center;">No</th>
                                 <th>Nama Siswa & Jurusan</th>
                                 <th>Judul Laporan & Guru Tujuan</th>
                                 <th>Tanggal</th>
                                 <th>Status</th>
-                                <th style="width:170px;">Tautan & Aksi</th>
+                                <th style="width:190px;">Tautan & Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || `<tr><td colspan="6" class="empty-placeholder">${role === 'siswa' ? 'Anda belum mengirimkan tautan laporan akhir PKL. Klik tombol "+ Kirim Laporan Akhir (G-Drive)" di atas.' : 'Belum ada berkas laporan akhir yang masuk.'}</td></tr>`}
+                            ${rows || `<tr><td colspan="7" class="empty-placeholder">${role === 'siswa' ? 'Anda belum mengirimkan tautan laporan akhir PKL. Klik tombol "+ Kirim Laporan Akhir (G-Drive)" di atas.' : 'Belum ada berkas laporan akhir yang masuk.'}</td></tr>`}
                         </tbody>
                     </table>
                 </div>
             </div>`;
+        };
+
+        window.konfirmasiHapusLaporanAkhir = function(originalIdx) {
+            const lap = (window.cloudState.laporanAkhir || [])[originalIdx];
+            if (!lap) return;
+
+            window.showConfirmDialog("Hapus Laporan Akhir?", `Apakah Anda yakin ingin menghapus laporan akhir <b>${lap.judul}</b> oleh <b>${lap.siswa}</b>?`, () => {
+                window.cloudState.laporanAkhir.splice(originalIdx, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("laporan", "Pantau Laporan Akhir PKL");
+            });
+        };
+
+        window.hapusMasalLaporanAkhir = function() {
+            const cbs = document.querySelectorAll('.cb-laporan-akhir:checked');
+            if (cbs.length === 0) return window.showModalInfo("Pilih Laporan", "Silakan centang minimal 1 data laporan akhir yang ingin dihapus!");
+
+            window.showConfirmDialog("Hapus Laporan Terpilih?", `Apakah Anda yakin ingin menghapus <b>${cbs.length} berkas laporan akhir</b> yang dicentang?`, () => {
+                const indices = Array.from(cbs).map(c => parseInt(c.value, 10)).sort((a,b) => b - a);
+                indices.forEach(idx => {
+                    if (window.cloudState.laporanAkhir[idx]) {
+                        window.cloudState.laporanAkhir.splice(idx, 1);
+                    }
+                });
+                window.simpanDatabasePersisten(true);
+                window.openFeature("laporan", "Pantau Laporan Akhir PKL");
+            });
         };
 
         window.updateGuruJurusanSelect = function(jurusanSelected) {
