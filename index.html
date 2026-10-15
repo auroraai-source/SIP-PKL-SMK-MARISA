@@ -2327,28 +2327,958 @@
             </div>`;
         };
 
+        // ==========================================
+        // 1. FITUR BUAT AKUN & KREDENSIAL PENGGUNA
+        // ==========================================
         window.renderKelolaAkunPengguna = function() {
             let rows = "";
-            (window.cloudState.registeredUsers || []).forEach((u, i) => { rows += `<tr><td style="text-align:center;">${i+1}</td><td><b>${u.nama}</b></td><td>${u.username}</td><td><span class="badge-status badge-blue">${u.role}</span></td></tr>`; });
-            return `<div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><div><h3 style="font-size:16px; font-weight:900; color:#0f172a;">🔑 Kelola Akun & Kredensial</h3><p style="font-size:11px; color:#64748b;">Pengaturan akun terdaftar dalam sistem.</p></div></div><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Nama Pengguna</th><th>Username</th><th>Peran</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty-placeholder">Data kosong</td></tr>'}</tbody></table></div></div>`;
+            (window.cloudState.registeredUsers || []).forEach((u, i) => { 
+                const roleLabels = { siswa: "Siswa PKL", guru: "Guru Pembimbing", industri: "Mitra DUDI", orangtua: "Wali Murid", admin: "Panitia PKL" };
+                const badgeClass = u.role === 'admin' ? 'badge-blue' : (u.role === 'guru' ? 'badge-green' : (u.role === 'industri' ? 'badge-amber' : 'badge-blue'));
+                rows += `
+                <tr class="row-item-akun" data-keyword="${(u.nama + ' ' + u.username + ' ' + (roleLabels[u.role]||u.role)).toLowerCase()}">
+                    <td style="text-align:center;"><input type="checkbox" class="cb-akun" value="${i}"></td>
+                    <td style="text-align:center;">${i+1}</td>
+                    <td><b>${u.nama}</b></td>
+                    <td><code>${u.username}</code></td>
+                    <td>
+                        <span style="font-family:monospace; background:#f1f5f9; padding:2px 6px; border-radius:6px; font-size:11px;">${u.pass || '******'}</span>
+                    </td>
+                    <td><span class="badge-status ${badgeClass}">${roleLabels[u.role] || u.role}</span></td>
+                    <td>${u.identitas || '-'}</td>
+                    <td style="text-align:center; white-space:nowrap;">
+                        <button onclick="window.bukaModalEditAkun(${i})" class="btn-action btn-amber" style="padding:5px 8px; font-size:10.5px; margin-right:4px;">✏️ Edit</button>
+                        <button onclick="window.hapusAkunSatuan(${i})" class="btn-action btn-red" style="padding:5px 8px; font-size:10.5px;">🗑️ Hapus</button>
+                    </td>
+                </tr>`; 
+            });
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MANAJEMEN HAK AKSES SISTEM</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🔑 Buat Akun & Kredensial Pengguna</h3>
+                        <p style="font-size:11px; color:#64748b;">Kelola akun masuk untuk Siswa, Guru Pembimbing, Mitra DUDI, dan Panitia.</p>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.bukaModalTambahAkun()" class="btn-action btn-blue" style="padding:9px 14px; font-weight:900;">
+                            + Buat Akun Baru
+                        </button>
+                        <button onclick="window.hapusMasalAkun()" class="btn-action btn-red" style="padding:9px 14px; font-weight:900;">
+                            🗑️ Hapus Terpilih
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:10px;">
+                    <input type="text" class="form-control" placeholder="🔍 Cari akun berdasarkan nama, username, atau peran..." oninput="window.filterTabelUmum('.row-item-akun', this.value)">
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px; text-align:center;"><input type="checkbox" onchange="window.toggleAllCheckboxes('akun', this.checked)"></th>
+                                <th style="width:36px; text-align:center;">No</th>
+                                <th>Nama Pengguna</th>
+                                <th>Username</th>
+                                <th>Kata Sandi</th>
+                                <th>Peran (Role)</th>
+                                <th>Identitas / NIS / NIP</th>
+                                <th style="width:110px; text-align:center;">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows || '<tr><td colspan="8" class="empty-placeholder">Belum ada akun yang terdaftar</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
         };
 
+        window.bukaModalTambahAkun = function() {
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">🔑 Tambah Akun Pengguna Baru</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Isi kredensial akun resmi pengguna ke dalam sistem.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Pilih Peran Akun (Role):</label>
+                    <select id="addAkunRole" class="form-control" style="font-weight:750; color:#0284c7;">
+                        <option value="siswa">👨‍🎓 Siswa PKL</option>
+                        <option value="guru">👩‍🏫 Guru Pembimbing Lapangan</option>
+                        <option value="industri">🏭 Mitra Industri DUDI</option>
+                        <option value="orangtua">👨‍👩‍👧 Orang Tua / Wali Siswa</option>
+                        <option value="admin">👨‍💼 Panitia / Admin PKL</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Nama Lengkap Pengguna:</label>
+                    <input type="text" id="addAkunNama" class="form-control" placeholder="Contoh: Muhammad Ilham" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Username Login:</label>
+                    <input type="text" id="addAkunUsername" class="form-control" placeholder="Contoh: NIS / NIP / ID Mitra" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Kata Sandi (Password):</label>
+                    <div class="form-control-wrap">
+                        <input type="password" id="addAkunPass" class="form-control" placeholder="Masukkan kata sandi..." required>
+                        <button type="button" class="btn-eye-toggle" onclick="window.togglePasswordEye('addAkunPass', this)">👁️</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Nomor Identitas (NISN / NIP / NIK):</label>
+                    <input type="text" id="addAkunIdentitas" class="form-control" placeholder="Nomor resmi identitas pengguna">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanAkunBaru()" class="btn-action btn-blue" style="font-weight:900; padding:10px 18px;">
+                        💾 Simpan Akun
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanAkunBaru = function() {
+            const role = document.getElementById("addAkunRole")?.value;
+            const nama = document.getElementById("addAkunNama")?.value.trim();
+            const username = document.getElementById("addAkunUsername")?.value.trim();
+            const pass = document.getElementById("addAkunPass")?.value.trim();
+            const identitas = document.getElementById("addAkunIdentitas")?.value.trim() || username;
+
+            if (!nama || !username || !pass) {
+                return window.showModalInfo("Lengkapi Data", "Nama, Username, dan Kata Sandi wajib diisi!");
+            }
+
+            if (!Array.isArray(window.cloudState.registeredUsers)) window.cloudState.registeredUsers = [];
+
+            const exists = window.cloudState.registeredUsers.some(u => u.username.toLowerCase() === username.toLowerCase() && u.role === role);
+            if (exists) {
+                return window.showModalInfo("Username Sudah Ada", `Username <b>${username}</b> untuk peran <b>${role}</b> sudah terdaftar! Gunakan username lain.`);
+            }
+
+            window.cloudState.registeredUsers.unshift({ role, nama, username, pass, identitas });
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Akun Tersimpan ✅", `Akun untuk <b>${nama}</b> (${role.toUpperCase()}) berhasil dibuat.`);
+            window.openFeature('kelola-akun', 'Buat Akun & Kredensial');
+        };
+
+        window.bukaModalEditAkun = function(index) {
+            const u = (window.cloudState.registeredUsers || [])[index];
+            if (!u) return;
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#d97706; margin-bottom:4px;">✏️ Edit Kredensial Akun</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Perbarui data identitas atau kata sandi pengguna.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Peran Akun (Role):</label>
+                    <select id="editAkunRole" class="form-control" style="font-weight:750; color:#0284c7;">
+                        <option value="siswa" ${u.role==='siswa'?'selected':''}>👨‍🎓 Siswa PKL</option>
+                        <option value="guru" ${u.role==='guru'?'selected':''}>👩‍🏫 Guru Pembimbing Lapangan</option>
+                        <option value="industri" ${u.role==='industri'?'selected':''}>🏭 Mitra Industri DUDI</option>
+                        <option value="orangtua" ${u.role==='orangtua'?'selected':''}>👨‍👩‍👧 Orang Tua / Wali Siswa</option>
+                        <option value="admin" ${u.role==='admin'?'selected':''}>👨‍💼 Panitia / Admin PKL</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Nama Pengguna:</label>
+                    <input type="text" id="editAkunNama" class="form-control" value="${u.nama || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Username:</label>
+                    <input type="text" id="editAkunUsername" class="form-control" value="${u.username || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Kata Sandi (Password):</label>
+                    <div class="form-control-wrap">
+                        <input type="password" id="editAkunPass" class="form-control" value="${u.pass || ''}">
+                        <button type="button" class="btn-eye-toggle" onclick="window.togglePasswordEye('editAkunPass', this)">👁️</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Nomor Identitas (NISN / NIP / NIK):</label>
+                    <input type="text" id="editAkunIdentitas" class="form-control" value="${u.identitas || ''}">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanEditAkun(${index})" class="btn-action btn-amber" style="font-weight:900; padding:10px 18px;">
+                        💾 Simpan Perubahan
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanEditAkun = function(index) {
+            const role = document.getElementById("editAkunRole")?.value;
+            const nama = document.getElementById("editAkunNama")?.value.trim();
+            const username = document.getElementById("editAkunUsername")?.value.trim();
+            const pass = document.getElementById("editAkunPass")?.value.trim();
+            const identitas = document.getElementById("editAkunIdentitas")?.value.trim();
+
+            if (!nama || !username || !pass) return window.showModalInfo("Lengkapi Data", "Nama, Username, dan Kata Sandi wajib diisi!");
+
+            if (window.cloudState.registeredUsers[index]) {
+                window.cloudState.registeredUsers[index].role = role;
+                window.cloudState.registeredUsers[index].nama = nama;
+                window.cloudState.registeredUsers[index].username = username;
+                window.cloudState.registeredUsers[index].pass = pass;
+                window.cloudState.registeredUsers[index].identitas = identitas || username;
+
+                window.simpanDatabasePersisten(true);
+                window.closeDynamicModal();
+                window.showModalInfo("Perubahan Tersimpan ✏️", `Akun <b>${nama}</b> berhasil diperbarui.`);
+                window.openFeature('kelola-akun', 'Buat Akun & Kredensial');
+            }
+        };
+
+        window.hapusAkunSatuan = function(index) {
+            const u = (window.cloudState.registeredUsers || [])[index];
+            if (!u) return;
+
+            window.showConfirmDialog("Hapus Akun Pengguna?", `Apakah Anda yakin ingin menghapus akun <b>${u.nama}</b> (${u.username})?`, () => {
+                window.cloudState.registeredUsers.splice(index, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature('kelola-akun', 'Buat Akun & Kredensial');
+            });
+        };
+
+        window.hapusMasalAkun = function() {
+            const cbs = document.querySelectorAll('.cb-akun:checked');
+            if (cbs.length === 0) return window.showModalInfo("Pilih Akun", "Centang minimal 1 akun yang ingin dihapus!");
+
+            window.showConfirmDialog("Hapus Akun Terpilih?", `Hapus <b>${cbs.length} akun</b> yang dicentang?`, () => {
+                const indices = Array.from(cbs).map(c => parseInt(c.value, 10)).sort((a,b) => b - a);
+                indices.forEach(idx => {
+                    if (window.cloudState.registeredUsers[idx]) window.cloudState.registeredUsers.splice(idx, 1);
+                });
+                window.simpanDatabasePersisten(true);
+                window.openFeature('kelola-akun', 'Buat Akun & Kredensial');
+            });
+        };
+
+        // ==========================================
+        // 2. FITUR DATA MASTER SISWA
+        // ==========================================
         window.renderMasterSiswaTable = function() {
             let rows = "";
-            (window.cloudState.siswa || []).forEach((s, i) => { rows += `<tr><td style="text-align:center;">${i+1}</td><td><b>${s.nama}</b></td><td>${s.nis}</td><td>${s.kelas}</td></tr>`; });
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">👨‍🎓 Data Master Siswa</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Daftar identitas siswa peserta PKL.</p><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Nama Siswa</th><th>NIS</th><th>Kelas / Jurusan</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty-placeholder">Data kosong</td></tr>'}</tbody></table></div></div>`;
+            (window.cloudState.siswa || []).forEach((s, i) => { 
+                rows += `
+                <tr class="row-item-siswa" data-keyword="${(s.nama + ' ' + s.nis + ' ' + (s.kelas||'')).toLowerCase()}">
+                    <td style="text-align:center;"><input type="checkbox" class="cb-siswa" value="${i}"></td>
+                    <td style="text-align:center;">${i+1}</td>
+                    <td><b>${s.nama}</b></td>
+                    <td>${s.nis || '-'}</td>
+                    <td style="text-align:center;">${s.jk || 'L'}</td>
+                    <td>${s.kelas || '-'}</td>
+                    <td>${s.noHp || '-'}</td>
+                    <td style="text-align:center; white-space:nowrap;">
+                        <button onclick="window.bukaModalEditSiswa(${i})" class="btn-action btn-amber" style="padding:5px 8px; font-size:10.5px; margin-right:4px;">✏️ Edit</button>
+                        <button onclick="window.hapusSiswaSatuan(${i})" class="btn-action btn-red" style="padding:5px 8px; font-size:10.5px;">🗑️ Hapus</button>
+                    </td>
+                </tr>`; 
+            });
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">PANGKALAN DATA INDUK SISWA</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">👨‍🎓 Data Master Siswa Peserta PKL</h3>
+                        <p style="font-size:11px; color:#64748b;">Kelola identitas resmi siswa, nomor induk, jurusan, dan kontak.</p>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.bukaModalTambahSiswa()" class="btn-action btn-blue" style="padding:9px 12px; font-weight:900;">
+                            + Tambah Siswa
+                        </button>
+                        <button onclick="window.unduhTemplateExcelSiswa()" class="btn-action btn-emerald" style="padding:9px 12px; font-weight:900;">
+                            📥 Template
+                        </button>
+                        <button onclick="window.bukaModalUploadExcel('Siswa')" class="btn-action btn-amber" style="padding:9px 12px; font-weight:900;">
+                            📤 Impor Excel
+                        </button>
+                        <button onclick="window.hapusMasalSiswa()" class="btn-action btn-red" style="padding:9px 12px; font-weight:900;">
+                            🗑️ Hapus Terpilih
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:10px;">
+                    <input type="text" class="form-control" placeholder="🔍 Cari siswa berdasarkan nama, NIS, atau jurusan..." oninput="window.filterTabelUmum('.row-item-siswa', this.value)">
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px; text-align:center;"><input type="checkbox" onchange="window.toggleAllCheckboxes('siswa', this.checked)"></th>
+                                <th style="width:36px; text-align:center;">No</th>
+                                <th>Nama Siswa</th>
+                                <th>NIS</th>
+                                <th style="width:40px; text-align:center;">JK</th>
+                                <th>Kelas / Konsentrasi Keahlian</th>
+                                <th>No. WhatsApp</th>
+                                <th style="width:110px; text-align:center;">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows || '<tr><td colspan="8" class="empty-placeholder">Belum ada data master siswa</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
         };
 
+        window.bukaModalTambahSiswa = function() {
+            let jurOpts = "";
+            DAFTAR_JURUSAN_SMKN1.forEach(j => { jurOpts += `<option value="${j}">${j}</option>`; });
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">👨‍🎓 Tambah Data Siswa Baru</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Masukkan data identitas siswa peserta PKL.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Nama Lengkap Siswa:</label>
+                    <input type="text" id="addSiswaNama" class="form-control" placeholder="Contoh: Rahmat Hidayat" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Nomor Induk Siswa (NIS / NISN):</label>
+                    <input type="text" id="addSiswaNis" class="form-control" placeholder="Contoh: 1025" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Jenis Kelamin:</label>
+                    <select id="addSiswaJk" class="form-control">
+                        <option value="L">Laki-laki (L)</option>
+                        <option value="P">Perempuan (P)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Kelas / Konsentrasi Keahlian:</label>
+                    <select id="addSiswaKelas" class="form-control" style="font-weight:750; color:#0369a1;">
+                        ${jurOpts}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Nomor WhatsApp Siswa / Wali:</label>
+                    <input type="text" id="addSiswaHp" class="form-control" placeholder="Contoh: 081234567890">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanSiswaBaru()" class="btn-action btn-blue" style="font-weight:900; padding:10px 18px;">
+                        💾 Simpan Data Siswa
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanSiswaBaru = function() {
+            const nama = document.getElementById("addSiswaNama")?.value.trim();
+            const nis = document.getElementById("addSiswaNis")?.value.trim();
+            const jk = document.getElementById("addSiswaJk")?.value;
+            const kelas = document.getElementById("addSiswaKelas")?.value;
+            const noHp = document.getElementById("addSiswaHp")?.value.trim() || "-";
+
+            if (!nama || !nis) return window.showModalInfo("Lengkapi Data", "Nama Siswa dan NIS wajib diisi!");
+
+            if (!Array.isArray(window.cloudState.siswa)) window.cloudState.siswa = [];
+
+            window.cloudState.siswa.unshift({ nama, nis, jk, kelas, noHp });
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Siswa Tersimpan ✅", `Data <b>${nama}</b> berhasil ditambahkan ke master siswa.`);
+            window.openFeature('master-siswa', 'Data Master Siswa');
+        };
+
+        window.bukaModalEditSiswa = function(index) {
+            const s = (window.cloudState.siswa || [])[index];
+            if (!s) return;
+
+            let jurOpts = "";
+            DAFTAR_JURUSAN_SMKN1.forEach(j => { 
+                jurOpts += `<option value="${j}" ${j === s.kelas ? 'selected' : ''}>${j}</option>`; 
+            });
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#d97706; margin-bottom:4px;">✏️ Edit Data Siswa</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Perbarui data identitas siswa.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Nama Lengkap Siswa:</label>
+                    <input type="text" id="editSiswaNama" class="form-control" value="${s.nama || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">NIS:</label>
+                    <input type="text" id="editSiswaNis" class="form-control" value="${s.nis || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Jenis Kelamin:</label>
+                    <select id="editSiswaJk" class="form-control">
+                        <option value="L" ${s.jk === 'L' ? 'selected' : ''}>Laki-laki (L)</option>
+                        <option value="P" ${s.jk === 'P' ? 'selected' : ''}>Perempuan (P)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Kelas / Jurusan:</label>
+                    <select id="editSiswaKelas" class="form-control" style="font-weight:750; color:#0369a1;">
+                        ${jurOpts}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">No. WhatsApp:</label>
+                    <input type="text" id="editSiswaHp" class="form-control" value="${s.noHp || ''}">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanEditSiswa(${index})" class="btn-action btn-amber" style="font-weight:900; padding:10px 18px;">
+                        💾 Simpan Perubahan
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanEditSiswa = function(index) {
+            const nama = document.getElementById("editSiswaNama")?.value.trim();
+            const nis = document.getElementById("editSiswaNis")?.value.trim();
+            const jk = document.getElementById("editSiswaJk")?.value;
+            const kelas = document.getElementById("editSiswaKelas")?.value;
+            const noHp = document.getElementById("editSiswaHp")?.value.trim();
+
+            if (!nama || !nis) return window.showModalInfo("Lengkapi Data", "Nama Siswa dan NIS wajib diisi!");
+
+            if (window.cloudState.siswa[index]) {
+                window.cloudState.siswa[index].nama = nama;
+                window.cloudState.siswa[index].nis = nis;
+                window.cloudState.siswa[index].jk = jk;
+                window.cloudState.siswa[index].kelas = kelas;
+                window.cloudState.siswa[index].noHp = noHp || "-";
+
+                window.simpanDatabasePersisten(true);
+                window.closeDynamicModal();
+                window.showModalInfo("Perubahan Tersimpan ✏️", `Data siswa <b>${nama}</b> berhasil diperbarui.`);
+                window.openFeature('master-siswa', 'Data Master Siswa');
+            }
+        };
+
+        window.hapusSiswaSatuan = function(index) {
+            const s = (window.cloudState.siswa || [])[index];
+            if (!s) return;
+
+            window.showConfirmDialog("Hapus Data Siswa?", `Apakah Anda yakin ingin menghapus siswa <b>${s.nama}</b> (${s.nis})?`, () => {
+                window.cloudState.siswa.splice(index, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature('master-siswa', 'Data Master Siswa');
+            });
+        };
+
+        window.hapusMasalSiswa = function() {
+            const cbs = document.querySelectorAll('.cb-siswa:checked');
+            if (cbs.length === 0) return window.showModalInfo("Pilih Siswa", "Centang minimal 1 siswa yang ingin dihapus!");
+
+            window.showConfirmDialog("Hapus Siswa Terpilih?", `Hapus <b>${cbs.length} data siswa</b> yang dicentang?`, () => {
+                const indices = Array.from(cbs).map(c => parseInt(c.value, 10)).sort((a,b) => b - a);
+                indices.forEach(idx => {
+                    if (window.cloudState.siswa[idx]) window.cloudState.siswa.splice(idx, 1);
+                });
+                window.simpanDatabasePersisten(true);
+                window.openFeature('master-siswa', 'Data Master Siswa');
+            });
+        };
+
+        // ==========================================
+        // 3. FITUR DATA MASTER GURU
+        // ==========================================
         window.renderMasterGuruTable = function() {
             let rows = "";
-            (window.cloudState.guru || []).forEach((g, i) => { rows += `<tr><td style="text-align:center;">${i+1}</td><td><b>${g.nama}</b></td><td>${g.nip}</td><td>${g.mapel}</td></tr>`; });
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">👩‍🏫 Data Master Guru</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Daftar guru pengajar dan pembimbing lapangan.</p><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Nama Guru</th><th>NIP</th><th>Mapel / Bidang</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty-placeholder">Data kosong</td></tr>'}</tbody></table></div></div>`;
+            (window.cloudState.guru || []).forEach((g, i) => { 
+                rows += `
+                <tr class="row-item-guru" data-keyword="${(g.nama + ' ' + (g.nip||'') + ' ' + (g.mapel||'')).toLowerCase()}">
+                    <td style="text-align:center;"><input type="checkbox" class="cb-guru" value="${i}"></td>
+                    <td style="text-align:center;">${i+1}</td>
+                    <td><b>${g.nama}</b></td>
+                    <td>${g.nip || '-'}</td>
+                    <td>${g.mapel || 'Guru Pembimbing'}</td>
+                    <td>${g.noHp || '-'}</td>
+                    <td style="text-align:center; white-space:nowrap;">
+                        <button onclick="window.bukaModalEditGuru(${i})" class="btn-action btn-amber" style="padding:5px 8px; font-size:10.5px; margin-right:4px;">✏️ Edit</button>
+                        <button onclick="window.hapusGuruSatuan(${i})" class="btn-action btn-red" style="padding:5px 8px; font-size:10.5px;">🗑️ Hapus</button>
+                    </td>
+                </tr>`; 
+            });
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">PANGKALAN DATA GURU PEMBIMBING</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">👩‍🏫 Data Master Guru</h3>
+                        <p style="font-size:11px; color:#64748b;">Daftar guru pengajar, pembimbing lapangan, dan nomor kontak.</p>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.bukaModalTambahGuru()" class="btn-action btn-blue" style="padding:9px 12px; font-weight:900;">
+                            + Tambah Guru
+                        </button>
+                        <button onclick="window.unduhTemplateExcelGuru()" class="btn-action btn-emerald" style="padding:9px 12px; font-weight:900;">
+                            📥 Template
+                        </button>
+                        <button onclick="window.bukaModalUploadExcel('Guru')" class="btn-action btn-amber" style="padding:9px 12px; font-weight:900;">
+                            📤 Impor Excel
+                        </button>
+                        <button onclick="window.hapusMasalGuru()" class="btn-action btn-red" style="padding:9px 12px; font-weight:900;">
+                            🗑️ Hapus Terpilih
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:10px;">
+                    <input type="text" class="form-control" placeholder="🔍 Cari guru berdasarkan nama, NIP, atau keahlian..." oninput="window.filterTabelUmum('.row-item-guru', this.value)">
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px; text-align:center;"><input type="checkbox" onchange="window.toggleAllCheckboxes('guru', this.checked)"></th>
+                                <th style="width:36px; text-align:center;">No</th>
+                                <th>Nama Guru</th>
+                                <th>NIP</th>
+                                <th>Bidang / Mapel Jurusan</th>
+                                <th>No. WhatsApp</th>
+                                <th style="width:110px; text-align:center;">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada data guru terdaftar</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
         };
 
+        window.bukaModalTambahGuru = function() {
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">👩‍🏫 Tambah Data Guru Baru</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Masukkan data guru pengajar / pembimbing PKL.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Nama Lengkap Guru (dengan Gelar):</label>
+                    <input type="text" id="addGuruNama" class="form-control" placeholder="Contoh: Ir. Herman Mansur, M.Pd" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">NIP (atau NUPTK / NIK):</label>
+                    <input type="text" id="addGuruNip" class="form-control" placeholder="Contoh: 198205102008011005" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Bidang / Mapel / Jurusan Binaan:</label>
+                    <input type="text" id="addGuruMapel" class="form-control" placeholder="Contoh: Teknik Jaringan Komputer & Telekomunikasi (TJKT)">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">No. WhatsApp Aktif:</label>
+                    <input type="text" id="addGuruHp" class="form-control" placeholder="Contoh: 081122334455">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanGuruBaru()" class="btn-action btn-blue" style="font-weight:900; padding:10px 18px;">
+                        💾 Simpan Data Guru
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanGuruBaru = function() {
+            const nama = document.getElementById("addGuruNama")?.value.trim();
+            const nip = document.getElementById("addGuruNip")?.value.trim();
+            const mapel = document.getElementById("addGuruMapel")?.value.trim() || "Guru Pembimbing";
+            const noHp = document.getElementById("addGuruHp")?.value.trim() || "-";
+
+            if (!nama) return window.showModalInfo("Lengkapi Data", "Nama Guru wajib diisi!");
+
+            if (!Array.isArray(window.cloudState.guru)) window.cloudState.guru = [];
+
+            window.cloudState.guru.unshift({ nama, nip, mapel, noHp });
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Guru Tersimpan ✅", `Data <b>${nama}</b> berhasil ditambahkan.`);
+            window.openFeature('master-guru', 'Data Master Guru');
+        };
+
+        window.bukaModalEditGuru = function(index) {
+            const g = (window.cloudState.guru || [])[index];
+            if (!g) return;
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#d97706; margin-bottom:4px;">✏️ Edit Data Guru</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Perbarui data identitas guru.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Nama Lengkap Guru:</label>
+                    <input type="text" id="editGuruNama" class="form-control" value="${g.nama || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">NIP:</label>
+                    <input type="text" id="editGuruNip" class="form-control" value="${g.nip || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Bidang / Mapel Jurusan:</label>
+                    <input type="text" id="editGuruMapel" class="form-control" value="${g.mapel || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">No. WhatsApp:</label>
+                    <input type="text" id="editGuruHp" class="form-control" value="${g.noHp || ''}">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanEditGuru(${index})" class="btn-action btn-amber" style="font-weight:900; padding:10px 18px;">
+                        💾 Simpan Perubahan
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanEditGuru = function(index) {
+            const nama = document.getElementById("editGuruNama")?.value.trim();
+            const nip = document.getElementById("editGuruNip")?.value.trim();
+            const mapel = document.getElementById("editGuruMapel")?.value.trim();
+            const noHp = document.getElementById("editGuruHp")?.value.trim();
+
+            if (!nama) return window.showModalInfo("Lengkapi Data", "Nama Guru wajib diisi!");
+
+            if (window.cloudState.guru[index]) {
+                window.cloudState.guru[index].nama = nama;
+                window.cloudState.guru[index].nip = nip || "-";
+                window.cloudState.guru[index].mapel = mapel || "Guru Pembimbing";
+                window.cloudState.guru[index].noHp = noHp || "-";
+
+                window.simpanDatabasePersisten(true);
+                window.closeDynamicModal();
+                window.showModalInfo("Perubahan Tersimpan ✏️", `Data guru <b>${nama}</b> berhasil diperbarui.`);
+                window.openFeature('master-guru', 'Data Master Guru');
+            }
+        };
+
+        window.hapusGuruSatuan = function(index) {
+            const g = (window.cloudState.guru || [])[index];
+            if (!g) return;
+
+            window.showConfirmDialog("Hapus Data Guru?", `Apakah Anda yakin ingin menghapus guru <b>${g.nama}</b>?`, () => {
+                window.cloudState.guru.splice(index, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature('master-guru', 'Data Master Guru');
+            });
+        };
+
+        window.hapusMasalGuru = function() {
+            const cbs = document.querySelectorAll('.cb-guru:checked');
+            if (cbs.length === 0) return window.showModalInfo("Pilih Guru", "Centang minimal 1 guru yang ingin dihapus!");
+
+            window.showConfirmDialog("Hapus Guru Terpilih?", `Hapus <b>${cbs.length} data guru</b> yang dicentang?`, () => {
+                const indices = Array.from(cbs).map(c => parseInt(c.value, 10)).sort((a,b) => b - a);
+                indices.forEach(idx => {
+                    if (window.cloudState.guru[idx]) window.cloudState.guru.splice(idx, 1);
+                });
+                window.simpanDatabasePersisten(true);
+                window.openFeature('master-guru', 'Data Master Guru');
+            });
+        };
+
+        // ==========================================
+        // 4. FITUR MITRA INDUSTRI DUDI
+        // ==========================================
         window.renderMasterIndustriTable = function() {
             let rows = "";
-            (window.cloudState.industri || []).forEach((ind, i) => { rows += `<tr><td style="text-align:center;">${i+1}</td><td><b>${ind.nama}</b></td><td>${ind.alamat}</td><td>${ind.pimpinan}</td></tr>`; });
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">🏭 Mitra Industri DUDI</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Pusat pangkalan data industri dan tempat magang.</p><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Nama Industri</th><th>Alamat</th><th>Pimpinan / HRD</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty-placeholder">Data kosong</td></tr>'}</tbody></table></div></div>`;
+            (window.cloudState.industri || []).forEach((ind, i) => { 
+                rows += `
+                <tr class="row-item-industri" data-keyword="${(ind.nama + ' ' + (ind.alamat||'') + ' ' + (ind.pimpinan||'')).toLowerCase()}">
+                    <td style="text-align:center;"><input type="checkbox" class="cb-industri" value="${i}"></td>
+                    <td style="text-align:center;">${i+1}</td>
+                    <td><b>🏢 ${ind.nama}</b></td>
+                    <td>${ind.alamat || '-'}</td>
+                    <td>${ind.pimpinan || '-'}</td>
+                    <td>${ind.noWa || '-'}</td>
+                    <td style="text-align:center;"><span class="badge-status badge-blue">${ind.radius || 100}m</span></td>
+                    <td style="white-space:nowrap;">${ind.masuk || '08:00'} - ${ind.pulang || '16:00'}</td>
+                    <td style="text-align:center; white-space:nowrap;">
+                        <button onclick="window.bukaModalEditIndustri(${i})" class="btn-action btn-amber" style="padding:5px 8px; font-size:10.5px; margin-right:4px;">✏️ Edit</button>
+                        <button onclick="window.hapusIndustriSatuan(${i})" class="btn-action btn-red" style="padding:5px 8px; font-size:10.5px;">🗑️ Hapus</button>
+                    </td>
+                </tr>`; 
+            });
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">PANGKALAN DATA MITRA INDUSTRI</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🏭 Mitra Industri DUDI Tempat Praktik</h3>
+                        <p style="font-size:11px; color:#64748b;">Kelola daftar perusahaan, instansi, pimpinan/HRD, dan radius geofence.</p>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.bukaModalTambahIndustri()" class="btn-action btn-blue" style="padding:9px 12px; font-weight:900;">
+                            + Tambah Mitra Industri
+                        </button>
+                        <button onclick="window.unduhTemplateExcelIndustri()" class="btn-action btn-emerald" style="padding:9px 12px; font-weight:900;">
+                            📥 Template
+                        </button>
+                        <button onclick="window.bukaModalUploadExcel('Industri')" class="btn-action btn-amber" style="padding:9px 12px; font-weight:900;">
+                            📤 Impor Excel
+                        </button>
+                        <button onclick="window.hapusMasalIndustri()" class="btn-action btn-red" style="padding:9px 12px; font-weight:900;">
+                            🗑️ Hapus Terpilih
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:10px;">
+                    <input type="text" class="form-control" placeholder="🔍 Cari mitra industri berdasarkan nama, alamat, atau pimpinan..." oninput="window.filterTabelUmum('.row-item-industri', this.value)">
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px; text-align:center;"><input type="checkbox" onchange="window.toggleAllCheckboxes('industri', this.checked)"></th>
+                                <th style="width:36px; text-align:center;">No</th>
+                                <th>Nama Industri / DUDI</th>
+                                <th>Alamat Kantor</th>
+                                <th>Pimpinan / HRD</th>
+                                <th>No. WhatsApp</th>
+                                <th style="width:75px; text-align:center;">Radius</th>
+                                <th>Jam Operasional</th>
+                                <th style="width:110px; text-align:center;">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows || '<tr><td colspan="9" class="empty-placeholder">Belum ada mitra industri terdaftar</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.bukaModalTambahIndustri = function() {
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">🏢 Tambah Mitra Industri Baru</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Daftarkan instansi/perusahaan tempat praktik kerja lapangan.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Nama Perusahaan / Instansi / DUDI:</label>
+                    <input type="text" id="addIndNama" class="form-control" placeholder="Contoh: PT. PLN Nusantara Power" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Alamat Lengkap Kantor:</label>
+                    <input type="text" id="addIndAlamat" class="form-control" placeholder="Contoh: Jl. Trans Sulawesi No. 45, Marisa">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Nama Pimpinan / Pembimbing DUDI / HRD:</label>
+                    <input type="text" id="addIndPimpinan" class="form-control" placeholder="Contoh: Bapak Irfan Rahman, S.T">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Nomor WhatsApp Kantor / HRD:</label>
+                    <input type="text" id="addIndWa" class="form-control" placeholder="Contoh: 081234567890">
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="form-group">
+                    <div>
+                        <label class="form-label">Jam Masuk (WITA):</label>
+                        <input type="time" id="addIndMasuk" class="form-control" value="08:00">
+                    </div>
+                    <div>
+                        <label class="form-label">Jam Pulang (WITA):</label>
+                        <input type="time" id="addIndPulang" class="form-control" value="16:00">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Radius Toleransi Geofence GPS (Meter):</label>
+                    <input type="number" id="addIndRadius" class="form-control" value="100" min="10" max="500">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanIndustriBaru()" class="btn-action btn-blue" style="font-weight:900; padding:10px 18px;">
+                        💾 Simpan Industri
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanIndustriBaru = function() {
+            const nama = document.getElementById("addIndNama")?.value.trim();
+            const alamat = document.getElementById("addIndAlamat")?.value.trim() || "-";
+            const pimpinan = document.getElementById("addIndPimpinan")?.value.trim() || "HRD";
+            const noWa = document.getElementById("addIndWa")?.value.trim() || "-";
+            const masuk = document.getElementById("addIndMasuk")?.value || "08:00";
+            const pulang = document.getElementById("addIndPulang")?.value || "16:00";
+            const radius = parseInt(document.getElementById("addIndRadius")?.value || 100, 10);
+
+            if (!nama) return window.showModalInfo("Lengkapi Data", "Nama Industri DUDI wajib diisi!");
+
+            if (!Array.isArray(window.cloudState.industri)) window.cloudState.industri = [];
+
+            window.cloudState.industri.unshift({
+                id: "ind_" + Date.now(),
+                nama,
+                alamat,
+                pimpinan,
+                noWa,
+                radius,
+                masuk,
+                pulang,
+                lat: "0.45612",
+                lng: "121.94210"
+            });
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Industri Tersimpan ✅", `Mitra DUDI <b>${nama}</b> berhasil ditambahkan.`);
+            window.openFeature('master-industri', 'Mitra Industri DUDI');
+        };
+
+        window.bukaModalEditIndustri = function(index) {
+            const ind = (window.cloudState.industri || [])[index];
+            if (!ind) return;
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#d97706; margin-bottom:4px;">✏️ Edit Data Mitra Industri</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Perbarui data operasional dan alamat industri.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Nama Perusahaan / Industri:</label>
+                    <input type="text" id="editIndNama" class="form-control" value="${ind.nama || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Alamat Lengkap:</label>
+                    <input type="text" id="editIndAlamat" class="form-control" value="${ind.alamat || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Pimpinan / HRD:</label>
+                    <input type="text" id="editIndPimpinan" class="form-control" value="${ind.pimpinan || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">No. WhatsApp:</label>
+                    <input type="text" id="editIndWa" class="form-control" value="${ind.noWa || ''}">
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="form-group">
+                    <div>
+                        <label class="form-label">Jam Masuk (WITA):</label>
+                        <input type="time" id="editIndMasuk" class="form-control" value="${ind.masuk || '08:00'}">
+                    </div>
+                    <div>
+                        <label class="form-label">Jam Pulang (WITA):</label>
+                        <input type="time" id="editIndPulang" class="form-control" value="${ind.pulang || '16:00'}">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Radius Geofence (Meter):</label>
+                    <input type="number" id="editIndRadius" class="form-control" value="${ind.radius || 100}" min="10" max="500">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanEditIndustri(${index})" class="btn-action btn-amber" style="font-weight:900; padding:10px 18px;">
+                        💾 Simpan Perubahan
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanEditIndustri = function(index) {
+            const nama = document.getElementById("editIndNama")?.value.trim();
+            const alamat = document.getElementById("editIndAlamat")?.value.trim();
+            const pimpinan = document.getElementById("editIndPimpinan")?.value.trim();
+            const noWa = document.getElementById("editIndWa")?.value.trim();
+            const masuk = document.getElementById("editIndMasuk")?.value;
+            const pulang = document.getElementById("editIndPulang")?.value;
+            const radius = parseInt(document.getElementById("editIndRadius")?.value || 100, 10);
+
+            if (!nama) return window.showModalInfo("Lengkapi Data", "Nama Industri wajib diisi!");
+
+            if (window.cloudState.industri[index]) {
+                window.cloudState.industri[index].nama = nama;
+                window.cloudState.industri[index].alamat = alamat || "-";
+                window.cloudState.industri[index].pimpinan = pimpinan || "HRD";
+                window.cloudState.industri[index].noWa = noWa || "-";
+                window.cloudState.industri[index].masuk = masuk || "08:00";
+                window.cloudState.industri[index].pulang = pulang || "16:00";
+                window.cloudState.industri[index].radius = radius;
+
+                window.simpanDatabasePersisten(true);
+                window.closeDynamicModal();
+                window.showModalInfo("Perubahan Tersimpan ✏️", `Data mitra industri <b>${nama}</b> berhasil diperbarui.`);
+                window.openFeature('master-industri', 'Mitra Industri DUDI');
+            }
+        };
+
+        window.hapusIndustriSatuan = function(index) {
+            const ind = (window.cloudState.industri || [])[index];
+            if (!ind) return;
+
+            window.showConfirmDialog("Hapus Mitra Industri?", `Apakah Anda yakin ingin menghapus industri <b>${ind.nama}</b>?`, () => {
+                window.cloudState.industri.splice(index, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature('master-industri', 'Mitra Industri DUDI');
+            });
+        };
+
+        window.hapusMasalIndustri = function() {
+            const cbs = document.querySelectorAll('.cb-industri:checked');
+            if (cbs.length === 0) return window.showModalInfo("Pilih Industri", "Centang minimal 1 industri yang ingin dihapus!");
+
+            window.showConfirmDialog("Hapus Industri Terpilih?", `Hapus <b>${cbs.length} mitra industri</b> yang dicentang?`, () => {
+                const indices = Array.from(cbs).map(c => parseInt(c.value, 10)).sort((a,b) => b - a);
+                indices.forEach(idx => {
+                    if (window.cloudState.industri[idx]) window.cloudState.industri.splice(idx, 1);
+                });
+                window.simpanDatabasePersisten(true);
+                window.openFeature('master-industri', 'Mitra Industri DUDI');
+            });
+        };
+
+        // Fungsi filter pencarian tabel umum real-time
+        window.filterTabelUmum = function(rowSelector, query) {
+            const q = (query || "").toLowerCase().trim();
+            const rows = document.querySelectorAll(rowSelector);
+            rows.forEach(r => {
+                const kw = r.getAttribute('data-keyword') || r.innerText.toLowerCase();
+                r.style.display = (!q || kw.includes(q)) ? '' : 'none';
+            });
         };
 
         window.renderPenempatanGuru = function() {
