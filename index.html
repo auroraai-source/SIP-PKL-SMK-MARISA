@@ -2352,13 +2352,552 @@
         };
 
         window.renderPenempatanGuru = function() {
-            let rows = "";
+            // 1. Baris Alokasi Guru Pembimbing
+            let rowsPembimbing = "";
             (window.cloudState.penempatan || []).forEach((p, i) => { 
                 let industriStr = Array.isArray(p.industri) ? p.industri.join(', ') : (p.industri || '-');
-                let siswaStr = Array.isArray(p.siswa) ? p.siswa.join(', ') : (p.siswa || '-');
-                rows += `<tr><td style="text-align:center;">${i+1}</td><td><b>${p.guru}</b></td><td>${industriStr}</td><td><div style="max-width:180px; white-space:normal; line-height:1.4;">${siswaStr}</div></td></tr>`; 
+                let siswaArr = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                let siswaPills = siswaArr.map(s => `<span style="background:#e0f2fe; color:#0369a1; padding:2px 7px; border-radius:6px; font-size:10px; font-weight:800; display:inline-block; margin:2px;">👨‍🎓 ${s}</span>`).join('');
+                
+                rowsPembimbing += `<tr>
+                    <td style="text-align:center;">${i+1}</td>
+                    <td><b>${p.guru}</b></td>
+                    <td><b>🏢 ${industriStr}</b></td>
+                    <td><div style="max-width:220px; white-space:normal; line-height:1.4;">${siswaPills || '<span style="color:#94a3b8;">Belum ada siswa</span>'}</div></td>
+                    <td style="text-align:center; white-space:nowrap;">
+                        <button onclick="window.bukaModalEditPenempatan(${i})" class="btn-action btn-amber" style="padding:5px 9px; font-size:10.5px; margin-right:4px;">✏️ Edit</button>
+                        <button onclick="window.konfirmasiHapusPenempatan(${i})" class="btn-action btn-red" style="padding:5px 9px; font-size:10.5px;">🗑️ Hapus</button>
+                    </td>
+                </tr>`; 
             });
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">🔄 Alokasi Guru Pembimbing & Siswa</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Penempatan hubungan siswa, tempat industri, dan guru pembimbingnya.</p><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Guru Pembimbing</th><th>Tempat Industri</th><th>Siswa Bimbingan</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty-placeholder">Data kosong</td></tr>'}</tbody></table></div></div>`;
+
+            // 2. Baris Alokasi Penugasan Guru Monitoring
+            let rowsMonitoring = "";
+            (window.cloudState.penugasanMonitoring || []).forEach((m, idx) => {
+                const listDudi = Array.isArray(m.industriList) ? m.industriList : [m.industriList || '-'];
+                const dudiPills = listDudi.map(d => `<span style="background:#f0fdf4; border:1px solid #86efac; color:#15803d; padding:2px 6px; border-radius:6px; font-size:10px; font-weight:800; display:inline-block; margin:2px;">🏢 ${d}</span>`).join('');
+
+                const listSiswa = Array.isArray(m.siswaList) ? m.siswaList : (m.siswaList ? [m.siswaList] : []);
+                const siswaPills = listSiswa.map(s => `<span style="background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:6px; font-size:10px; font-weight:800; display:inline-block; margin:2px;">👨‍🎓 ${s}</span>`).join('');
+
+                rowsMonitoring += `<tr>
+                    <td style="text-align:center;">${idx+1}</td>
+                    <td><b>${m.guru}</b></td>
+                    <td>
+                        <div style="font-weight:900; color:#0284c7;">${m.judulTugas || 'Monitoring Lapangan'}</div>
+                        <div style="font-size:10px; color:#64748b; margin-top:2px;">📅 ${m.tanggalMulai || '-'} s/d ${m.tanggalSelesai || '-'}</div>
+                        ${m.catatan ? `<div style="font-size:10px; color:#475569; margin-top:2px;"><i>${m.catatan}</i></div>` : ''}
+                    </td>
+                    <td><div style="max-width:200px; white-space:normal;">${dudiPills || '-'}</div></td>
+                    <td><div style="max-width:200px; white-space:normal;">${siswaPills || '<span style="color:#64748b; font-size:10px;">Semua Siswa Terkait</span>'}</div></td>
+                    <td style="text-align:center; white-space:nowrap;">
+                        <button onclick="window.bukaModalEditTugasMonitoring(${idx})" class="btn-action btn-amber" style="padding:5px 9px; font-size:10.5px; margin-right:4px;">✏️ Edit</button>
+                        <button onclick="window.konfirmasiHapusMonitoring(${idx})" class="btn-action btn-red" style="padding:5px 9px; font-size:10.5px;">🗑️ Hapus</button>
+                    </td>
+                </tr>`;
+            });
+
+            return `
+            <div style="display:flex; flex-direction:column; gap:16px;">
+                <!-- SEKSI 1: ALOKASI GURU PEMBIMBING & SISWA -->
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                        <div>
+                            <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">FORMULIR 1: PEMBIMBING LAPANGAN</div>
+                            <h3 style="font-size:16px; font-weight:950; color:#0f172a; margin-top:2px;">🔄 Alokasi Guru Pembimbing & Siswa Magang</h3>
+                            <p style="font-size:11px; color:#64748b; margin-top:2px;">Atur hubungan penempatan siswa, mitra industri tempat PKL, dan guru pembimbingnya.</p>
+                        </div>
+                        <button onclick="window.bukaModalAlokasiPenempatan()" class="btn-action btn-blue" style="padding:9px 15px; font-size:12px; font-weight:900; display:inline-flex; align-items:center; gap:6px; box-shadow:0 3px 10px rgba(2,132,199,0.3);">
+                            + Alokasi Pembimbing Baru
+                        </button>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:36px; text-align:center;">No</th>
+                                    <th>Guru Pembimbing</th>
+                                    <th>Tempat Industri</th>
+                                    <th>Siswa Bimbingan</th>
+                                    <th style="width:130px; text-align:center;">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowsPembimbing || '<tr><td colspan="5" class="empty-placeholder">Belum ada alokasi pembimbing siswa yang dibuat</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SEKSI 2: ALOKASI GURU MONITORING LAPANGAN -->
+                <div class="card" style="border: 2px solid #86efac; background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 60px);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                        <div>
+                            <div style="font-size:11px; font-weight:900; color:#15803d; letter-spacing:0.5px;">FORMULIR 2: MONITORING DUDI</div>
+                            <h3 style="font-size:16px; font-weight:950; color:#0f172a; margin-top:2px;">🚗 Alokasi Penugasan Guru Monitoring DUDI</h3>
+                            <p style="font-size:11px; color:#64748b; margin-top:2px;">Terbitkan surat tugas monitoring lapangan bagi guru untuk mengunjungi mitra industri.</p>
+                        </div>
+                        <button onclick="window.bukaModalTambahMonitoring()" class="btn-action btn-emerald" style="padding:9px 15px; font-size:12px; font-weight:900; display:inline-flex; align-items:center; gap:6px; box-shadow:0 3px 10px rgba(16,185,129,0.3);">
+                            + Tambah Tugas Monitoring
+                        </button>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:36px; text-align:center;">No</th>
+                                    <th>Guru Monitoring</th>
+                                    <th>Surat Tugas / Periode</th>
+                                    <th>Industri Target</th>
+                                    <th>Siswa yang Dimonitoring</th>
+                                    <th style="width:130px; text-align:center;">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowsMonitoring || '<tr><td colspan="6" class="empty-placeholder">Belum ada penugasan monitoring yang diterbitkan</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>`;
+        };
+
+        // Modal Tambah Alokasi Guru Pembimbing & Siswa
+        window.bukaModalAlokasiPenempatan = function() {
+            let guruOpts = "";
+            (window.cloudState.guru || []).forEach(g => {
+                guruOpts += `<option value="${g.nama}">${g.nama} (${g.mapel || 'Guru Pembimbing'})</option>`;
+            });
+
+            let indOpts = "";
+            (window.cloudState.industri || []).forEach(i => {
+                indOpts += `<option value="${i.nama}">${i.nama}</option>`;
+            });
+
+            let siswaCheckboxes = "";
+            (window.cloudState.siswa || []).forEach((s, idx) => {
+                siswaCheckboxes += `
+                <label class="item-siswa-alokasi" data-nama="${s.nama.toLowerCase()}" data-kelas="${(s.kelas||'').toLowerCase()}" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#f8fafc; border:1px solid #e2e8f0; font-size:11.5px; cursor:pointer;">
+                    <input type="checkbox" class="cb-siswa-alokasi" value="${s.nama}">
+                    <div>
+                        <div style="font-weight:800; color:#0f172a;">${s.nama}</div>
+                        <div style="font-size:10px; color:#64748b;">${s.kelas || '-'}</div>
+                    </div>
+                </label>`;
+            });
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:950; color:#0284c7; margin-bottom:4px;">🔄 Alokasi Guru Pembimbing & Siswa</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Tentukan guru pembimbing, tempat industri, dan centang siswa yang ditempatkan.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Pilih Guru Pembimbing:</label>
+                    <select id="allocGuruSelect" class="form-control" style="font-weight:750; color:#0369a1;">
+                        ${guruOpts || '<option value="">Belum ada data guru</option>'}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Pilih Tempat Industri / DUDI:</label>
+                    <select id="allocIndustriSelect" class="form-control" style="font-weight:750; color:#0f172a;">
+                        ${indOpts || '<option value="">Belum ada data industri</option>'}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Cari & Pilih Siswa Bimbingan (Bisa Lebih Dari 1):</label>
+                    <input type="text" id="cariSiswaAlokasiInput" class="form-control" placeholder="🔍 Ketik nama siswa atau jurusan untuk mencari..." oninput="window.filterSiswaPenempatan(this.value)" style="margin-bottom:8px;">
+                    <div id="containerListSiswaAlokasi" style="max-height:190px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; border:1.5px solid #cbd5e1; border-radius:12px; padding:8px; background:#ffffff;">
+                        ${siswaCheckboxes || '<div class="empty-placeholder">Belum ada master siswa</div>'}
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanAlokasiPenempatanBaru()" class="btn-action btn-blue" style="font-weight:900; padding:10px 18px;">
+                        💾 Simpan Alokasi Pembimbing
+                    </button>
+                </div>
+            `);
+        };
+
+        // Filter Siswa Realtime
+        window.filterSiswaPenempatan = function(query) {
+            const q = (query || "").toLowerCase().trim();
+            const items = document.querySelectorAll('.item-siswa-alokasi');
+            items.forEach(el => {
+                const nama = el.getAttribute('data-nama') || '';
+                const kelas = el.getAttribute('data-kelas') || '';
+                if (!q || nama.includes(q) || kelas.includes(q)) {
+                    el.style.display = 'flex';
+                } else {
+                    el.style.display = 'none';
+                }
+            });
+        };
+
+        // Simpan Alokasi Pembimbing Baru
+        window.simpanAlokasiPenempatanBaru = function() {
+            try {
+                const guru = document.getElementById("allocGuruSelect")?.value;
+                const industri = document.getElementById("allocIndustriSelect")?.value;
+                const cbs = document.querySelectorAll('.cb-siswa-alokasi:checked');
+
+                if (!guru || !industri) {
+                    return window.showModalInfo("Lengkapi Data", "Silakan pilih Guru Pembimbing dan Tempat Industri terlebih dahulu!");
+                }
+
+                if (cbs.length === 0) {
+                    return window.showModalInfo("Pilih Siswa", "Centang minimal 1 siswa yang dibimbing pada industri tersebut!");
+                }
+
+                const selectedS = [];
+                cbs.forEach(c => selectedS.push(c.value));
+
+                if (!Array.isArray(window.cloudState.penempatan)) window.cloudState.penempatan = [];
+
+                window.cloudState.penempatan.unshift({
+                    id: "pen_" + Date.now(),
+                    guru: guru,
+                    industri: industri,
+                    siswa: selectedS
+                });
+
+                window.simpanDatabasePersisten(true);
+                window.closeDynamicModal();
+                window.showModalInfo("Alokasi Tersimpan ✅", `Berhasil mengalokasikan <b>${selectedS.length} siswa</b> di <b>${industri}</b> dengan pembimbing <b>${guru}</b>.`);
+                window.openFeature('penempatan', 'Alokasi Guru & Siswa');
+            } catch(e) {
+                window.showModalInfo("Galat", "Terjadi kesalahan saat menyimpan alokasi: " + e.message);
+            }
+        };
+
+        // Modal Edit Alokasi Pembimbing
+        window.bukaModalEditPenempatan = function(index) {
+            const item = (window.cloudState.penempatan || [])[index];
+            if (!item) return;
+
+            let guruOpts = "";
+            (window.cloudState.guru || []).forEach(g => {
+                guruOpts += `<option value="${g.nama}" ${g.nama === item.guru ? 'selected' : ''}>${g.nama} (${g.mapel || 'Guru Pembimbing'})</option>`;
+            });
+
+            const currentInd = Array.isArray(item.industri) ? item.industri[0] : item.industri;
+            let indOpts = "";
+            (window.cloudState.industri || []).forEach(i => {
+                indOpts += `<option value="${i.nama}" ${i.nama === currentInd ? 'selected' : ''}>${i.nama}</option>`;
+            });
+
+            const currentSiswa = Array.isArray(item.siswa) ? item.siswa : (item.siswa ? [item.siswa] : []);
+            let siswaCheckboxes = "";
+            (window.cloudState.siswa || []).forEach(s => {
+                const isChecked = currentSiswa.includes(s.nama);
+                siswaCheckboxes += `
+                <label class="item-siswa-alokasi" data-nama="${s.nama.toLowerCase()}" data-kelas="${(s.kelas||'').toLowerCase()}" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#f8fafc; border:1px solid #e2e8f0; font-size:11.5px; cursor:pointer;">
+                    <input type="checkbox" class="cb-siswa-alokasi-edit" value="${s.nama}" ${isChecked ? 'checked' : ''}>
+                    <div>
+                        <div style="font-weight:800; color:#0f172a;">${s.nama}</div>
+                        <div style="font-size:10px; color:#64748b;">${s.kelas || '-'}</div>
+                    </div>
+                </label>`;
+            });
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:950; color:#d97706; margin-bottom:4px;">✏️ Edit Alokasi Pembimbing & Siswa</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Perbarui data pembimbing, industri tempat PKL, atau daftar siswa yang dibimbing.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Pilih Guru Pembimbing:</label>
+                    <select id="editAllocGuruSelect" class="form-control" style="font-weight:750; color:#0369a1;">
+                        ${guruOpts}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Pilih Tempat Industri / DUDI:</label>
+                    <select id="editAllocIndustriSelect" class="form-control" style="font-weight:750; color:#0f172a;">
+                        ${indOpts}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Daftar Siswa Bimbingan:</label>
+                    <input type="text" class="form-control" placeholder="🔍 Cari siswa..." oninput="window.filterSiswaPenempatan(this.value)" style="margin-bottom:8px;">
+                    <div style="max-height:190px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; border:1.5px solid #cbd5e1; border-radius:12px; padding:8px; background:#ffffff;">
+                        ${siswaCheckboxes}
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanEditPenempatan(${index})" class="btn-action btn-amber" style="font-weight:900; padding:10px 18px;">
+                        💾 Simpan Perubahan Alokasi
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanEditPenempatan = function(index) {
+            const guru = document.getElementById("editAllocGuruSelect")?.value;
+            const industri = document.getElementById("editAllocIndustriSelect")?.value;
+            const cbs = document.querySelectorAll('.cb-siswa-alokasi-edit:checked');
+
+            if (!guru || !industri) return window.showModalInfo("Lengkapi Data", "Guru dan Industri wajib dipilih!");
+            if (cbs.length === 0) return window.showModalInfo("Pilih Siswa", "Centang minimal 1 siswa!");
+
+            const selectedS = [];
+            cbs.forEach(c => selectedS.push(c.value));
+
+            if (window.cloudState.penempatan[index]) {
+                window.cloudState.penempatan[index].guru = guru;
+                window.cloudState.penempatan[index].industri = industri;
+                window.cloudState.penempatan[index].siswa = selectedS;
+
+                window.simpanDatabasePersisten(true);
+                window.closeDynamicModal();
+                window.showModalInfo("Perubahan Tersimpan ✏️", "Data alokasi pembimbing dan siswa berhasil diperbarui.");
+                window.openFeature('penempatan', 'Alokasi Guru & Siswa');
+            }
+        };
+
+        window.konfirmasiHapusPenempatan = function(index) {
+            const item = (window.cloudState.penempatan || [])[index];
+            if (!item) return;
+
+            window.showConfirmDialog(
+                "Hapus Alokasi Pembimbing?",
+                `Apakah Anda yakin ingin menghapus alokasi pembimbing <b>${item.guru}</b> di <b>${Array.isArray(item.industri) ? item.industri.join(', ') : item.industri}</b>?`,
+                () => {
+                    window.cloudState.penempatan.splice(index, 1);
+                    window.simpanDatabasePersisten(true);
+                    window.openFeature('penempatan', 'Alokasi Guru & Siswa');
+                }
+            );
+        };
+
+        // Modal Tambah Penugasan Guru Monitoring
+        window.bukaModalTambahMonitoring = function() {
+            let guruOpts = "";
+            (window.cloudState.guru || []).forEach(g => {
+                guruOpts += `<option value="${g.nama}">${g.nama} (${g.mapel || 'Guru'})</option>`;
+            });
+
+            let indCheckboxes = "";
+            (window.cloudState.industri || []).forEach(i => {
+                indCheckboxes += `
+                <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#f0fdf4; border:1px solid #86efac; font-size:11.5px; cursor:pointer;">
+                    <input type="checkbox" class="cb-ind-mon" value="${i.nama}">
+                    <div>
+                        <div style="font-weight:900; color:#15803d;">🏢 ${i.nama}</div>
+                        <div style="font-size:10px; color:#64748b;">${i.alamat || '-'}</div>
+                    </div>
+                </label>`;
+            });
+
+            const today = new Date().toISOString().split('T')[0];
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:950; color:#15803d; margin-bottom:4px;">🚗 Terbitkan Surat Tugas Monitoring</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Pilih guru monitoring, tentukan rentang tanggal, dan centang industri target kunjungan.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Pilih Guru Monitoring Lapangan:</label>
+                    <select id="monGuruSelect" class="form-control" style="font-weight:750; color:#0369a1;">
+                        ${guruOpts || '<option value="">Belum ada data guru</option>'}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Judul Surat Tugas / Kegiatan Monitoring:</label>
+                    <input type="text" id="monJudulInput" class="form-control" placeholder="Contoh: Monitoring PKL Tahap I Wilayah Marisa" value="Monitoring PKL Tahap I">
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="form-group">
+                    <div>
+                        <label class="form-label">Tanggal Mulai:</label>
+                        <input type="date" id="monTglMulai" class="form-control" value="${today}">
+                    </div>
+                    <div>
+                        <label class="form-label">Tanggal Selesai:</label>
+                        <input type="date" id="monTglSelesai" class="form-control" value="${today}">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Pilih Mitra Industri Sasaran Kunjungan (Bisa Lebih Dari 1):</label>
+                    <div style="max-height:170px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; border:1.5px solid #86efac; border-radius:12px; padding:8px; background:#ffffff;">
+                        ${indCheckboxes || '<div class="empty-placeholder">Belum ada master industri</div>'}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Catatan Tambahan / Agenda Khusus (Opsional):</label>
+                    <input type="text" id="monCatatanInput" class="form-control" placeholder="Contoh: Koordinasi evaluasi jurnal dan kedisiplinan">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanAlokasiMonitoringBaru()" class="btn-action btn-emerald" style="font-weight:900; padding:10px 18px;">
+                        💾 Simpan Penugasan Monitoring
+                    </button>
+                </div>
+            `);
+        };
+
+        // Simpan Penugasan Monitoring Baru
+        window.simpanAlokasiMonitoringBaru = function() {
+            try {
+                const guru = document.getElementById("monGuruSelect")?.value;
+                const judul = document.getElementById("monJudulInput")?.value.trim() || "Monitoring DUDI";
+                const tglMulai = document.getElementById("monTglMulai")?.value;
+                const tglSelesai = document.getElementById("monTglSelesai")?.value;
+                const catatan = document.getElementById("monCatatanInput")?.value.trim() || "-";
+                const cbs = document.querySelectorAll('.cb-ind-mon:checked');
+
+                if (!guru) return window.showModalInfo("Lengkapi Data", "Silakan pilih Guru Monitoring!");
+                if (cbs.length === 0) return window.showModalInfo("Pilih Industri", "Centang minimal 1 industri target kunjungan!");
+
+                const indList = [];
+                cbs.forEach(c => indList.push(c.value));
+
+                if (!Array.isArray(window.cloudState.penugasanMonitoring)) window.cloudState.penugasanMonitoring = [];
+
+                window.cloudState.penugasanMonitoring.unshift({
+                    id: "mon_" + Date.now(),
+                    guru: guru,
+                    judulTugas: judul,
+                    tanggalMulai: tglMulai,
+                    tanggalSelesai: tglSelesai,
+                    catatan: catatan,
+                    industriList: indList,
+                    siswaList: []
+                });
+
+                window.simpanDatabasePersisten(true);
+                window.closeDynamicModal();
+                window.showModalInfo("Penugasan Terbit 🚗", `Surat tugas monitoring untuk <b>${guru}</b> ke <b>${indList.length} Industri</b> berhasil diterbitkan.`);
+                window.openFeature('penempatan', 'Alokasi Guru & Siswa');
+            } catch(e) {
+                window.showModalInfo("Galat", "Terjadi kesalahan: " + e.message);
+            }
+        };
+
+        // Modal Edit Penugasan Guru Monitoring
+        window.bukaModalEditTugasMonitoring = function(index) {
+            const item = (window.cloudState.penugasanMonitoring || [])[index];
+            if (!item) return;
+
+            let guruOpts = "";
+            (window.cloudState.guru || []).forEach(g => {
+                guruOpts += `<option value="${g.nama}" ${g.nama === item.guru ? 'selected' : ''}>${g.nama} (${g.mapel || 'Guru'})</option>`;
+            });
+
+            const currentDudi = Array.isArray(item.industriList) ? item.industriList : [item.industriList];
+            let indCheckboxes = "";
+            (window.cloudState.industri || []).forEach(i => {
+                const isChecked = currentDudi.includes(i.nama);
+                indCheckboxes += `
+                <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#f0fdf4; border:1px solid #86efac; font-size:11.5px; cursor:pointer;">
+                    <input type="checkbox" class="cb-ind-mon-edit" value="${i.nama}" ${isChecked ? 'checked' : ''}>
+                    <div>
+                        <div style="font-weight:900; color:#15803d;">🏢 ${i.nama}</div>
+                        <div style="font-size:10px; color:#64748b;">${i.alamat || '-'}</div>
+                    </div>
+                </label>`;
+            });
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:950; color:#d97706; margin-bottom:4px;">✏️ Edit Surat Tugas Monitoring</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Perbarui data penugasan monitoring lapangan guru.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Guru Monitoring:</label>
+                    <select id="editMonGuruSelect" class="form-control" style="font-weight:750; color:#0369a1;">
+                        ${guruOpts}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Judul Surat Tugas / Kegiatan:</label>
+                    <input type="text" id="editMonJudulInput" class="form-control" value="${item.judulTugas || ''}">
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="form-group">
+                    <div>
+                        <label class="form-label">Tanggal Mulai:</label>
+                        <input type="date" id="editMonTglMulai" class="form-control" value="${item.tanggalMulai || ''}">
+                    </div>
+                    <div>
+                        <label class="form-label">Tanggal Selesai:</label>
+                        <input type="date" id="editMonTglSelesai" class="form-control" value="${item.tanggalSelesai || ''}">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Industri Sasaran:</label>
+                    <div style="max-height:170px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; border:1.5px solid #86efac; border-radius:12px; padding:8px; background:#ffffff;">
+                        ${indCheckboxes}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Catatan Agenda:</label>
+                    <input type="text" id="editMonCatatanInput" class="form-control" value="${item.catatan || ''}">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanEditTugasMonitoring(${index})" class="btn-action btn-amber" style="font-weight:900; padding:10px 18px;">
+                        💾 Simpan Perubahan Tugas
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanEditTugasMonitoring = function(index) {
+            const guru = document.getElementById("editMonGuruSelect")?.value;
+            const judul = document.getElementById("editMonJudulInput")?.value.trim();
+            const tglMulai = document.getElementById("editMonTglMulai")?.value;
+            const tglSelesai = document.getElementById("editMonTglSelesai")?.value;
+            const catatan = document.getElementById("editMonCatatanInput")?.value.trim();
+            const cbs = document.querySelectorAll('.cb-ind-mon-edit:checked');
+
+            if (!guru) return window.showModalInfo("Lengkapi Data", "Pilih guru monitoring!");
+            if (cbs.length === 0) return window.showModalInfo("Pilih Industri", "Centang minimal 1 industri!");
+
+            const indList = [];
+            cbs.forEach(c => indList.push(c.value));
+
+            if (window.cloudState.penugasanMonitoring[index]) {
+                window.cloudState.penugasanMonitoring[index].guru = guru;
+                window.cloudState.penugasanMonitoring[index].judulTugas = judul;
+                window.cloudState.penugasanMonitoring[index].tanggalMulai = tglMulai;
+                window.cloudState.penugasanMonitoring[index].tanggalSelesai = tglSelesai;
+                window.cloudState.penugasanMonitoring[index].catatan = catatan;
+                window.cloudState.penugasanMonitoring[index].industriList = indList;
+
+                window.simpanDatabasePersisten(true);
+                window.closeDynamicModal();
+                window.showModalInfo("Perubahan Tersimpan ✏️", "Surat tugas monitoring berhasil diperbarui.");
+                window.openFeature('penempatan', 'Alokasi Guru & Siswa');
+            }
+        };
+
+        window.konfirmasiHapusMonitoring = function(index) {
+            const item = (window.cloudState.penugasanMonitoring || [])[index];
+            if (!item) return;
+
+            window.showConfirmDialog(
+                "Hapus Tugas Monitoring?",
+                `Apakah Anda yakin ingin menghapus surat tugas monitoring <b>${item.judulTugas}</b> untuk <b>${item.guru}</b>?`,
+                () => {
+                    window.cloudState.penugasanMonitoring.splice(index, 1);
+                    window.simpanDatabasePersisten(true);
+                    window.openFeature('penempatan', 'Alokasi Guru & Siswa');
+                }
+            );
         };
 
         window.renderJamGeofenceGPS = function() { 
