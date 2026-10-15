@@ -1461,6 +1461,7 @@
                 { id: "tag-lokasi-dudi", label: "Koleksi Titik GPS DUDI", icon: "📌" },
                 { id: "penempatan", label: "Alokasi Guru & Siswa", icon: "🔄" },
                 { id: "rekap-absensi", label: "Rekap Presensi Global", icon: "📈" },
+                { id: "rekap-jurnal", label: "Rekap Jurnal Siswa", icon: "📖" },
                 { id: "jam-geofence", label: "Jam & Geofence GPS", icon: "📍" },
                 { id: "periode-pkl", label: "Periode Pelaksanaan PKL", icon: "📅" },
                 { id: "dokumen", label: "Manajemen Dokumen", icon: "📁" },
@@ -2289,6 +2290,7 @@
                 { id: "tag-lokasi-dudi", icon: "📌", title: "Koleksi Titik GPS DUDI" },
                 { id: "penempatan", icon: "🔄", title: "Alokasi Guru & Siswa" },
                 { id: "rekap-absensi", icon: "📈", title: "Rekap Presensi Global" },
+                { id: "rekap-jurnal", icon: "📖", title: "Rekap Jurnal Siswa" },
                 { id: "jam-geofence", icon: "📍", title: "Jam & Geofence GPS" },
                 { id: "periode-pkl", icon: "📅", title: "Periode Pelaksanaan PKL" },
                 { id: "dokumen", icon: "📁", title: "Manajemen Dokumen" },
@@ -2298,46 +2300,26 @@
                 { id: "banner-jadwal", icon: "🖼️", title: "Banner & Jadwal PKL" }
             ];
 
-            let gridCardsHtml = "";
+            let gridHtml = "";
             adminItems.forEach(item => {
-                gridCardsHtml += `
+                gridHtml += `
                 <div class="admin-item-card" onclick="window.openFeature('${item.id}', '${item.title}')">
                     <div class="admin-item-icon">${item.icon}</div>
                     <div class="admin-item-title">${item.title}</div>
-                    <div class="admin-item-link">Buka Menu ➔</div>
+                    <div class="admin-item-link">Buka Fitur ➔</div>
                 </div>`;
             });
 
-            const currentCfg = Object.assign({}, DEFAULT_PKL_CONFIG, window.cloudState.pklConfig || {});
-
             return `
             <div class="admin-welcome-card">
-                <div style="font-size: 11px; font-weight: 900; color: #0284c7; letter-spacing: 0.5px;">PANEL KONTROL ADMINISTRATOR / PANITIA PKL</div>
-                <h3 style="font-size: 18px; font-weight: 950; color: #0f172a; margin-top: 2px;">Selamat Bertugas, Tim Panitia PKL</h3>
-                <p style="font-size: 11px; color: #64748b; margin-top: 4px;">Kelola alokasi bimbingan, jadwal kunjungan, master data, akun login, dan pantau presensi seluruh siswa.</p>
-
-                <!-- Pengaturan Periode PKL Singkron -->
-                <div style="margin-top:12px; padding-top:10px; border-top:1.5px dashed #bfdbfe; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                    <div>
-                        <div style="font-size:10px; font-weight:800; color:#64748b; text-transform:uppercase;">PERIODE RESMI PKL AKTIF:</div>
-                        <div style="font-size:12.5px; font-weight:950; color:#0284c7;">
-                            📅 ${currentCfg.durasi}
-                            <span style="font-size:11px; font-weight:700; color:#475569;">(${currentCfg.tglAwal} s/d ${currentCfg.tglPenarikan})</span>
-                        </div>
-                    </div>
-                    <button onclick="window.openFeature('periode-pkl', 'Periode Pelaksanaan PKL')" class="btn-action btn-emerald" style="padding:8px 14px; font-size:11.5px; font-weight:900; box-shadow:0 3px 10px rgba(16,185,129,0.3);">
-                        📅 Atur Periode PKL
-                    </button>
-                </div>
+                <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">PANEL ADMINISTRATOR PKL</div>
+                <h3 style="font-size:17px; font-weight:900; color:#0f172a; margin-top:2px;">Selamat Datang, Panitia PKL</h3>
+                <p style="font-size:11px; color:#64748b; margin-top:4px;">Kelola akun, master data, penempatan, dan monitoring ekosistem secara menyeluruh dari panel ini.</p>
             </div>
-
             <div class="admin-menu-box-wrap">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div style="font-size: 14px; font-weight: 900; color: #0f172a;">MENU PENGELOLAAN SISTEM (14 FITUR)</div>
-                    <span class="badge-status badge-blue">PANEL ADMIN</span>
-                </div>
+                <h4 style="font-size:13px; font-weight:900; color:#0f172a;">Menu Administrasi:</h4>
                 <div class="admin-grid-12">
-                    ${gridCardsHtml}
+                    ${gridHtml}
                 </div>
             </div>`;
         };
@@ -2357,33 +2339,13 @@
                 const mapsUrl = hasValidGps ? `https://www.google.com/maps?q=${ind.lat},${ind.lng}` : "#";
 
                 rows += `<tr>
-                    <td>${idx + 1}</td>
+                    <td style="text-align:center;">${idx + 1}</td>
+                    <td><b>🏢 ${ind.nama}</b></td>
+                    <td>${ind.alamat || '-'}</td>
+                    <td>${hasValidGps ? `<a href="${mapsUrl}" target="_blank" class="badge-status badge-blue" style="text-decoration:none;">📍 ${ind.lat}, ${ind.lng}</a>` : `<span class="badge-status badge-amber">Belum Dikunci</span>`}</td>
+                    <td>${ind.radius || 100} m</td>
                     <td>
-                        <div style="font-weight:800; color:#0f172a;">${j.siswa}</div>
-                        <div style="font-size:10px; color:#64748b;">${kelasSiswa}</div>
-                    </td>
-                    <td><b>🏢 ${j.industri || tempatPkl}</b></td>
-                    <td>${j.guru_pembimbing || '-'}</td>
-                    <td style="white-space:nowrap; font-weight:700;">${hariTglStr}</td>
-                    <td style="white-space:normal; min-width:180px; line-height:1.4;">${j.kegiatan}</td>
-                    <td>
-                        ${adaBukti ? `
-                            <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;">
-                                <button onclick="window.bukaPratinjauBuktiJurnal(${originalIdx})" class="btn-action btn-blue" style="padding:4px 8px; font-size:10.5px; display:inline-flex; align-items:center; gap:4px;">
-                                    📷 Bukti
-                                </button>
-                                <button onclick="window.konfirmasiHapusFileBuktiJurnal(${originalIdx})" class="btn-action btn-red" style="padding:2px 6px; font-size:9.5px;" title="Hapus foto/file bukti agar memori aplikasi ringan">
-                                    🗑️ Hapus
-                                </button>
-                            </div>
-                        ` : `<span style="font-size:10px; color:#94a3b8;">-</span>`}
-                    </td>
-                    <td><span class="badge-status ${statusBadge}">${j.status || 'Menunggu'}</span></td>
-                    <td style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-                        <span style="font-size:10px; font-weight:800; color:${j.status === 'Disetujui' ? '#15803d' : '#64748b'}; background:${j.status === 'Disetujui' ? '#dcfce7' : '#f1f5f9'}; padding:3px 6px; border-radius:6px;">
-                            ${j.status === 'Disetujui' ? '✓ Tervalidasi Guru' : '⏳ Menunggu Guru'}
-                        </span>
-                        <button onclick="window.konfirmasiHapusJurnal(${originalIdx})" class="btn-action btn-red" style="padding:5px 8px; font-size:11px;">🗑️ Hapus</button>
+                        <button onclick="window.showModalInfo('Info', 'Titik GPS industri ini ${hasValidGps ? 'sudah' : 'belum'} dikunci.')" class="btn-action btn-emerald" style="padding:4px 8px; font-size:10px;">Info</button>
                     </td>
                 </tr>`;
             });
@@ -2392,17 +2354,9 @@
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
-                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">EVALUASI LOGBOOK HARIAN</div>
-                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📋 Validasi & Pengesahan Jurnal Siswa</h3>
-                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Periksa kegiatan harian, verifikasi berkas bukti fisik, dan kelola arsip jurnal.</p>
-                    </div>
-                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                        <button onclick="window.bukaModalExportJurnal('${role}')" class="btn-action btn-emerald" style="padding:8px 14px; font-weight:850; display:inline-flex; align-items:center; gap:6px;">
-                            📥 Export Jurnal (Excel/PDF)
-                        </button>
-                        <button onclick="window.hapusMasalJurnal('cb-jurnal-validasi')" class="btn-action btn-red" style="padding:8px 14px; font-weight:850;">
-                            🗑️ Hapus Terpilih
-                        </button>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">TITIK GEOFENCE DUDI</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📌 Koleksi Titik GPS Industri</h3>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Daftar lokasi industri yang telah dikunci titik GPS-nya. ${terkunciCount} dari ${industriList.length} Industri Terkunci.</p>
                     </div>
                 </div>
 
@@ -2410,18 +2364,16 @@
                     <table>
                         <thead>
                             <tr>
-                                <th style="width:36px; text-align:center;"><input type="checkbox" onchange="window.toggleAllCheckboxes('jurnal-validasi', this.checked)"></th>
                                 <th style="width:36px; text-align:center;">No</th>
-                                <th>Nama Siswa</th>
-                                <th style="width:145px;">Hari/Tgl</th>
-                                <th>Uraian Kegiatan</th>
-                                <th>Bukti Praktik</th>
-                                <th>Status</th>
-                                <th style="width:140px;">Aksi</th>
+                                <th>Nama Industri / DUDI</th>
+                                <th>Alamat</th>
+                                <th>Koordinat (Lat, Lng)</th>
+                                <th>Radius</th>
+                                <th style="width:100px;">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="8" class="empty-placeholder">Belum ada jurnal siswa yang masuk untuk diperiksa</td></tr>'}
+                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada titik GPS yang dikunci</td></tr>'}
                         </tbody>
                     </table>
                 </div>
