@@ -5110,48 +5110,138 @@
             `);
         };
 
+        window.formatHariTanggal = function(dateStr) {
+            if (!dateStr) return "-";
+            try {
+                const parts = dateStr.split('-');
+                if (parts.length === 3) {
+                    const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                    const days = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+                    const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+                    const dayName = days[d.getDay()];
+                    const dayNum = d.getDate();
+                    const monthName = months[d.getMonth()];
+                    const yearNum = d.getFullYear();
+                    return `${dayName}, ${dayNum} ${monthName} ${yearNum}`;
+                }
+            } catch(e) {}
+            return dateStr;
+        };
+
+        window.konfirmasiHapusJurnal = function(originalIdx) {
+            const j = window.cloudState.jurnal[originalIdx];
+            if (!j) return;
+            window.showConfirmDialog(
+                "Hapus Catatan Jurnal?",
+                `Apakah Anda yakin ingin menghapus catatan jurnal tanggal <b>${j.tanggal}</b> atas nama <b>${j.siswa}</b>?`,
+                () => {
+                    window.cloudState.jurnal.splice(originalIdx, 1);
+                    window.simpanDatabasePersisten(true);
+                    window.openFeature(window.cloudState.currentFeature || "jurnal", "Jurnal Harian");
+                }
+            );
+        };
+
+        window.hapusMasalJurnal = function(checkboxClass) {
+            const cbs = document.querySelectorAll(`.${checkboxClass}:checked`);
+            if (cbs.length === 0) {
+                return window.showModalInfo("Pilih Data Jurnal", "Silakan centang minimal 1 catatan jurnal yang ingin dihapus!");
+            }
+            window.showConfirmDialog(
+                "Hapus Jurnal Terpilih?",
+                `Apakah Anda yakin ingin menghapus <b>${cbs.length} catatan jurnal</b> yang telah dicentang?`,
+                () => {
+                    const indices = Array.from(cbs).map(c => parseInt(c.value, 10)).sort((a, b) => b - a);
+                    indices.forEach(idx => {
+                        if (window.cloudState.jurnal[idx]) {
+                            window.cloudState.jurnal.splice(idx, 1);
+                        }
+                    });
+                    window.simpanDatabasePersisten(true);
+                    window.openFeature(window.cloudState.currentFeature || "jurnal", "Jurnal Harian");
+                }
+            );
+        };
+
         window.renderJurnalKegiatan = function() {
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const sData = (window.cloudState.siswa || []).find(s => s.nama.toLowerCase().trim() === profile.nama.toLowerCase().trim()) || {};
+            const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
+            const namaIndustri = penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "PT. Telkom Marisa";
+            const kelasSiswa = sData.kelas || "Teknik Jaringan Komputer & Telekomunikasi (TJKT)";
+
             const myJurnal = (window.cloudState.jurnal || []).filter(j => j.siswa === profile.nama);
             let rows = "";
-            myJurnal.forEach((jur, idx) => {
+            myJurnal.forEach((jur, displayIdx) => {
+                const originalIdx = (window.cloudState.jurnal || []).indexOf(jur);
+                const hariTglStr = window.formatHariTanggal(jur.tanggal);
+                const statusBadge = (jur.status === 'Disetujui') ? 'badge-green' : 'badge-amber';
+
                 rows += `<tr>
-                    <td>${idx + 1}</td>
-                    <td>${jur.tanggal}</td>
-                    <td style="white-space:normal; min-width:160px;"><b>${jur.kegiatan}</b><div style="font-size:10px; color:#64748b;">Kendala: ${jur.kendala || '-'}</div></td>
-                    <td>${jur.guru_pembimbing || '-'}</td>
-                    <td>${jur.file_bukti ? `<a href="${jur.file_bukti}" target="_blank" class="btn-action btn-blue" style="text-decoration:none; padding:3px 8px; font-size:10px;">📎 Lihat Bukti</a>` : '<span style="color:#94a3b8;">-</span>'}</td>
-                    <td><span class="badge-status ${jur.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${jur.status || 'Menunggu'}</span></td>
+                    <td style="text-align:center;"><input type="checkbox" class="cb-jurnal-siswa" value="${originalIdx}"></td>
+                    <td style="text-align:center;">${displayIdx + 1}</td>
+                    <td style="white-space:nowrap; font-weight:750;">${hariTglStr}</td>
+                    <td style="white-space:normal; min-width:180px; line-height:1.4;">${jur.kegiatan}</td>
+                    <td style="white-space:normal; min-width:140px;">
+                        <div><span class="badge-status ${statusBadge}">${jur.status || 'Menunggu'}</span></div>
+                        ${jur.kendala && jur.kendala !== 'Selesai' ? `<div style="font-size:10px; color:#64748b; margin-top:2px;">Kendala: ${jur.kendala}</div>` : ''}
+                        ${jur.file_bukti ? `<div style="margin-top:4px;"><button onclick="window.bukaPratinjauBuktiJurnal(${originalIdx})" class="btn-action btn-blue" style="padding:2px 6px; font-size:9.5px;">📷 Bukti</button></div>` : ''}
+                    </td>
+                    <td style="text-align:center;">
+                        <button onclick="window.konfirmasiHapusJurnal(${originalIdx})" class="btn-action btn-red" style="padding:4px 8px; font-size:10.5px;">
+                            🗑️ Hapus
+                        </button>
+                    </td>
                 </tr>`;
             });
 
             return `
             <div class="card">
-                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-                    <div>
-                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">LOG AKTIVITAS PKL</div>
-                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📖 Jurnal Harian PKL</h3>
-                        <p style="font-size:11px; color:#64748b;">Catat pekerjaan harian dan kirimkan ke pembimbing.</p>
-                    </div>
-                    <button onclick="window.bukaModalTambahJurnal()" class="btn-action btn-blue" style="padding:8px 14px;">
-                        + Tulis Jurnal Baru
-                    </button>
+                <!-- Kop Judul Resmi Jurnal PKL -->
+                <div style="border-bottom: 2px solid #0284c7; padding-bottom: 10px; margin-bottom: 12px; text-align: center;">
+                    <h3 style="font-size: 16px; font-weight: 950; color: #0284c7; letter-spacing: 0.5px; text-transform: uppercase;">JURNAL KEGIATAN HARIAN SISWA PKL</h3>
+                    <div style="font-size: 11px; font-weight: 800; color: #475569; margin-top: 2px;">SISTEM INFORMASI PRAKTIK KERJA LAPANGAN (SIP-PKL)</div>
                 </div>
 
+                <!-- Sub-Judul Identitas Siswa -->
+                <div style="background: #f0f9ff; border: 1.5px solid #bae6fd; border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11.5px;">
+                    <div><span style="color:#64748b; font-weight:750;">Nama Sekolah:</span> <b style="color:#0f172a;">SMK Negeri 1 Marisa</b></div>
+                    <div><span style="color:#64748b; font-weight:750;">Nama Siswa:</span> <b style="color:#0284c7;">${profile.nama}</b></div>
+                    <div><span style="color:#64748b; font-weight:750;">Kelas / Jurusan:</span> <b style="color:#0f172a;">${kelasSiswa}</b></div>
+                    <div><span style="color:#64748b; font-weight:750;">Tempat PKL:</span> <b style="color:#0f172a;">${namaIndustri}</b></div>
+                </div>
+
+                <!-- Tombol Aksi -->
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div style="font-size:11px; font-weight:800; color:#475569;">CATATAN LOGBOOK HARIAN</div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.bukaModalTambahJurnal()" class="btn-action btn-blue" style="padding:8px 12px; font-weight:850;">
+                            + Tulis Jurnal Baru
+                        </button>
+                        <button onclick="window.bukaModalExportJurnal('siswa')" class="btn-action btn-emerald" style="padding:8px 12px; font-weight:850; display:inline-flex; align-items:center; gap:5px;">
+                            📥 Export Jurnal (Excel/PDF)
+                        </button>
+                        <button onclick="window.hapusMasalJurnal('cb-jurnal-siswa')" class="btn-action btn-red" style="padding:8px 12px; font-weight:850;">
+                            🗑️ Hapus Terpilih
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tabel Jurnal Format Resmi -->
                 <div class="table-wrap">
                     <table>
                         <thead>
                             <tr>
-                                <th>No</th>
-                                <th>Tanggal</th>
+                                <th style="width:36px; text-align:center;"><input type="checkbox" onchange="window.toggleAllCheckboxes('jurnal-siswa', this.checked)"></th>
+                                <th style="width:36px; text-align:center;">No</th>
+                                <th style="width:140px;">Hari/Tgl</th>
                                 <th>Uraian Kegiatan</th>
-                                <th>Pembimbing</th>
-                                <th>Bukti File</th>
-                                <th>Status</th>
+                                <th style="width:130px;">Keterangan</th>
+                                <th style="width:75px; text-align:center;">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada jurnal kegiatan yang dikirimkan</td></tr>'}
+                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada jurnal harian yang dikirimkan</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -5165,7 +5255,6 @@
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
             window.tempJurnalFile = null;
 
-            // Dapatkan guru pembimbing siswa
             const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
             const defGuru = penempatan ? penempatan.guru : ((window.cloudState.guru && window.cloudState.guru[0]) ? window.cloudState.guru[0].nama : "Wilasia S. Talaa, S.ST");
 
@@ -5212,8 +5301,8 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Kendala & Pemecahan Masalah (Opsional):</label>
-                    <input type="text" id="jurKendala" class="form-control" placeholder="Tuliskan kendala dan solusinya...">
+                    <label class="form-label">Keterangan / Kendala (Opsional):</label>
+                    <input type="text" id="jurKendala" class="form-control" placeholder="Contoh: Selesai dengan baik / Ada kendala teknis...">
                 </div>
 
                 <div class="form-group">
@@ -5298,7 +5387,7 @@
                         <td>${counter++}</td>
                         <td><b>${sNama}</b></td>
                         <td>${sData.kelas || '-'}</td>
-                        <td>${isGuru ? p.industri : p.guru}</td>
+                        <td>${isGuru ? (Array.isArray(p.industri) ? p.industri.join(', ') : p.industri) : p.guru}</td>
                         <td>${sData.noHp || '-'}</td>
                     </tr>`;
                 });
@@ -5338,7 +5427,6 @@
             let list = window.cloudState.jurnal || [];
 
             if (role === 'guru') {
-                // Saring jurnal milik siswa bimbingan atau yang ditujukan ke guru ini
                 const myPlacements = (window.cloudState.penempatan || []).filter(p => window.isGuruMatch(p.guru, profile.nama));
                 const mySiswaNames = [];
                 myPlacements.forEach(p => {
@@ -5360,6 +5448,7 @@
                 const originalIdx = (window.cloudState.jurnal || []).indexOf(j);
 
                 rows += `<tr>
+                    <td style="text-align:center;"><input type="checkbox" class="cb-jurnal-validasi" value="${originalIdx}"></td>
                     <td style="text-align:center;">${idx + 1}</td>
                     <td><b>${j.siswa}</b></td>
                     <td style="white-space:nowrap; font-weight:700;">${hariTglStr}</td>
@@ -5377,8 +5466,9 @@
                         ` : `<span style="font-size:10px; color:#94a3b8;">(Tidak ada / Terhapus)</span>`}
                     </td>
                     <td><span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span></td>
-                    <td>
+                    <td style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
                         ${j.status !== 'Disetujui' ? `<button onclick="window.sahkanJurnalSiswa(${originalIdx})" class="btn-action btn-emerald" style="padding:5px 9px; font-size:11px;">✓ Sahkan</button>` : '<span style="color:#15803d; font-weight:800; font-size:11px;">Tervalidasi</span>'}
+                        <button onclick="window.konfirmasiHapusJurnal(${originalIdx})" class="btn-action btn-red" style="padding:5px 8px; font-size:11px;">🗑️ Hapus</button>
                     </td>
                 </tr>`;
             });
@@ -5389,11 +5479,14 @@
                     <div>
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">EVALUASI LOGBOOK HARIAN</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📋 Validasi & Pengesahan Jurnal Siswa</h3>
-                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Format tabel: No, Hari/Tgl, Uraian Kegiatan, dan Keterangan.</p>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Periksa kegiatan harian, verifikasi berkas bukti fisik, dan kelola arsip jurnal.</p>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button onclick="window.bukaModalExportJurnal('${role}')" class="btn-action btn-emerald" style="padding:8px 14px; font-weight:850; display:inline-flex; align-items:center; gap:6px;">
                             📥 Export Jurnal (Excel/PDF)
+                        </button>
+                        <button onclick="window.hapusMasalJurnal('cb-jurnal-validasi')" class="btn-action btn-red" style="padding:8px 14px; font-weight:850;">
+                            🗑️ Hapus Terpilih
                         </button>
                     </div>
                 </div>
@@ -5402,81 +5495,359 @@
                     <table>
                         <thead>
                             <tr>
+                                <th style="width:36px; text-align:center;"><input type="checkbox" onchange="window.toggleAllCheckboxes('jurnal-validasi', this.checked)"></th>
                                 <th style="width:36px; text-align:center;">No</th>
                                 <th>Nama Siswa</th>
-                                <th style="width:150px;">Hari/Tgl</th>
+                                <th style="width:145px;">Hari/Tgl</th>
                                 <th>Uraian Kegiatan</th>
                                 <th>Bukti Praktik</th>
                                 <th>Status</th>
-                                <th>Aksi</th>
+                                <th style="width:140px;">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada jurnal siswa yang masuk untuk diperiksa</td></tr>'}
+                            ${rows || '<tr><td colspan="8" class="empty-placeholder">Belum ada jurnal siswa yang masuk untuk diperiksa</td></tr>'}
                         </tbody>
                     </table>
                 </div>
             </div>`;
         };
 
-        window.renderValidasiJurnalList = function() {
-            const list = window.cloudState.jurnal || [];
-            let rows = "";
-            list.forEach((j, idx) => {
-                const adaBukti = !!j.file_bukti;
-                rows += `<tr>
-                    <td>${idx + 1}</td>
-                    <td><b>${j.siswa}</b></td>
-                    <td>${j.tanggal}</td>
-                    <td style="white-space:normal; min-width:160px;">${j.kegiatan}</td>
-                    <td>
-                        ${adaBukti ? `
-                            <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;">
-                                <button onclick="window.bukaPratinjauBuktiJurnal(${idx})" class="btn-action btn-blue" style="padding:4px 8px; font-size:10.5px; display:inline-flex; align-items:center; gap:4px;">
-                                    📷 Lihat/Unduh
-                                </button>
-                                <button onclick="window.konfirmasiHapusFileBuktiJurnal(${idx})" class="btn-action btn-red" style="padding:2px 6px; font-size:9.5px;" title="Hapus foto/file bukti agar memori aplikasi ringan">
-                                    🗑️ Hapus Bukti
-                                </button>
-                            </div>
-                        ` : `<span style="font-size:10px; color:#94a3b8;">(Tidak ada / Terhapus)</span>`}
-                    </td>
-                    <td><span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span></td>
-                    <td>
-                        ${j.status !== 'Disetujui' ? `<button onclick="window.sahkanJurnalSiswa(${idx})" class="btn-action btn-emerald" style="padding:5px 9px; font-size:11px;">✓ Sahkan</button>` : '<span style="color:#15803d; font-weight:800; font-size:11px;">Tervalidasi</span>'}
-                    </td>
-                </tr>`;
-            });
+        window.bukaModalExportJurnal = function(role) {
+            const profile = window.cloudState.userProfile || {};
+            let daftarSiswa = window.cloudState.siswa || [];
 
-            return `
-            <div class="card">
-                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-                    <div>
-                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">EVALUASI LOGBOOK HARIAN</div>
-                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📋 Validasi & Pengesahan Jurnal Siswa</h3>
-                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Periksa kegiatan, verifikasi foto bukti praktik industri, dan bersihkan file jika sudah diverifikasi agar memori tetap hemat.</p>
+            if (role === 'guru') {
+                const myPlacements = (window.cloudState.penempatan || []).filter(p => window.isGuruMatch(p.guru, profile.nama));
+                const mySiswaNames = [];
+                myPlacements.forEach(p => {
+                    const arr = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                    arr.forEach(s => {
+                        if (s && !mySiswaNames.includes(s.toLowerCase().trim())) mySiswaNames.push(s.toLowerCase().trim());
+                    });
+                });
+                daftarSiswa = daftarSiswa.filter(s => s.nama && mySiswaNames.includes(s.nama.toLowerCase().trim()));
+            }
+
+            let siswaSelectHtml = "";
+            if (role === 'siswa') {
+                siswaSelectHtml = `<input type="text" class="form-control" value="${profile.nama}" readonly style="background:#f1f5f9; font-weight:800; color:#0f172a;">`;
+            } else {
+                let sOptions = `<option value="ALL">-- Seluruh Siswa (${daftarSiswa.length} Siswa) --</option>`;
+                daftarSiswa.forEach(s => {
+                    sOptions += `<option value="${s.nama}">${s.nama} (${s.kelas || 'Siswa'})</option>`;
+                });
+                siswaSelectHtml = `<select id="exportJurnalSiswaSelect" class="form-control" style="font-weight:750; color:#0284c7;">${sOptions}</select>`;
+            }
+
+            const today = new Date();
+            const curYear = today.getFullYear();
+            const curMonth = today.getMonth() + 1;
+            const todayStr = today.toISOString().split('T')[0];
+            const weekAgo = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
+            const weekAgoStr = weekAgo.toISOString().split('T')[0];
+
+            window.openDynamicModal(`
+                <div style="text-align:left;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                        <span style="font-size:24px;">📖</span>
+                        <div>
+                            <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:0;">Export Jurnal Kegiatan Harian Siswa</h3>
+                            <div style="font-size:10.5px; color:#64748b;">Format Resmi: No, Hari/Tgl, Uraian Kegiatan, Keterangan</div>
+                        </div>
+                    </div>
+
+                    <div style="background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:14px; padding:10px 12px; margin:10px 0;">
+                        <div style="font-size:10.5px; font-weight:800; color:#0369a1;">PENGGUNA:</div>
+                        <div style="font-size:12.5px; font-weight:900; color:#0f172a;">${profile.nama || 'Pengguna'} (${(role || 'Siswa').toUpperCase()})</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Target Siswa:</label>
+                        ${siswaSelectHtml}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Pilihan Periode Jurnal:</label>
+                        <select id="exportJurnalPeriodeTipe" class="form-control" style="font-weight:800; color:#0f172a;" onchange="window.togglePeriodeExportJurnal(this.value)">
+                            <option value="bulanan" selected>📅 Rekap Bulanan (Pilih Bulan & Tahun)</option>
+                            <option value="mingguan">📆 Rekap Mingguan (Rentang Tanggal)</option>
+                            <option value="semua">📋 Semua Catatan Jurnal</option>
+                        </select>
+                    </div>
+
+                    <div id="wrapPeriodeJurnalMingguan" style="display:none; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:14px; padding:10px; margin-bottom:12px;">
+                        <div style="font-size:10.5px; font-weight:800; color:#475569; margin-bottom:6px;">RENTANG TANGGAL MINGGUAN:</div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            <div>
+                                <label class="form-label" style="font-size:10px;">Dari Tanggal:</label>
+                                <input type="date" id="exportJurnalTglMulai" class="form-control" value="${weekAgoStr}">
+                            </div>
+                            <div>
+                                <label class="form-label" style="font-size:10px;">Sampai Tanggal:</label>
+                                <input type="date" id="exportJurnalTglSelesai" class="form-control" value="${todayStr}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="wrapPeriodeJurnalBulanan" style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:14px; padding:10px; margin-bottom:12px;">
+                        <div style="font-size:10.5px; font-weight:800; color:#475569; margin-bottom:6px;">PILIH BULAN & TAHUN:</div>
+                        <div style="display:grid; grid-template-columns:1.5fr 1fr; gap:8px;">
+                            <div>
+                                <label class="form-label" style="font-size:10px;">Bulan:</label>
+                                <select id="exportJurnalBulan" class="form-control" style="font-weight:750;">
+                                    <option value="1" ${curMonth === 1 ? 'selected' : ''}>Januari</option>
+                                    <option value="2" ${curMonth === 2 ? 'selected' : ''}>Februari</option>
+                                    <option value="3" ${curMonth === 3 ? 'selected' : ''}>Maret</option>
+                                    <option value="4" ${curMonth === 4 ? 'selected' : ''}>April</option>
+                                    <option value="5" ${curMonth === 5 ? 'selected' : ''}>Mei</option>
+                                    <option value="6" ${curMonth === 6 ? 'selected' : ''}>Juni</option>
+                                    <option value="7" ${curMonth === 7 ? 'selected' : ''}>Juli</option>
+                                    <option value="8" ${curMonth === 8 ? 'selected' : ''}>Agustus</option>
+                                    <option value="9" ${curMonth === 9 ? 'selected' : ''}>September</option>
+                                    <option value="10" ${curMonth === 10 ? 'selected' : ''}>Oktober</option>
+                                    <option value="11" ${curMonth === 11 ? 'selected' : ''}>November</option>
+                                    <option value="12" ${curMonth === 12 ? 'selected' : ''}>Desember</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label" style="font-size:10px;">Tahun:</label>
+                                <input type="number" id="exportJurnalTahun" class="form-control" value="${curYear}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px;">
+                        <button type="button" onclick="window.jalankanExportJurnal('${role}', 'excel')" class="btn-action btn-emerald" style="padding:11px 12px; font-weight:900; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px;">
+                            📊 Unduh Excel (.xlsx)
+                        </button>
+                        <button type="button" onclick="window.jalankanExportJurnal('${role}', 'pdf')" class="btn-action btn-blue" style="padding:11px 12px; font-weight:900; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px;">
+                            🖨️ Cetak / PDF
+                        </button>
+                    </div>
+
+                    <div style="text-align:center; margin-top:10px;">
+                        <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff; padding:6px 16px;">
+                            Batal
+                        </button>
                     </div>
                 </div>
+            `);
+        };
 
-                <div class="table-wrap">
+        window.togglePeriodeExportJurnal = function(tipe) {
+            const wrapMingguan = document.getElementById("wrapPeriodeJurnalMingguan");
+            const wrapBulanan = document.getElementById("wrapPeriodeJurnalBulanan");
+            if (!wrapMingguan || !wrapBulanan) return;
+            if (tipe === 'mingguan') {
+                wrapMingguan.style.display = "block";
+                wrapBulanan.style.display = "none";
+            } else if (tipe === 'bulanan') {
+                wrapMingguan.style.display = "none";
+                wrapBulanan.style.display = "block";
+            } else {
+                wrapMingguan.style.display = "none";
+                wrapBulanan.style.display = "none";
+            }
+        };
+
+        window.dapatkanDataJurnalTersaring = function(role) {
+            const profile = window.cloudState.userProfile || {};
+            let targetSiswa = (role === 'siswa') ? profile.nama : (document.getElementById("exportJurnalSiswaSelect")?.value || "ALL");
+            const periodeTipe = document.getElementById("exportJurnalPeriodeTipe")?.value || "bulanan";
+            let rawList = window.cloudState.jurnal || [];
+
+            if (role === 'guru') {
+                const myPlacements = (window.cloudState.penempatan || []).filter(p => window.isGuruMatch(p.guru, profile.nama));
+                const mySiswaNames = [];
+                myPlacements.forEach(p => {
+                    const arr = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                    arr.forEach(s => { if (s && !mySiswaNames.includes(s.toLowerCase().trim())) mySiswaNames.push(s.toLowerCase().trim()); });
+                });
+                rawList = rawList.filter(j => (j.siswa && mySiswaNames.includes(j.siswa.toLowerCase().trim())) || window.isGuruMatch(j.guru_pembimbing, profile.nama));
+            }
+
+            if (targetSiswa !== 'ALL') {
+                rawList = rawList.filter(j => j.siswa && j.siswa.toLowerCase().trim() === targetSiswa.toLowerCase().trim());
+            }
+
+            let labelPeriode = "Seluruh Periode PKL";
+            if (periodeTipe === 'mingguan') {
+                const tglMulai = document.getElementById("exportJurnalTglMulai")?.value;
+                const tglSelesai = document.getElementById("exportJurnalTglSelesai")?.value;
+                if (tglMulai && tglSelesai) {
+                    rawList = rawList.filter(j => j.tanggal >= tglMulai && j.tanggal <= tglSelesai);
+                    labelPeriode = `Mingguan (${tglMulai} s/d ${tglSelesai})`;
+                }
+            } else if (periodeTipe === 'bulanan') {
+                const bInt = parseInt(document.getElementById("exportJurnalBulan")?.value || "1", 10);
+                const bStr = bInt < 10 ? `0${bInt}` : `${bInt}`;
+                const thn = document.getElementById("exportJurnalTahun")?.value || "2026";
+                const prefixYM = `${thn}-${bStr}`;
+                const namaBulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"][bInt - 1];
+
+                rawList = rawList.filter(j => j.tanggal && j.tanggal.startsWith(prefixYM));
+                labelPeriode = `Bulan ${namaBulan} ${thn}`;
+            }
+
+            const sortedList = [...rawList].sort((a, b) => (a.tanggal || "").localeCompare(b.tanggal || ""));
+            return { list: sortedList, labelPeriode, targetSiswa, role };
+        };
+
+        window.jalankanExportJurnal = function(role, format) {
+            const pkg = window.dapatkanDataJurnalTersaring(role);
+            if (!pkg.list || pkg.list.length === 0) {
+                return window.showModalInfo("Data Tidak Ditemukan", "Tidak ada catatan jurnal kegiatan pada kriteria periode dan siswa yang dipilih.");
+            }
+
+            if (format === 'excel') {
+                if (typeof XLSX === 'undefined') return window.showModalInfo("Pustaka Belum Siap", "Pustaka SheetJS belum dimuat.");
+
+                const rows = [];
+                rows.push(["JURNAL KEGIATAN HARIAN SISWA PKL"]);
+                rows.push(["SMK NEGERI 1 MARISA"]);
+                rows.push([`Periode: ${pkg.labelPeriode}`]);
+                if (pkg.targetSiswa !== 'ALL') {
+                    const sData = (window.cloudState.siswa || []).find(s => s.nama.toLowerCase().trim() === pkg.targetSiswa.toLowerCase().trim()) || {};
+                    const pen = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(pkg.targetSiswa));
+                    rows.push([`Nama Siswa: ${pkg.targetSiswa}`]);
+                    rows.push([`Kelas / Jurusan: ${sData.kelas || '-'}`]);
+                    rows.push([`Tempat PKL: ${pen ? (Array.isArray(pen.industri) ? pen.industri.join(', ') : pen.industri) : '-'}`]);
+                }
+                rows.push([]);
+
+                rows.push(["No", "Hari/Tgl", "Uraian Kegiatan", "Keterangan"]);
+
+                pkg.list.forEach((j, idx) => {
+                    const ket = (j.kendala && j.kendala !== 'Selesai') ? `${j.status || 'Tercatat'} (Kendala: ${j.kendala})` : (j.status || 'Tercatat');
+                    rows.push([idx + 1, window.formatHariTanggal(j.tanggal), j.kegiatan, ket]);
+                });
+
+                rows.push([]);
+                rows.push(["", "Mengetahui,", "", "Marisa, " + window.formatHariTanggal(new Date().toISOString().split('T')[0])]);
+                rows.push(["", "Pembimbing Industri DUDI,", "", "Guru Pembimbing Lapangan,"]);
+                rows.push([]);
+                rows.push([]);
+                rows.push(["", "( ........................................ )", "", "( ........................................ )"]);
+
+                const ws = XLSX.utils.aoa_to_sheet(rows);
+                ws['!cols'] = [{ wch: 6 }, { wch: 28 }, { wch: 50 }, { wch: 30 }];
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Jurnal Harian");
+                XLSX.writeFile(wb, `Jurnal_PKL_${pkg.targetSiswa === 'ALL' ? 'Semua_Siswa' : pkg.targetSiswa.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.xlsx`);
+                window.closeDynamicModal();
+                window.showModalInfo("Export Excel Berhasil 📊", `Jurnal kegiatan harian berhasil diunduh.`);
+            } else {
+                let trRows = "";
+                pkg.list.forEach((j, idx) => {
+                    const ket = (j.kendala && j.kendala !== 'Selesai') ? `${j.status || 'Tercatat'} <br><small>Kendala: ${j.kendala}</small>` : (j.status || 'Tercatat');
+                    trRows += `<tr>
+                        <td style="text-align:center; padding:6px 4px;">${idx + 1}</td>
+                        <td style="padding:6px 8px; white-space:nowrap; font-weight:bold;">${window.formatHariTanggal(j.tanggal)}</td>
+                        <td style="padding:6px 8px; line-height:1.4;">${j.kegiatan}</td>
+                        <td style="padding:6px 8px; text-align:center;">${ket}</td>
+                    </tr>`;
+                });
+
+                const targetJudul = (pkg.targetSiswa === 'ALL') ? "SELURUH SISWA PKL" : `SISWA: ${pkg.targetSiswa.toUpperCase()}`;
+                const tglCetak = window.formatHariTanggal(new Date().toISOString().split('T')[0]);
+
+                const printHtml = `
+                <!DOCTYPE html>
+                <html lang="id">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Jurnal Kegiatan Harian Siswa PKL - SMKN 1 Marisa</title>
+                    <style>
+                        @page { size: A4 portrait; margin: 15mm; }
+                        body { font-family: 'Times New Roman', serif; font-size: 11.5px; color: #000; margin: 0; padding: 10px; }
+                        .kop-wrap { display: flex; align-items: center; border-bottom: 2.5px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
+                        .kop-logo { width: 65px; height: 65px; object-fit: contain; margin-right: 15px; }
+                        .kop-text { flex: 1; text-align: center; }
+                        .kop-text h4 { margin: 0; font-size: 13px; font-weight: normal; }
+                        .kop-text h2 { margin: 2px 0; font-size: 16px; font-weight: bold; }
+                        .kop-text p { margin: 0; font-size: 10px; }
+                        .judul { text-align: center; margin: 12px 0 14px; }
+                        .judul h3 { margin: 0; font-size: 13.5px; text-transform: uppercase; text-decoration: underline; }
+                        .judul p { margin: 3px 0 0; font-size: 11px; font-weight: bold; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10.5px; }
+                        th, td { border: 1px solid #000; }
+                        th { background-color: #f1f5f9; padding: 7px 4px; text-align: center; font-weight: bold; }
+                        .ttd-box { margin-top: 30px; display: flex; justify-content: space-between; page-break-inside: avoid; }
+                        .ttd-col { width: 30%; text-align: center; font-size: 11px; }
+                        @media print { button { display: none !important; } }
+                    </style>
+                </head>
+                <body>
+                    <div style="text-align:right; margin-bottom:10px;">
+                        <button onclick="window.print()" style="background:#0284c7; color:#fff; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:bold;">🖨️ Cetak / Simpan PDF</button>
+                    </div>
+
+                    <div class="kop-wrap">
+                        <img src="Logo SMK.png" class="kop-logo" onerror="this.style.display='none'">
+                        <div class="kop-text">
+                            <h4>PEMERINTAH PROVINSI GORONTALO</h4>
+                            <h4>DINAS PENDIDIKAN DAN KEBUDAYAAN</h4>
+                            <h2>SMK NEGERI 1 MARISA</h2>
+                            <p>Jalan Trans Sulawesi, Desa Teratai, Kec. Marisa, Kab. Pohuwato, Gorontalo 96266</p>
+                        </div>
+                    </div>
+
+                    <div class="judul">
+                        <h3>JURNAL KEGIATAN HARIAN SISWA PKL</h3>
+                        <p>${targetJudul} &bull; PERIODE: ${pkg.labelPeriode.toUpperCase()}</p>
+                    </div>
+
                     <table>
                         <thead>
                             <tr>
-                                <th>No</th>
-                                <th>Nama Siswa</th>
-                                <th>Tanggal</th>
+                                <th style="width:30px;">No</th>
+                                <th style="width:140px;">Hari/Tgl</th>
                                 <th>Uraian Kegiatan</th>
-                                <th>Bukti Praktik</th>
-                                <th>Status</th>
-                                <th>Aksi</th>
+                                <th style="width:120px;">Keterangan</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada jurnal siswa yang masuk</td></tr>'}
+                            ${trRows}
                         </tbody>
                     </table>
-                </div>
-            </div>`;
+
+                    <div class="ttd-box">
+                        <div class="ttd-col">
+                            Mengetahui,<br>
+                            Pembimbing Industri DUDI<br><br><br><br><br>
+                            <b>( ............................................ )</b>
+                        </div>
+                        <div class="ttd-col">
+                            <br>
+                            Siswa Praktikan<br><br><br><br><br>
+                            <b>( ${pkg.targetSiswa === 'ALL' ? '............................................' : pkg.targetSiswa} )</b>
+                        </div>
+                        <div class="ttd-col">
+                            Marisa, ${tglCetak}<br>
+                            Guru Pembimbing Lapangan<br><br><br><br><br>
+                            <b>( ............................................ )</b>
+                        </div>
+                    </div>
+
+                    <script>
+                        window.onload = function() {
+                            setTimeout(function() { window.print(); }, 500);
+                        };
+                    <\/script>
+                </body>
+                </html>`;
+
+                const printWindow = window.open('', '_blank');
+                if (printWindow) {
+                    printWindow.document.open();
+                    printWindow.document.write(printHtml);
+                    printWindow.document.close();
+                } else {
+                    window.showModalInfo("Popup Diblokir", "Mohon izinkan popup jendela pada peramban Anda untuk mencetak PDF laporan jurnal.");
+                }
+                window.closeDynamicModal();
+            }
         };
 
         window.bukaPratinjauBuktiJurnal = function(idx) {
@@ -5744,6 +6115,41 @@
             </div>`;
         };
 
+        window.konfirmasiHapusAbsensi = function(originalIdx) {
+            const ab = window.cloudState.absensi[originalIdx];
+            if (!ab) return;
+            window.showConfirmDialog(
+                "Hapus Data Presensi?",
+                `Apakah Anda yakin ingin menghapus data presensi <b>${ab.tipe_absen}</b> tanggal <b>${ab.tanggal}</b> atas nama <b>${ab.nama}</b>?`,
+                () => {
+                    window.cloudState.absensi.splice(originalIdx, 1);
+                    window.simpanDatabasePersisten(true);
+                    window.openFeature(window.cloudState.currentFeature || "rekap-absensi", "Rekap Presensi");
+                }
+            );
+        };
+
+        window.hapusMasalAbsensi = function() {
+            const cbs = document.querySelectorAll('.cb-rekap-absen:checked');
+            if (cbs.length === 0) {
+                return window.showModalInfo("Pilih Data Presensi", "Silakan centang minimal 1 data presensi yang ingin dihapus!");
+            }
+            window.showConfirmDialog(
+                "Hapus Data Presensi Terpilih?",
+                `Apakah Anda yakin ingin menghapus <b>${cbs.length} data presensi</b> yang telah dicentang?`,
+                () => {
+                    const indices = Array.from(cbs).map(c => parseInt(c.value, 10)).sort((a, b) => b - a);
+                    indices.forEach(idx => {
+                        if (window.cloudState.absensi[idx]) {
+                            window.cloudState.absensi.splice(idx, 1);
+                        }
+                    });
+                    window.simpanDatabasePersisten(true);
+                    window.openFeature(window.cloudState.currentFeature || "rekap-absensi", "Rekap Presensi");
+                }
+            );
+        };
+
         window.renderRekapAbsensiGlobal = function() {
             const role = window.cloudState.activeRole || "admin";
             const profile = window.cloudState.userProfile || {};
@@ -5766,18 +6172,27 @@
 
             let rows = "";
             rawList.forEach((ab, idx) => {
+                const originalIdx = (window.cloudState.absensi || []).indexOf(ab);
+                const hariTgl = window.formatHariTanggal(ab.tanggal);
+
                 rows += `<tr>
-                    <td>${idx + 1}</td>
+                    <td style="text-align:center;"><input type="checkbox" class="cb-rekap-absen" value="${originalIdx}"></td>
+                    <td style="text-align:center;">${idx + 1}</td>
                     <td>
                         ${ab.foto_selfie ? `<img src="${ab.foto_selfie}" alt="Foto" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid #7dd3fc; cursor:pointer;" onclick="window.bukaPratinjauFotoSelfie('${ab.foto_selfie}', '${ab.nama}', '${ab.tanggal} ${ab.jam}')">` : '<span style="color:#94a3b8;">-</span>'}
                     </td>
                     <td><b>${ab.nama}</b></td>
                     <td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td>
                     <td><span class="badge-status badge-blue" style="font-size:10px;">${ab.kategori_hadir || 'Hadir di Lokasi'}</span></td>
-                    <td>${ab.tanggal}</td>
+                    <td style="white-space:nowrap;">${hariTgl}</td>
                     <td>${ab.jam} WITA</td>
                     <td>${ab.industri || '-'}</td>
                     <td><span class="badge-status ${ab.status === 'Tepat Waktu' || ab.status === 'Hadir' ? 'badge-green' : 'badge-amber'}">${ab.status || 'Hadir'}</span></td>
+                    <td style="text-align:center;">
+                        <button onclick="window.konfirmasiHapusAbsensi(${originalIdx})" class="btn-action btn-red" style="padding:4px 8px; font-size:10.5px;">
+                            🗑️ Hapus
+                        </button>
+                    </td>
                 </tr>`;
             });
 
@@ -5787,11 +6202,14 @@
                     <div>
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MONITORING PRESENSI ${role === 'guru' ? 'SISWA BIMBINGAN' : 'GLOBAL'}</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📈 Rekap Presensi Masuk & Pulang</h3>
-                        <p style="font-size:11px; color:#64748b;">Pantau dan ekspor data kehadiran masuk & pulang siswa secara mingguan atau bulanan.</p>
+                        <p style="font-size:11px; color:#64748b;">Pantau, ekspor, dan kelola arsip data kehadiran masuk & pulang siswa.</p>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button onclick="window.bukaModalExportPresensi('${role}')" class="btn-action btn-emerald" style="padding:9px 15px; font-weight:900; display:inline-flex; align-items:center; gap:6px; box-shadow:0 3px 10px rgba(16,185,129,0.25);">
                             📥 Export Presensi (Excel/PDF)
+                        </button>
+                        <button onclick="window.hapusMasalAbsensi()" class="btn-action btn-red" style="padding:9px 15px; font-weight:900;">
+                            🗑️ Hapus Terpilih
                         </button>
                     </div>
                 </div>
@@ -5800,19 +6218,21 @@
                     <table>
                         <thead>
                             <tr>
-                                <th>No</th>
+                                <th style="width:36px; text-align:center;"><input type="checkbox" onchange="window.toggleAllCheckboxes('rekap-absen', this.checked)"></th>
+                                <th style="width:36px; text-align:center;">No</th>
                                 <th>Foto</th>
                                 <th>Nama Siswa</th>
                                 <th>Tipe</th>
                                 <th>Kategori</th>
-                                <th>Tanggal</th>
+                                <th>Hari / Tanggal</th>
                                 <th>Jam</th>
                                 <th>Industri</th>
                                 <th>Status</th>
+                                <th style="width:75px; text-align:center;">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || `<tr><td colspan="9" class="empty-placeholder">${role === 'guru' ? 'Belum ada catatan presensi dari siswa bimbingan Anda' : 'Belum ada riwayat absensi masuk/pulang hari ini'}</td></tr>`}
+                            ${rows || `<tr><td colspan="11" class="empty-placeholder">${role === 'guru' ? 'Belum ada catatan presensi dari siswa bimbingan Anda' : 'Belum ada riwayat absensi masuk/pulang hari ini'}</td></tr>`}
                         </tbody>
                     </table>
                 </div>
