@@ -2981,22 +2981,25 @@
         };
 
         window.bukaModalInputNilai = function() {
-            let sOpts = ""; (window.cloudState.siswa || []).forEach(s => sOpts += `<option value="${s.nama}">${s.nama} (${s.kelas})</option>`);
+            let sOpts = ""; 
+            (window.cloudState.siswa || []).forEach(s => sOpts += `<option value="${s.nama}">${s.nama} (${s.kelas})</option>`);
             window.openDynamicModal(`
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">🏆 Input Nilai Magang Siswa</h3>
                 <div class="form-group">
                     <label class="form-label">Pilih Siswa:</label>
                     <select id="nilSiswa" class="form-control">${sOpts || '<option>Belum ada siswa</option>'}</select>
                 </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                    <div class="form-group">
-                        <label class="form-label">Nilai Aspek Teknis (0-100):</label>
-                        <input type="number" id="nilTeknis" class="form-control" value="88">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Nilai Sikap/Disiplin (0-100):</label>
-                        <input type="number" id="nilSikap" class="form-control" value="90">
-                    </div>
+                <div class="form-group">
+                    <label class="form-label">Nilai Teknis / Kejuruan (0-100):</label>
+                    <input type="number" id="nilTeknis" class="form-control" value="85" min="0" max="100">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Nilai Sikap & Kedisiplinan (0-100):</label>
+                    <input type="number" id="nilNonTeknis" class="form-control" value="88" min="0" max="100">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Catatan Evaluasi / Rekomendasi:</label>
+                    <textarea id="nilCatatan" class="form-control" placeholder="Tuliskan catatan evaluasi bimbingan..."></textarea>
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
                     <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
@@ -3007,110 +3010,171 @@
 
         window.simpanNilaiSiswaManual = function() {
             const siswa = document.getElementById("nilSiswa")?.value;
-            const teknis = parseFloat(document.getElementById("nilTeknis")?.value) || 0;
-            const sikap = parseFloat(document.getElementById("nilSikap")?.value) || 0;
-            const akhir = ((teknis * 0.6) + (sikap * 0.4)).toFixed(1);
-            const predikat = akhir >= 85 ? "Sangat Baik (A)" : (akhir >= 75 ? "Baik (B)" : "Cukup (C)");
+            const nTeknis = parseFloat(document.getElementById("nilTeknis")?.value || 0);
+            const nNonTeknis = parseFloat(document.getElementById("nilNonTeknis")?.value || 0);
+            const catatan = document.getElementById("nilCatatan")?.value || "";
 
-            window.cloudState.nilai.unshift({
+            if (!siswa) return window.showModalInfo("Peringatan", "Pilih siswa terlebih dahulu!");
+
+            const rataRata = Math.round((nTeknis + nNonTeknis) / 2);
+            let predikat = "Sangat Baik (A)";
+            if (rataRata < 75) predikat = "Cukup (C)";
+            else if (rataRata < 85) predikat = "Baik (B)";
+
+            const pen = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(siswa));
+            const industri = pen ? (Array.isArray(pen.industri) ? pen.industri.join(', ') : pen.industri) : "-";
+
+            if (!Array.isArray(window.cloudState.nilai)) window.cloudState.nilai = [];
+
+            const existingIdx = window.cloudState.nilai.findIndex(n => n.siswa === siswa);
+            const record = {
                 id: "nil_" + Date.now(),
-                siswa: siswa,
-                industri: "DUDI",
-                nilai_akhir: akhir,
-                predikat: predikat
-            });
+                siswa,
+                industri,
+                teknis: nTeknis,
+                nonTeknis: nNonTeknis,
+                nilai_akhir: rataRata,
+                predikat,
+                catatan,
+                tanggal: new Date().toISOString().split('T')[0]
+            };
+
+            if (existingIdx !== -1) {
+                window.cloudState.nilai[existingIdx] = record;
+            } else {
+                window.cloudState.nilai.push(record);
+            }
 
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
-            window.openFeature("penilaian", "Penilaian");
+            window.showModalInfo("Nilai Tersimpan 🏆", `Nilai untuk siswa <b>${siswa}</b> berhasil disimpan dengan predikat <b>${predikat}</b>.`);
+            window.openFeature(window.cloudState.currentFeature || "penilaian", "Penilaian");
         };
 
-        window.renderPresensiAnandaOnly = function() {
-            const profile = window.cloudState.userProfile || { nama: "Orang Tua Siswa" };
-            const namaAnanda = profile.namaAnanda || profile.nama.replace("Wali dari ", "");
-            const list = (window.cloudState.absensi || []).filter(a => a.nama === namaAnanda);
+        window.renderRekapJurnalAdmin = function() {
+            const rawList = window.cloudState.jurnal || [];
 
             let rows = "";
-            list.forEach((ab, idx) => {
+            rawList.forEach((j, idx) => {
+                const originalIdx = (window.cloudState.jurnal || []).indexOf(j);
+                const sData = (window.cloudState.siswa || []).find(s => s.nama && s.nama.toLowerCase().trim() === (j.siswa || '').toLowerCase().trim());
+                const pen = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(j.siswa));
+                const tempatPkl = pen ? (Array.isArray(pen.industri) ? pen.industri.join(', ') : pen.industri) : (j.industri || '-');
+                const kelasSiswa = sData ? sData.kelas : (j.kelas || '-');
+                const hariTglStr = window.formatHariTanggal ? window.formatHariTanggal(j.tanggal) : j.tanggal;
+                const statusBadge = j.status === 'Disetujui' ? 'badge-green' : (j.status === 'Ditolak' ? 'badge-red' : 'badge-amber');
+                const adaBukti = Boolean(j.foto_bukti);
+
                 rows += `<tr>
-                    <td>${idx + 1}</td>
-                    <td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td>
-                    <td>${ab.tanggal}</td>
-                    <td>${ab.jam} WITA</td>
-                    <td><span class="badge-status badge-green">${ab.status || 'Hadir'}</span></td>
+                    <td style="text-align:center;"><input type="checkbox" class="cb-rekap-jurnal-admin" value="${originalIdx}"></td>
+                    <td style="text-align:center;">${idx + 1}</td>
+                    <td>
+                        <div style="font-weight:800; color:#0f172a;">${j.siswa}</div>
+                        <div style="font-size:10px; color:#64748b;">${kelasSiswa}</div>
+                    </td>
+                    <td><b>🏢 ${j.industri || tempatPkl}</b></td>
+                    <td>${j.guru_pembimbing || (pen ? pen.guru : '-')}</td>
+                    <td style="white-space:nowrap; font-weight:700;">${hariTglStr}</td>
+                    <td style="white-space:normal; min-width:180px; line-height:1.4;">${j.kegiatan}</td>
+                    <td style="text-align:center;">
+                        ${adaBukti ? `
+                            <div style="display:flex; flex-direction:column; gap:4px; align-items:center;">
+                                <button onclick="window.bukaPratinjauBuktiJurnal(${originalIdx})" class="btn-action btn-blue" style="padding:4px 8px; font-size:10px; display:inline-flex; align-items:center; gap:3px;">
+                                    📷 Bukti
+                                </button>
+                                <button onclick="window.konfirmasiHapusFileBuktiJurnal(${originalIdx})" class="btn-action btn-red" style="padding:2px 6px; font-size:9px;" title="Hapus berkas foto bukti agar database ringan">
+                                    🗑️ File
+                                </button>
+                            </div>
+                        ` : `<span style="font-size:10px; color:#94a3b8;">-</span>`}
+                    </td>
+                    <td><span class="badge-status ${statusBadge}">${j.status || 'Menunggu'}</span></td>
+                    <td>
+                        <span style="font-size:10px; font-weight:800; color:${j.status === 'Disetujui' ? '#15803d' : '#64748b'}; background:${j.status === 'Disetujui' ? '#dcfce7' : '#f1f5f9'}; padding:3px 6px; border-radius:6px; display:inline-block; margin-bottom:4px;">
+                            ${j.status === 'Disetujui' ? '✓ Tervalidasi Guru' : '⏳ Menunggu Guru'}
+                        </span>
+                        <div>
+                            <button onclick="window.konfirmasiHapusJurnalAdmin(${originalIdx})" class="btn-action btn-red" style="padding:4px 8px; font-size:10.5px;">
+                                🗑️ Hapus
+                            </button>
+                        </div>
+                    </td>
                 </tr>`;
             });
 
             return `
             <div class="card">
-                <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">📍 Presensi Ananda: ${namaAnanda}</h3>
-                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Catatan absensi harian yang diambil melalui GPS & selfie.</p>
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">REKAP LOGBOOK HARIAN SELURUH SISWA</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📖 Rekap Jurnal Siswa PKL</h3>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Pantau catatan jurnal seluruh siswa dari semua jurusan. Validasi jurnal adalah wewenang Guru Pembimbing.</p>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.bukaModalExportJurnal('admin')" class="btn-action btn-emerald" style="padding:9px 15px; font-weight:900; display:inline-flex; align-items:center; gap:6px; box-shadow:0 3px 10px rgba(16,185,129,0.25);">
+                            📥 Export Jurnal (Excel/PDF)
+                        </button>
+                        <button onclick="window.hapusMasalJurnalAdmin()" class="btn-action btn-red" style="padding:9px 15px; font-weight:900;">
+                            🗑️ Hapus Terpilih
+                        </button>
+                    </div>
+                </div>
+
                 <div class="table-wrap">
                     <table>
                         <thead>
                             <tr>
-                                <th>No</th>
-                                <th>Tipe</th>
-                                <th>Tanggal</th>
-                                <th>Waktu</th>
-                                <th>Keterangan</th>
+                                <th style="width:36px; text-align:center;"><input type="checkbox" onchange="window.toggleAllCheckboxes('rekap-jurnal-admin', this.checked)"></th>
+                                <th style="width:36px; text-align:center;">No</th>
+                                <th>Nama Siswa & Jurusan</th>
+                                <th>Tempat DUDI</th>
+                                <th>Guru Pembimbing</th>
+                                <th style="width:130px;">Hari/Tanggal</th>
+                                <th>Uraian Kegiatan</th>
+                                <th style="width:75px; text-align:center;">Bukti</th>
+                                <th>Status</th>
+                                <th style="width:130px;">Aksi & Status</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada catatan presensi ananda</td></tr>'}
+                            ${rows || '<tr><td colspan="10" class="empty-placeholder">Belum ada jurnal kegiatan harian yang masuk dari siswa</td></tr>'}
                         </tbody>
                     </table>
                 </div>
             </div>`;
         };
 
-        window.renderJurnalAnandaOnly = function() {
-            const profile = window.cloudState.userProfile || { nama: "Orang Tua Siswa" };
-            const namaAnanda = profile.namaAnanda || profile.nama.replace("Wali dari ", "");
-            const list = (window.cloudState.jurnal || []).filter(j => j.siswa === namaAnanda);
-
-            let rows = "";
-            list.forEach((j, idx) => {
-                rows += `<tr>
-                    <td>${idx + 1}</td>
-                    <td>${j.tanggal}</td>
-                    <td style="white-space:normal; min-width:180px;">${j.kegiatan}</td>
-                    <td><span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span></td>
-                </tr>`;
-            });
-
-            return `
-            <div class="card">
-                <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">📖 Log Jurnal Ananda: ${namaAnanda}</h3>
-                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Catatan pekerjaan yang diselesaikan ananda di tempat industri.</p>
-                <div class="table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>No</th>
-                                <th>Tanggal</th>
-                                <th>Kegiatan</th>
-                                <th>Status Validasi</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${rows || '<tr><td colspan="4" class="empty-placeholder">Belum ada jurnal yang ditulis oleh ananda</td></tr>'}
-                        </tbody>
-                    </table>
-                </div>
-            </div>`;
-        };
-
-        window.konfirmasiHapusAbsensi = function(originalIdx) {
-            const ab = window.cloudState.absensi[originalIdx];
-            if (!ab) return;
+        window.konfirmasiHapusJurnalAdmin = function(originalIdx) {
+            const j = window.cloudState.jurnal[originalIdx];
+            if (!j) return;
             window.showConfirmDialog(
-                "Hapus Data Presensi?",
-                `Apakah Anda yakin ingin menghapus data presensi <b>${ab.tipe_absen}</b> tanggal <b>${ab.tanggal}</b> atas nama <b>${ab.nama}</b>?`,
+                "Hapus Data Jurnal Siswa?",
+                `Apakah Anda yakin ingin menghapus catatan jurnal tanggal <b>${j.tanggal}</b> atas nama <b>${j.siswa}</b>?`,
                 () => {
-                    window.cloudState.absensi.splice(originalIdx, 1);
+                    window.cloudState.jurnal.splice(originalIdx, 1);
                     window.simpanDatabasePersisten(true);
-                    window.openFeature(window.cloudState.currentFeature || "rekap-absensi", "Rekap Presensi");
+                    window.openFeature("rekap-jurnal", "Rekap Jurnal Siswa");
+                }
+            );
+        };
+
+        window.hapusMasalJurnalAdmin = function() {
+            const cbs = document.querySelectorAll('.cb-rekap-jurnal-admin:checked');
+            if (cbs.length === 0) {
+                return window.showModalInfo("Pilih Data Jurnal", "Silakan centang minimal 1 data jurnal yang ingin dihapus!");
+            }
+            window.showConfirmDialog(
+                "Hapus Jurnal Terpilih?",
+                `Apakah Anda yakin ingin menghapus <b>${cbs.length} data jurnal</b> yang telah dicentang?`,
+                () => {
+                    const indices = Array.from(cbs).map(c => parseInt(c.value, 10)).sort((a, b) => b - a);
+                    indices.forEach(idx => {
+                        if (window.cloudState.jurnal[idx]) {
+                            window.cloudState.jurnal.splice(idx, 1);
+                        }
+                    });
+                    window.simpanDatabasePersisten(true);
+                    window.openFeature("rekap-jurnal", "Rekap Jurnal Siswa");
                 }
             );
         };
