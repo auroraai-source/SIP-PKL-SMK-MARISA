@@ -2324,6 +2324,145 @@
             </div>`;
         };
 
+        window.renderKelolaAkunPengguna = function() {
+            let rows = "";
+            (window.cloudState.registeredUsers || []).forEach((u, i) => { rows += `<tr><td style="text-align:center;">${i+1}</td><td><b>${u.nama}</b></td><td>${u.username}</td><td><span class="badge-status badge-blue">${u.role}</span></td></tr>`; });
+            return `<div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><div><h3 style="font-size:16px; font-weight:900; color:#0f172a;">🔑 Kelola Akun & Kredensial</h3><p style="font-size:11px; color:#64748b;">Pengaturan akun terdaftar dalam sistem.</p></div></div><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Nama Pengguna</th><th>Username</th><th>Peran</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty-placeholder">Data kosong</td></tr>'}</tbody></table></div></div>`;
+        };
+
+        window.renderMasterSiswaTable = function() {
+            let rows = "";
+            (window.cloudState.siswa || []).forEach((s, i) => { rows += `<tr><td style="text-align:center;">${i+1}</td><td><b>${s.nama}</b></td><td>${s.nis}</td><td>${s.kelas}</td></tr>`; });
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">👨‍🎓 Data Master Siswa</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Daftar identitas siswa peserta PKL.</p><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Nama Siswa</th><th>NIS</th><th>Kelas / Jurusan</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty-placeholder">Data kosong</td></tr>'}</tbody></table></div></div>`;
+        };
+
+        window.renderMasterGuruTable = function() {
+            let rows = "";
+            (window.cloudState.guru || []).forEach((g, i) => { rows += `<tr><td style="text-align:center;">${i+1}</td><td><b>${g.nama}</b></td><td>${g.nip}</td><td>${g.mapel}</td></tr>`; });
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">👩‍🏫 Data Master Guru</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Daftar guru pengajar dan pembimbing lapangan.</p><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Nama Guru</th><th>NIP</th><th>Mapel / Bidang</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty-placeholder">Data kosong</td></tr>'}</tbody></table></div></div>`;
+        };
+
+        window.renderMasterIndustriTable = function() {
+            let rows = "";
+            (window.cloudState.industri || []).forEach((ind, i) => { rows += `<tr><td style="text-align:center;">${i+1}</td><td><b>${ind.nama}</b></td><td>${ind.alamat}</td><td>${ind.pimpinan}</td></tr>`; });
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">🏭 Mitra Industri DUDI</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Pusat pangkalan data industri dan tempat magang.</p><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Nama Industri</th><th>Alamat</th><th>Pimpinan / HRD</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty-placeholder">Data kosong</td></tr>'}</tbody></table></div></div>`;
+        };
+
+        window.renderPenempatanGuru = function() {
+            let rows = "";
+            (window.cloudState.penempatan || []).forEach((p, i) => { 
+                let industriStr = Array.isArray(p.industri) ? p.industri.join(', ') : (p.industri || '-');
+                let siswaStr = Array.isArray(p.siswa) ? p.siswa.join(', ') : (p.siswa || '-');
+                rows += `<tr><td style="text-align:center;">${i+1}</td><td><b>${p.guru}</b></td><td>${industriStr}</td><td><div style="max-width:180px; white-space:normal; line-height:1.4;">${siswaStr}</div></td></tr>`; 
+            });
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">🔄 Alokasi Guru Pembimbing & Siswa</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Penempatan hubungan siswa, tempat industri, dan guru pembimbingnya.</p><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Guru Pembimbing</th><th>Tempat Industri</th><th>Siswa Bimbingan</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty-placeholder">Data kosong</td></tr>'}</tbody></table></div></div>`;
+        };
+
+        window.renderJamGeofenceGPS = function() { 
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">📍 Jam & Geofence GPS</h3><p style="font-size:11px; color:#64748b;">Pengaturan waktu operasional presensi digital PKL.</p><div style="margin-top:14px; background:#f8fafc; padding:16px; border-radius:14px; border:1.5px solid #e2e8f0;"><div style="display:flex; align-items:center; gap:8px;"><span style="font-size:20px;">☀️</span><div><div style="font-size:11px; font-weight:800; color:#475569;">JAM MASUK KERJA</div><div style="font-size:13px; font-weight:900; color:#0f172a; margin-top:2px;">Mulai: ${window.cloudState.jamConfig?.masukMulai || '06:30'} WITA &bull; Batas Akhir: ${window.cloudState.jamConfig?.masukBatasAkhir || '15:00'} WITA</div></div></div><hr style="border-color:#cbd5e1; margin:12px 0;"><div style="display:flex; align-items:center; gap:8px;"><span style="font-size:20px;">🌙</span><div><div style="font-size:11px; font-weight:800; color:#475569;">JAM PULANG KERJA</div><div style="font-size:13px; font-weight:900; color:#0f172a; margin-top:2px;">Mulai: ${window.cloudState.jamConfig?.pulangMulai || '16:00'} WITA &bull; Batas Akhir: ${window.cloudState.jamConfig?.pulangBatasAkhir || '23:00'} WITA</div></div></div></div></div>`; 
+        };
+
+        window.renderPeriodePKLPanel = function() { 
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">📅 Periode Pelaksanaan PKL</h3><p style="font-size:11px; color:#64748b;">Rentang waktu resmi pelaksanaan kegiatan praktik kerja.</p><div style="margin-top:14px; background:#f0f9ff; padding:16px; border-radius:14px; border:1.5px solid #bae6fd;"><div><span style="font-size:10.5px; font-weight:800; color:#0369a1;">MULAI PKL:</span><div style="font-size:14px; font-weight:900; color:#0f172a; margin-top:2px;">${window.cloudState.pklConfig?.tglAwal || '-'}</div></div><div style="margin-top:12px;"><span style="font-size:10.5px; font-weight:800; color:#0369a1;">PENARIKAN PKL:</span><div style="font-size:14px; font-weight:900; color:#0f172a; margin-top:2px;">${window.cloudState.pklConfig?.tglPenarikan || '-'}</div></div><div style="margin-top:12px;"><span style="font-size:10.5px; font-weight:800; color:#0369a1;">DURASI MAGANG:</span><div style="font-size:14px; font-weight:900; color:#0f172a; margin-top:2px;">${window.cloudState.pklConfig?.durasi || '-'}</div></div></div></div>`; 
+        };
+
+        window.renderDatabaseCloud = function() { 
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">☁️ Database Cloud [Supabase]</h3><p style="font-size:11px; color:#64748b;">Status konektivitas server pusat dan sinkronisasi basis data.</p><div style="margin-top:16px; text-align:center; padding:20px; background:#f8fafc; border:1.5px dashed #cbd5e1; border-radius:16px;"><div style="font-size:32px; margin-bottom:8px;">${window.isCloudConnected ? '🟢' : '🔴'}</div><div style="font-size:14px; font-weight:900; color:#0f172a;">${window.isCloudConnected ? 'Sistem Terhubung ke Server' : 'Mode Penyimpanan Lokal'}</div><p style="font-size:11px; color:#64748b; margin-top:4px;">Sistem akan melakukan pembaruan data secara ${window.isCloudConnected ? 'real-time' : 'terjadwal'} ketika ada sinyal internet.</p></div></div>`; 
+        };
+
+        window.renderBannerJadwalPKL = function() { 
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">🖼️ Banner & Jadwal PKL</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Modul ini menampilkan daftar banner yang aktif di slider beranda.</p><div style="display:flex; flex-direction:column; gap:10px;">${(window.cloudState.bannerSliderImages || []).map(b => `<div style="display:flex; align-items:center; gap:10px; background:#f8fafc; padding:8px; border-radius:12px; border:1px solid #e2e8f0;"><img src="${b.url}" style="width:70px; height:46px; object-fit:cover; border-radius:8px;"><div><div style="font-size:12px; font-weight:800; color:#0f172a;">${b.slogan1}</div><div style="font-size:10px; color:#64748b;">${b.slogan2}</div></div></div>`).join('')}</div></div>`; 
+        };
+
+        window.renderPresensiGPS = function() { 
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">📍 Presensi GPS & Selfie</h3><p style="font-size:12px; color:#475569; margin-top:8px; line-height:1.5;">Fitur pengambilan titik koordinat satelit dan jepret kamera selfie dilakukan secara langsung dan aman melalui tombol pintasan <span class="badge-status badge-blue">PRESENSI MASUK</span> atau <span class="badge-status badge-green">PRESENSI PULANG</span> di halaman <b>Beranda Utama</b> Anda.</p><div style="text-align:center; margin-top:20px;"><button onclick="window.openFeature('dashboard', 'Beranda')" class="btn-action-primary" style="padding:12px 24px; font-size:14px; width:auto; display:inline-block;">Kembali ke Beranda Utama ➔</button></div></div>`; 
+        };
+
+        window.renderJurnalKegiatan = function() {
+            let rows = "";
+            const prof = window.cloudState.userProfile || {};
+            (window.cloudState.jurnal || []).filter(j => j.siswa === prof.nama).forEach((j, i) => { rows += `<tr><td style="text-align:center;">${i+1}</td><td style="white-space:nowrap;">${j.tanggal}</td><td style="white-space:normal; min-width:150px; line-height:1.4;">${j.kegiatan}</td><td><span class="badge-status ${j.status==='Disetujui'?'badge-green':'badge-amber'}">${j.status}</span></td></tr>`; });
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">📖 Jurnal Harian PKL</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Riwayat pengisian logbook kegiatan magang Anda yang tersimpan di sistem.</p><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Tanggal</th><th>Uraian Kegiatan</th><th>Status</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty-placeholder">Belum ada catatan jurnal</td></tr>'}</tbody></table></div></div>`;
+        };
+
+        window.renderSiswaBimbinganList = function() {
+            let rows = "";
+            const prof = window.cloudState.userProfile || {};
+            let mySiswaNames = [];
+            
+            if (window.cloudState.activeRole === 'guru') {
+                const myPlacements = (window.cloudState.penempatan || []).filter(p => window.isGuruMatch(p.guru, prof.nama));
+                myPlacements.forEach(p => {
+                    const arr = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                    arr.forEach(s => { if (s && !mySiswaNames.includes(s)) mySiswaNames.push(s); });
+                });
+            } else if (window.cloudState.activeRole === 'industri') {
+                const myPlacements = (window.cloudState.penempatan || []).filter(p => window.isIndustriMatch(p.industri, prof.nama));
+                myPlacements.forEach(p => {
+                    const arr = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                    arr.forEach(s => { if (s && !mySiswaNames.includes(s)) mySiswaNames.push(s); });
+                });
+            } else {
+                mySiswaNames = (window.cloudState.siswa || []).map(s => s.nama);
+            }
+
+            const siswaFiltered = (window.cloudState.siswa || []).filter(s => mySiswaNames.includes(s.nama));
+
+            siswaFiltered.forEach((s, i) => { rows += `<tr><td style="text-align:center;">${i+1}</td><td><b>${s.nama}</b></td><td>${s.nis || '-'}</td><td>${s.kelas || '-'}</td></tr>`; });
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">👥 Daftar Siswa Bimbingan / Magang</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Daftar siswa yang ditempatkan di bawah pengawasan dan bimbingan Anda.</p><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Nama Siswa</th><th>NIS</th><th>Kelas / Jurusan</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty-placeholder">Tidak ada siswa bimbingan</td></tr>'}</tbody></table></div></div>`;
+        };
+
+        window.renderValidasiJurnalList = function() {
+            let rows = "";
+            const prof = window.cloudState.userProfile || {};
+            let myJurnals = [];
+
+            if (window.cloudState.activeRole === 'guru') {
+                const myPlacements = (window.cloudState.penempatan || []).filter(p => window.isGuruMatch(p.guru, prof.nama));
+                const mySiswaNames = [];
+                myPlacements.forEach(p => {
+                    const arr = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                    arr.forEach(s => { if (s && !mySiswaNames.includes(s)) mySiswaNames.push(s); });
+                });
+                myJurnals = (window.cloudState.jurnal || []).filter(j => mySiswaNames.includes(j.siswa));
+            } else if (window.cloudState.activeRole === 'industri') {
+                const myPlacements = (window.cloudState.penempatan || []).filter(p => window.isIndustriMatch(p.industri, prof.nama));
+                const mySiswaNames = [];
+                myPlacements.forEach(p => {
+                    const arr = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                    arr.forEach(s => { if (s && !mySiswaNames.includes(s)) mySiswaNames.push(s); });
+                });
+                myJurnals = (window.cloudState.jurnal || []).filter(j => mySiswaNames.includes(j.siswa));
+            } else {
+                myJurnals = window.cloudState.jurnal || [];
+            }
+
+            myJurnals.forEach((j, i) => { rows += `<tr><td style="text-align:center;">${i+1}</td><td><b>${j.siswa}</b></td><td style="white-space:nowrap;">${j.tanggal}</td><td style="white-space:normal; min-width:160px; line-height:1.4;">${j.kegiatan}</td><td><span class="badge-status ${j.status==='Disetujui'?'badge-green':'badge-amber'}">${j.status}</span></td></tr>`; });
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">📋 Validasi Jurnal Siswa</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Periksa dan sahkan logbook catatan harian siswa magang bimbingan Anda.</p><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Nama Siswa</th><th>Tanggal</th><th>Uraian Kegiatan</th><th>Status Validasi</th></tr></thead><tbody>${rows||'<tr><td colspan="5" class="empty-placeholder">Belum ada jurnal yang membutuhkan validasi</td></tr>'}</tbody></table></div></div>`;
+        };
+
+        window.renderPresensiAnandaOnly = function() { 
+            let rows = "";
+            const prof = window.cloudState.userProfile || {};
+            const namaAnanda = prof.namaAnanda || prof.nama.replace("Wali dari ", "");
+            const myAbsensi = (window.cloudState.absensi || []).filter(a => a.nama === namaAnanda);
+            
+            myAbsensi.forEach((ab, i) => {
+                rows += `<tr><td style="text-align:center;">${i+1}</td><td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td><td style="white-space:nowrap;">${ab.tanggal}</td><td><b>${ab.jam}</b> WITA</td><td><span class="badge-status ${ab.status==='Tepat Waktu'||ab.status==='Hadir'?'badge-green':'badge-amber'}">${ab.status}</span></td></tr>`;
+            });
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">📍 Presensi Harian Ananda</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Riwayat lengkap jam kedatangan dan kepulangan anak wali Anda (<b>${namaAnanda}</b>).</p><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Tipe Presensi</th><th>Tanggal</th><th>Waktu</th><th>Status Kehadiran</th></tr></thead><tbody>${rows||'<tr><td colspan="5" class="empty-placeholder">Belum ada rekaman kehadiran</td></tr>'}</tbody></table></div></div>`; 
+        };
+
+        window.renderJurnalAnandaOnly = function() { 
+            let rows = "";
+            const prof = window.cloudState.userProfile || {};
+            const namaAnanda = prof.namaAnanda || prof.nama.replace("Wali dari ", "");
+            const myJurnal = (window.cloudState.jurnal || []).filter(j => j.siswa === namaAnanda);
+            
+            myJurnal.forEach((j, i) => { rows += `<tr><td style="text-align:center;">${i+1}</td><td style="white-space:nowrap;">${j.tanggal}</td><td style="white-space:normal; line-height:1.4;">${j.kegiatan}</td><td><span class="badge-status ${j.status==='Disetujui'?'badge-green':'badge-amber'}">${j.status}</span></td></tr>`; });
+            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">📖 Log Jurnal Ananda</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Aktivitas pengisian logbook praktik lapangan harian ananda.</p><div class="table-wrap"><table><thead><tr><th style="width:40px; text-align:center;">No</th><th>Tanggal</th><th>Uraian Kegiatan</th><th>Status Validasi</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty-placeholder">Belum ada jurnal yang dikirimkan</td></tr>'}</tbody></table></div></div>`; 
+        };
+
         window.renderKoleksiTitikGPSDUDI = function() {
             const profile = window.cloudState.userProfile || { nama: "Guru/Panitia" };
             const role = window.cloudState.activeRole;
