@@ -7175,7 +7175,36 @@
                     let addedCount = 0;
                     let updatedCount = 0;
 
-                    if (type === 'Siswa') {
+                    if (type === 'Akun') {
+                        if (!Array.isArray(window.cloudState.registeredUsers)) window.cloudState.registeredUsers = [];
+                        json.forEach(row => {
+                            const nama = (row['Nama Lengkap'] || row['Nama'] || row['nama'] || row['NAMA'] || '').toString().trim();
+                            const username = (row['Username'] || row['username'] || row['User'] || '').toString().trim();
+                            const pass = (row['Password'] || row['Kata Sandi'] || row['pass'] || row['password'] || '123456').toString().trim();
+                            let role = (row['Role'] || row['Peran'] || row['role'] || 'siswa').toString().trim().toLowerCase();
+                            const identitas = (row['Identitas'] || row['identitas'] || row['NIS'] || row['NIP'] || username).toString().trim();
+
+                            if (!nama || !username) return;
+
+                            // Normalisasi hanya 4 peran resmi
+                            if (role.includes('guru')) role = 'guru';
+                            else if (role.includes('ind') || role.includes('dudi')) role = 'industri';
+                            else if (role.includes('admin') || role.includes('panitia')) role = 'admin';
+                            else role = 'siswa';
+
+                            const existingIdx = window.cloudState.registeredUsers.findIndex(u => u.username.toLowerCase() === username.toLowerCase() && u.role === role);
+                            if (existingIdx !== -1) {
+                                window.cloudState.registeredUsers[existingIdx].nama = nama;
+                                window.cloudState.registeredUsers[existingIdx].pass = pass;
+                                window.cloudState.registeredUsers[existingIdx].identitas = identitas;
+                                updatedCount++;
+                            } else {
+                                window.cloudState.registeredUsers.push({ role, nama, username, pass, identitas });
+                                addedCount++;
+                            }
+                        });
+                        window.openFeature("kelola-akun", "Buat Akun & Kredensial");
+                    } else if (type === 'Siswa') {
                         json.forEach(row => {
                             const nama = (row['Nama Siswa'] || row['nama'] || row['Nama'] || row['NAMA SISWA'] || row['NAMA'] || '').toString().trim();
                             if (!nama) return;
