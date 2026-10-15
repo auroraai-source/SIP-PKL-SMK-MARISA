@@ -2901,19 +2901,600 @@
         };
 
         window.renderJamGeofenceGPS = function() { 
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">📍 Jam & Geofence GPS</h3><p style="font-size:11px; color:#64748b;">Pengaturan waktu operasional presensi digital PKL.</p><div style="margin-top:14px; background:#f8fafc; padding:16px; border-radius:14px; border:1.5px solid #e2e8f0;"><div style="display:flex; align-items:center; gap:8px;"><span style="font-size:20px;">☀️</span><div><div style="font-size:11px; font-weight:800; color:#475569;">JAM MASUK KERJA</div><div style="font-size:13px; font-weight:900; color:#0f172a; margin-top:2px;">Mulai: ${window.cloudState.jamConfig?.masukMulai || '06:30'} WITA &bull; Batas Akhir: ${window.cloudState.jamConfig?.masukBatasAkhir || '15:00'} WITA</div></div></div><hr style="border-color:#cbd5e1; margin:12px 0;"><div style="display:flex; align-items:center; gap:8px;"><span style="font-size:20px;">🌙</span><div><div style="font-size:11px; font-weight:800; color:#475569;">JAM PULANG KERJA</div><div style="font-size:13px; font-weight:900; color:#0f172a; margin-top:2px;">Mulai: ${window.cloudState.jamConfig?.pulangMulai || '16:00'} WITA &bull; Batas Akhir: ${window.cloudState.jamConfig?.pulangBatasAkhir || '23:00'} WITA</div></div></div></div></div>`; 
+            const jc = Object.assign({
+                masukMulai: "06:30",
+                masukTepatWaktu: "08:15",
+                masukBatasAkhir: "15:00",
+                pulangMulai: "16:00",
+                pulangBatasAkhir: "23:00",
+                radiusDefault: 50
+            }, window.cloudState.jamConfig || {});
+
+            return `
+            <div class="card">
+                <div style="margin-bottom:14px;">
+                    <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">PENGATURAN OPERASIONAL & RADIUS SATELIT</div>
+                    <h3 style="font-size:16px; font-weight:950; color:#0f172a; margin-top:2px;">📍 Jam Operasional & Geofence GPS</h3>
+                    <p style="font-size:11px; color:#64748b; margin-top:2px;">Atur batas jam kedatangan, jam kepulangan, toleransi keterlambatan, dan radius satelit industri.</p>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:14px;">
+                    <!-- KOTAK 1: JAM MASUK -->
+                    <div style="background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:18px; padding:14px;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                            <span style="font-size:20px;">☀️</span>
+                            <div>
+                                <div style="font-size:12.5px; font-weight:900; color:#0284c7;">PENGATURAN PRESENSI MASUK</div>
+                                <div style="font-size:10px; color:#64748b;">Menentukan rentang waktu absensi pagi siswa PKL</div>
+                            </div>
+                        </div>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px;">
+                            <div>
+                                <label class="form-label" style="font-size:10.5px;">Buka Mulai Jam:</label>
+                                <input type="time" id="cfgMasukMulai" class="form-control" value="${jc.masukMulai || '06:30'}">
+                            </div>
+                            <div>
+                                <label class="form-label" style="font-size:10.5px;">Batas Tepat Waktu:</label>
+                                <input type="time" id="cfgMasukTepat" class="form-control" value="${jc.masukTepatWaktu || '08:15'}">
+                            </div>
+                            <div>
+                                <label class="form-label" style="font-size:10.5px;">Batas Akhir (Tutup):</label>
+                                <input type="time" id="cfgMasukBatas" class="form-control" value="${jc.masukBatasAkhir || '15:00'}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- KOTAK 2: JAM PULANG -->
+                    <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:18px; padding:14px;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                            <span style="font-size:20px;">🌙</span>
+                            <div>
+                                <div style="font-size:12.5px; font-weight:900; color:#0f172a;">PENGATURAN PRESENSI PULANG</div>
+                                <div style="font-size:10px; color:#64748b;">Siswa wajib mengisi jurnal hari ini sebelum presensi pulang terbuka</div>
+                            </div>
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                            <div>
+                                <label class="form-label" style="font-size:10.5px;">Buka Pulang Jam:</label>
+                                <input type="time" id="cfgPulangMulai" class="form-control" value="${jc.pulangMulai || '16:00'}">
+                            </div>
+                            <div>
+                                <label class="form-label" style="font-size:10.5px;">Batas Akhir (Tutup):</label>
+                                <input type="time" id="cfgPulangBatas" class="form-control" value="${jc.pulangBatasAkhir || '23:00'}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- KOTAK 3: RADIUS GEOFENCE DEFAULT -->
+                    <div style="background:#fefce8; border:1.5px solid #fde047; border-radius:18px; padding:14px;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                            <span style="font-size:20px;">🎯</span>
+                            <div>
+                                <div style="font-size:12.5px; font-weight:900; color:#b45309;">RADIUS GEOFENCE DEFAULT</div>
+                                <div style="font-size:10px; color:#78350f;">Radius toleransi maksimal titik satelit dari kantor DUDI (Meter)</div>
+                            </div>
+                        </div>
+                        <div>
+                            <input type="number" id="cfgRadiusDefault" class="form-control" value="${jc.radiusDefault || 50}" min="10" max="500">
+                            <div style="font-size:10px; color:#78350f; margin-top:4px;">
+                                *Catatan: Masing-masing industri juga dapat diatur radius spesifiknya pada modul Mitra Industri DUDI.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="text-align:right; margin-top:4px;">
+                        <button onclick="window.simpanPengaturanJamGeofence()" class="btn-action-primary" style="padding:12px 22px; font-weight:900; font-size:13px; width:auto; display:inline-flex; align-items:center; gap:8px;">
+                            💾 Simpan & Terapkan Pengaturan Jam
+                        </button>
+                    </div>
+                </div>
+            </div>`; 
+        };
+
+        window.simpanPengaturanJamGeofence = function() {
+            const mMulai = document.getElementById("cfgMasukMulai")?.value || "06:30";
+            const mTepat = document.getElementById("cfgMasukTepat")?.value || "08:15";
+            const mBatas = document.getElementById("cfgMasukBatas")?.value || "15:00";
+            const pMulai = document.getElementById("cfgPulangMulai")?.value || "16:00";
+            const pBatas = document.getElementById("cfgPulangBatas")?.value || "23:00";
+            const rDef = parseInt(document.getElementById("cfgRadiusDefault")?.value || 50, 10);
+
+            window.cloudState.jamConfig = {
+                masukMulai: mMulai,
+                masukTepatWaktu: mTepat,
+                masukBatasAkhir: mBatas,
+                pulangMulai: pMulai,
+                pulangBatasAkhir: pBatas,
+                masuk: mTepat,
+                pulang: pMulai,
+                radiusDefault: rDef
+            };
+
+            window.simpanDatabasePersisten(true);
+            window.showModalInfo(
+                "Pengaturan Jam Tersimpan ✅",
+                `Pengaturan jam operasional dan radius geofence berhasil diperbarui:<br><br>• <b>Masuk:</b> ${mMulai} s/d ${mBatas} WITA (Tepat: ${mTepat})<br>• <b>Pulang:</b> ${pMulai} s/d ${pBatas} WITA<br>• <b>Radius Default:</b> ${rDef} Meter.<br><br>Perubahan langsung aktif di seluruh presensi digital siswa.`
+            );
         };
 
         window.renderPeriodePKLPanel = function() { 
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">📅 Periode Pelaksanaan PKL</h3><p style="font-size:11px; color:#64748b;">Rentang waktu resmi pelaksanaan kegiatan praktik kerja.</p><div style="margin-top:14px; background:#f0f9ff; padding:16px; border-radius:14px; border:1.5px solid #bae6fd;"><div><span style="font-size:10.5px; font-weight:800; color:#0369a1;">MULAI PKL:</span><div style="font-size:14px; font-weight:900; color:#0f172a; margin-top:2px;">${window.cloudState.pklConfig?.tglAwal || '-'}</div></div><div style="margin-top:12px;"><span style="font-size:10.5px; font-weight:800; color:#0369a1;">PENARIKAN PKL:</span><div style="font-size:14px; font-weight:900; color:#0f172a; margin-top:2px;">${window.cloudState.pklConfig?.tglPenarikan || '-'}</div></div><div style="margin-top:12px;"><span style="font-size:10.5px; font-weight:800; color:#0369a1;">DURASI MAGANG:</span><div style="font-size:14px; font-weight:900; color:#0f172a; margin-top:2px;">${window.cloudState.pklConfig?.durasi || '-'}</div></div></div></div>`; 
+            const cfg = Object.assign({}, DEFAULT_PKL_CONFIG, window.cloudState.pklConfig || {});
+
+            return `
+            <div class="card">
+                <div style="margin-bottom:14px;">
+                    <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">JADWAL RESMI & DURASI MAGANG</div>
+                    <h3 style="font-size:16px; font-weight:950; color:#0f172a; margin-top:2px;">📅 Periode Pelaksanaan PKL</h3>
+                    <p style="font-size:11px; color:#64748b; margin-top:2px;">Data periode ini langsung tersinkronkan ke kartu informasi dashboard Siswa dan Guru Pembimbing.</p>
+                </div>
+
+                <div style="background:#f8fafc; border:1.5px solid #bae6fd; border-radius:18px; padding:16px; margin-bottom:16px;">
+                    <div class="form-group">
+                        <label class="form-label">Tanggal Mulai PKL:</label>
+                        <input type="text" id="inputCfgTglAwal" class="form-control" value="${cfg.tglAwal || '15 Juli 2026'}" placeholder="Contoh: 15 Juli 2026" oninput="window.updatePreviewPeriodePKL()">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Tanggal Penarikan PKL:</label>
+                        <input type="text" id="inputCfgTglPenarikan" class="form-control" value="${cfg.tglPenarikan || '15 November 2026'}" placeholder="Contoh: 15 November 2026" oninput="window.updatePreviewPeriodePKL()">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Durasi Lama di Industri:</label>
+                        <input type="text" id="inputCfgDurasi" class="form-control" value="${cfg.durasi || '4 Bulan (120 Hari)'}" placeholder="Contoh: 4 Bulan (120 Hari)" oninput="window.updatePreviewPeriodePKL()">
+                    </div>
+
+                    <div style="text-align:right; margin-top:10px;">
+                        <button onclick="window.simpanPeriodePKLForm()" class="btn-action-primary" style="padding:12px 22px; font-weight:900; font-size:13px; width:auto; display:inline-flex; align-items:center; gap:8px;">
+                            💾 Simpan & Terapkan ke Seluruh Dashboard
+                        </button>
+                    </div>
+                </div>
+
+                <!-- LIVE PREVIEW TAMPILAN DI DASHBOARD -->
+                <div style="border-top:1.5px dashed #bfdbfe; padding-top:14px;">
+                    <div style="font-size:11px; font-weight:900; color:#475569; margin-bottom:8px;">PRATINJAU LANGSUNG DI DASHBOARD:</div>
+                    <div style="background:linear-gradient(135deg, #0284c7 0%, #0f52ba 100%); border-radius:18px; padding:14px; color:#ffffff;">
+                        <div style="font-size:11px; font-weight:800; color:#fde047;">INFO PERIODE AKTIF</div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; font-size:11px;">
+                            <div>Mulai: <b id="prevTglAwal" style="color:#ffffff;">${cfg.tglAwal}</b></div>
+                            <div>Penarikan: <b id="prevTglPenarikan" style="color:#ffffff;">${cfg.tglPenarikan}</b></div>
+                        </div>
+                        <div style="margin-top:6px; font-size:11px;">
+                            Durasi Magang: <span id="prevDurasi" style="background:#fde047; color:#0f172a; padding:2px 8px; border-radius:6px; font-weight:900;">${cfg.durasi}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>`; 
+        };
+
+        window.updatePreviewPeriodePKL = function() {
+            const tAwal = document.getElementById("inputCfgTglAwal")?.value || "-";
+            const tTarik = document.getElementById("inputCfgTglPenarikan")?.value || "-";
+            const dur = document.getElementById("inputCfgDurasi")?.value || "-";
+
+            const elAwal = document.getElementById("prevTglAwal");
+            const elTarik = document.getElementById("prevTglPenarikan");
+            const elDur = document.getElementById("prevDurasi");
+
+            if (elAwal) elAwal.innerText = tAwal;
+            if (elTarik) elTarik.innerText = tTarik;
+            if (elDur) elDur.innerText = dur;
+        };
+
+        window.simpanPeriodePKLForm = function() {
+            const tAwal = document.getElementById("inputCfgTglAwal")?.value.trim();
+            const tTarik = document.getElementById("inputCfgTglPenarikan")?.value.trim();
+            const dur = document.getElementById("inputCfgDurasi")?.value.trim();
+
+            if (!tAwal || !tTarik || !dur) {
+                return window.showModalInfo("Lengkapi Data", "Tanggal Mulai, Tanggal Penarikan, dan Durasi wajib diisi!");
+            }
+
+            window.cloudState.pklConfig = {
+                tglAwal: tAwal,
+                tglPenarikan: tTarik,
+                durasi: dur
+            };
+
+            window.simpanDatabasePersisten(true);
+            window.showModalInfo(
+                "Periode PKL Diperbarui 📅",
+                `Periode pelaksanaan PKL berhasil disimpan:<br><br>• <b>Mulai:</b> ${tAwal}<br>• <b>Penarikan:</b> ${tTarik}<br>• <b>Durasi:</b> ${dur}<br><br>Informasi ini langsung terintegrasi dan muncul pada dashboard Siswa serta Guru.`
+            );
         };
 
         window.renderDatabaseCloud = function() { 
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">☁️ Database Cloud [Supabase]</h3><p style="font-size:11px; color:#64748b;">Status konektivitas server pusat dan sinkronisasi basis data.</p><div style="margin-top:16px; text-align:center; padding:20px; background:#f8fafc; border:1.5px dashed #cbd5e1; border-radius:16px;"><div style="font-size:32px; margin-bottom:8px;">${window.isCloudConnected ? '🟢' : '🔴'}</div><div style="font-size:14px; font-weight:900; color:#0f172a;">${window.isCloudConnected ? 'Sistem Terhubung ke Server' : 'Mode Penyimpanan Lokal'}</div><p style="font-size:11px; color:#64748b; margin-top:4px;">Sistem akan melakukan pembaruan data secara ${window.isCloudConnected ? 'real-time' : 'terjadwal'} ketika ada sinyal internet.</p></div></div>`; 
+            const creds = window.getSupabaseCredentials ? window.getSupabaseCredentials() : {
+                url: "https://fhphcjqqseljqhblwzcs.supabase.co",
+                key: "sb_publishable_kLOfvq6f7z0WIKgeT5kVJw_bvvXq_cQ"
+            };
+
+            const totSiswa = (window.cloudState.siswa || []).length;
+            const totGuru = (window.cloudState.guru || []).length;
+            const totIndustri = (window.cloudState.industri || []).length;
+            const totPenempatan = (window.cloudState.penempatan || []).length;
+            const totAbsensi = (window.cloudState.absensi || []).length;
+            const totJurnal = (window.cloudState.jurnal || []).length;
+
+            return `
+            <div class="card">
+                <div style="margin-bottom:14px;">
+                    <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">SINKRONISASI SERVER & CADANGAN DATA</div>
+                    <h3 style="font-size:16px; font-weight:950; color:#0f172a; margin-top:2px;">☁️ Database Cloud [Supabase]</h3>
+                    <p style="font-size:11px; color:#64748b; margin-top:2px;">Kelola kredensial server, lakukan sinkronisasi real-time, atau unduh berkas cadangan offline.</p>
+                </div>
+
+                <!-- INDIKATOR STATUS KONEKSI -->
+                <div style="display:flex; align-items:center; justify-content:space-between; background:${window.isCloudConnected ? '#f0fdf4' : '#fef2f2'}; border:1.5px solid ${window.isCloudConnected ? '#86efac' : '#fca5a5'}; border-radius:16px; padding:12px 16px; margin-bottom:14px;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-size:24px;">${window.isCloudConnected ? '🟢' : '🔴'}</span>
+                        <div>
+                            <div style="font-size:13px; font-weight:900; color:${window.isCloudConnected ? '#15803d' : '#b91c1c'};">
+                                ${window.isCloudConnected ? 'TERHUBUNG KE SERVER CLOUD SUPABASE' : 'SERVER TERPUTUS / MODE LOKAL'}
+                            </div>
+                            <div style="font-size:10px; color:#64748b; margin-top:1px;">
+                                ${window.isCloudConnected ? 'Data otomatis tersinkronkan antar ponsel secara real-time.' : 'Data tersimpan di penyimpanan internal peramban ponsel ini.'}
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="window.ujiKoneksiSupabaseManual()" class="btn-action btn-blue" style="font-size:10.5px; padding:6px 12px; white-space:nowrap;">
+                        ⚡ Tes Ping
+                    </button>
+                </div>
+
+                <!-- FORM KREDENSIAL SUPABASE -->
+                <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:18px; padding:14px; margin-bottom:14px;">
+                    <div style="font-size:11.5px; font-weight:900; color:#0f172a; margin-bottom:8px;">KONFIGURASI KREDENSIAL SUPABASE:</div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Project URL Supabase:</label>
+                        <input type="text" id="cfgSupabaseUrl" class="form-control" value="${creds.url || ''}" placeholder="https://xxxx.supabase.co">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Anon / Publishable API Key:</label>
+                        <div class="form-control-wrap">
+                            <input type="password" id="cfgSupabaseKey" class="form-control" value="${creds.key || ''}" placeholder="sb_publishable_...">
+                            <button type="button" class="btn-eye-toggle" onclick="window.togglePasswordEye('cfgSupabaseKey', this)">👁️</button>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap:8px;">
+                        <button onclick="window.resetKredensialSupabaseDefault()" class="btn-action" style="background:#94a3b8; color:#fff;">Reset Default</button>
+                        <button onclick="window.simpanKredensialSupabaseForm()" class="btn-action btn-blue" style="font-weight:900;">💾 Simpan Kredensial</button>
+                    </div>
+                </div>
+
+                <!-- AKSI SINKRONISASI & CADANGAN (BACKUP/RESTORE) -->
+                <div style="background:#ffffff; border:1.5px solid #bfdbfe; border-radius:18px; padding:14px; margin-bottom:14px;">
+                    <div style="font-size:11.5px; font-weight:900; color:#0284c7; margin-bottom:10px;">AKSI SINKRONISASI DATA BISNIS:</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                        <button onclick="window.paksaTarikDataDariCloudManual()" class="btn-action btn-blue" style="padding:10px; font-weight:900; font-size:11.5px; display:flex; align-items:center; justify-content:center; gap:6px;">
+                            🔄 Tarik Cloud (Pull)
+                        </button>
+                        <button onclick="window.paksaUnggahDataKeCloudManual()" class="btn-action btn-emerald" style="padding:10px; font-weight:900; font-size:11.5px; display:flex; align-items:center; justify-content:center; gap:6px;">
+                            ☁️ Unggah Cloud (Push)
+                        </button>
+                    </div>
+
+                    <hr style="border:none; border-top:1px dashed #cbd5e1; margin:12px 0;">
+
+                    <div style="font-size:11.5px; font-weight:900; color:#0f172a; margin-bottom:8px;">CADANGAN BERKAS JSON LOKAL (OFFLINE BACKUP):</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                        <button onclick="window.unduhBackupDatabaseJSON()" class="btn-action btn-amber" style="padding:10px; font-weight:900; font-size:11.5px; display:flex; align-items:center; justify-content:center; gap:6px;">
+                            📥 Unduh File JSON
+                        </button>
+                        <label class="btn-action" style="background:#475569; color:#ffffff; padding:10px; font-weight:900; font-size:11.5px; text-align:center; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+                            📤 Pulihkan JSON
+                            <input type="file" accept=".json" style="display:none;" onchange="window.pulihkanDatabaseDariJSON(this)">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- STATISTIK DATABASE LOKAL SAAT INI -->
+                <div style="background:#f8fafc; border-radius:14px; padding:12px; font-size:11px; color:#475569;">
+                    <div style="font-weight:900; color:#0f172a; margin-bottom:4px;">RINGKASAN DATA DALAM SISTEM:</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
+                        <div>• Siswa: <b>${totSiswa}</b></div>
+                        <div>• Guru: <b>${totGuru}</b></div>
+                        <div>• Industri: <b>${totIndustri}</b></div>
+                        <div>• Alokasi: <b>${totPenempatan}</b></div>
+                        <div>• Presensi: <b>${totAbsensi}</b></div>
+                        <div>• Jurnal: <b>${totJurnal}</b></div>
+                    </div>
+                </div>
+            </div>`; 
+        };
+
+        window.simpanKredensialSupabaseForm = function() {
+            const url = document.getElementById("cfgSupabaseUrl")?.value.trim();
+            const key = document.getElementById("cfgSupabaseKey")?.value.trim();
+
+            if (!url || !key) return window.showModalInfo("Lengkapi Kredensial", "Project URL dan API Key wajib diisi!");
+
+            try {
+                localStorage.setItem(STORAGE_KEY_CLOUD_CFG, JSON.stringify({ url, key }));
+                window.inisialisasiSupabaseClient();
+                window.showModalInfo("Kredensial Tersimpan 💾", "Kredensial Supabase berhasil disimpan. Sistem mencoba menghubungkan ulang ke server...");
+                window.openFeature('database-cloud', 'Database Cloud [Supabase]');
+            } catch(e) {
+                window.showModalInfo("Galat", "Gagal menyimpan kredensial: " + e.message);
+            }
+        };
+
+        window.resetKredensialSupabaseDefault = function() {
+            localStorage.removeItem(STORAGE_KEY_CLOUD_CFG);
+            window.inisialisasiSupabaseClient();
+            window.showModalInfo("Reset Berhasil", "Kredensial Supabase telah dikembalikan ke bawaan SMKN 1 Marisa.");
+            window.openFeature('database-cloud', 'Database Cloud [Supabase]');
+        };
+
+        window.ujiKoneksiSupabaseManual = async function() {
+            if (!window.supabaseClient) {
+                window.inisialisasiSupabaseClient();
+            }
+            if (!window.supabaseClient) {
+                return window.showModalInfo("Koneksi Gagal 🔴", "Pustaka Supabase client belum siap atau URL tidak valid.");
+            }
+            try {
+                const { data, error } = await window.supabaseClient.from('app_state').select('id').limit(1);
+                if (error) throw error;
+                window.isCloudConnected = true;
+                window.showModalInfo("Koneksi Sukses 🟢", "Server Supabase merespons dengan cepat dan normal. Sinkronisasi aktif!");
+                window.openFeature('database-cloud', 'Database Cloud [Supabase]');
+            } catch(err) {
+                window.isCloudConnected = false;
+                window.showModalInfo("Gagal Terhubung 🔴", "Tidak dapat menghubungi server Supabase: " + (err.message || err));
+                window.openFeature('database-cloud', 'Database Cloud [Supabase]');
+            }
+        };
+
+        window.paksaTarikDataDariCloudManual = async function() {
+            const ok = await window.tarikDataDariCloud(false);
+            if (ok) {
+                window.showModalInfo("Tarik Data Sukses 🔄", "Seluruh data terbaru dari server Supabase berhasil ditarik ke ponsel ini.");
+                window.openFeature('database-cloud', 'Database Cloud [Supabase]');
+            } else {
+                window.showModalInfo("Tarik Data Gagal ⚠️", "Gagal menarik data dari cloud. Pastikan ponsel terhubung ke internet dan tabel database di server telah dibuat.");
+            }
+        };
+
+        window.paksaUnggahDataKeCloudManual = async function() {
+            const ok = await window.kirimSnapshotKeSupabase(window.getSanitizedCloudPayload(), false);
+            if (ok) {
+                window.showModalInfo("Unggah Data Sukses ☁️", "Snapshot basis data lokal berhasil disinkronkan ke server Supabase Cloud.");
+            } else {
+                window.showModalInfo("Unggah Data Gagal ⚠️", "Gagal mengunggah ke cloud. Pastikan API key memiliki izin tulis/upsert ke tabel app_state atau app_cloud_db.");
+            }
+        };
+
+        window.unduhBackupDatabaseJSON = function() {
+            try {
+                const payload = window.getSanitizedCloudPayload();
+                const jsonStr = JSON.stringify(payload, null, 2);
+                const blob = new Blob([jsonStr], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `SIP_PKL_SMKN1_Marisa_Backup_${Date.now()}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                window.showModalInfo("Cadangan Diunduh 📥", "Berkas cadangan JSON berhasil diunduh ke penyimpanan perangkat Anda.");
+            } catch(e) {
+                window.showModalInfo("Galat", "Gagal membuat cadangan JSON: " + e.message);
+            }
+        };
+
+        window.pulihkanDatabaseDariJSON = function(inputEl) {
+            if (!inputEl.files || !inputEl.files[0]) return;
+            const file = inputEl.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (parsed && typeof parsed === 'object') {
+                        window.showConfirmDialog(
+                            "Pulihkan Data dari JSON?",
+                            `Apakah Anda yakin ingin memulihkan database dari berkas <b>${file.name}</b>? Data lama akan digantikan dengan isi berkas ini.`,
+                            () => {
+                                window.terapkanDataRealtime(parsed);
+                                window.simpanDatabasePersisten(true);
+                                window.showModalInfo("Pemulihan Berhasil ✅", "Data berhasil dipulihkan dan disinkronkan ke penyimpanan.");
+                                window.openFeature('database-cloud', 'Database Cloud [Supabase]');
+                            }
+                        );
+                    }
+                } catch(err) {
+                    window.showModalInfo("Berkas Rusak", "Format berkas JSON tidak valid: " + err.message);
+                }
+            };
+            reader.readAsText(file);
         };
 
         window.renderBannerJadwalPKL = function() { 
-            return `<div class="card"><h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">🖼️ Banner & Jadwal PKL</h3><p style="font-size:11px; color:#64748b; margin-bottom:12px;">Modul ini menampilkan daftar banner yang aktif di slider beranda.</p><div style="display:flex; flex-direction:column; gap:10px;">${(window.cloudState.bannerSliderImages || []).map(b => `<div style="display:flex; align-items:center; gap:10px; background:#f8fafc; padding:8px; border-radius:12px; border:1px solid #e2e8f0;"><img src="${b.url}" style="width:70px; height:46px; object-fit:cover; border-radius:8px;"><div><div style="font-size:12px; font-weight:800; color:#0f172a;">${b.slogan1}</div><div style="font-size:10px; color:#64748b;">${b.slogan2}</div></div></div>`).join('')}</div></div>`; 
+            const banners = window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES;
+
+            let bannerRows = "";
+            banners.forEach((b, idx) => {
+                bannerRows += `
+                <div style="display:flex; align-items:center; gap:10px; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:14px; padding:10px;">
+                    <img src="${b.url}" alt="Banner ${idx+1}" style="width:80px; height:50px; object-fit:cover; border-radius:10px; border:1px solid #cbd5e1; flex-shrink:0;" onerror="this.src='https://placehold.co/160x100/0284c7/ffffff?text=Banner'">
+                    <div style="flex:1; overflow:hidden;">
+                        <div style="font-size:12px; font-weight:900; color:#0f172a; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${b.slogan1 || 'Slogan'}</div>
+                        <div style="font-size:10px; color:#64748b; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; margin-top:2px;">${b.slogan2 || '-'}</div>
+                    </div>
+                    <div style="display:flex; gap:4px; flex-shrink:0;">
+                        <button onclick="window.bukaModalEditBanner(${idx})" class="btn-action btn-amber" style="padding:5px 8px; font-size:10px;">✏️</button>
+                        <button onclick="window.hapusBannerSlide(${idx})" class="btn-action btn-red" style="padding:5px 8px; font-size:10px;">🗑️</button>
+                    </div>
+                </div>`;
+            });
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">TAMPILAN BERANDA & TIMELINE</div>
+                        <h3 style="font-size:16px; font-weight:950; color:#0f172a; margin-top:2px;">🖼️ Banner Slider & Jadwal PKL</h3>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Kelola slide gambar dan slogan motivasi yang tampil di beranda aplikasi.</p>
+                    </div>
+                    <button onclick="window.bukaModalTambahBanner()" class="btn-action btn-blue" style="padding:9px 14px; font-size:12px; font-weight:900; display:inline-flex; align-items:center; gap:6px;">
+                        + Tambah Banner Baru
+                    </button>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
+                    ${bannerRows || '<div class="empty-placeholder">Belum ada slide banner</div>'}
+                </div>
+
+                <!-- TOMBOL RESET BANNER DEFAULT -->
+                <div style="display:flex; justify-content:space-between; align-items:center; border-top:1.5px dashed #cbd5e1; padding-top:12px;">
+                    <div style="font-size:10.5px; color:#64748b;">Ingin kembali ke gambar bawaan SMKN 1 Marisa?</div>
+                    <button onclick="window.resetBannerSlideBawaan()" class="btn-action" style="background:#64748b; color:#fff; font-size:10.5px; padding:6px 12px;">
+                        ↺ Reset Banner Bawaan
+                    </button>
+                </div>
+            </div>`; 
+        };
+
+        window.bukaModalTambahBanner = function() {
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:950; color:#0284c7; margin-bottom:4px;">🖼️ Tambah Banner Beranda</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Masukkan URL tautan gambar serta slogan teks motivasi.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Tautan / URL Gambar Banner:</label>
+                    <input type="url" id="addBannerUrl" class="form-control" placeholder="https://images.unsplash.com/... atau URL gambar web" oninput="window.previewBannerInput(this.value)">
+                    <div id="wrapPreviewImgBanner" style="margin-top:6px; display:none;">
+                        <img id="imgPreviewBanner" src="" style="width:100%; height:130px; object-fit:cover; border-radius:12px; border:1px solid #7dd3fc;">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Slogan Utama (Huruf Kapital Besar):</label>
+                    <input type="text" id="addBannerSlogan1" class="form-control" placeholder="Contoh: SMK BISA! SMK HEBAT!" value="SMK BISA! SMK HEBAT!">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Sub-Slogan / Keterangan Tambahan:</label>
+                    <input type="text" id="addBannerSlogan2" class="form-control" placeholder="Contoh: SIAP KERJA, SANTUN, MANDIRI, KREATIF" value="SIAP KERJA, SANTUN, MANDIRI, KREATIF">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanBannerBaru()" class="btn-action btn-blue" style="font-weight:900; padding:10px 18px;">
+                        💾 Terbitkan Banner
+                    </button>
+                </div>
+            `);
+        };
+
+        window.previewBannerInput = function(url) {
+            const wrap = document.getElementById("wrapPreviewImgBanner");
+            const img = document.getElementById("imgPreviewBanner");
+            if (!wrap || !img) return;
+            if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+                img.src = url;
+                wrap.style.display = "block";
+            } else {
+                wrap.style.display = "none";
+            }
+        };
+
+        window.simpanBannerBaru = function() {
+            const url = document.getElementById("addBannerUrl")?.value.trim();
+            const s1 = document.getElementById("addBannerSlogan1")?.value.trim() || "SMK BISA! SMK HEBAT!";
+            const s2 = document.getElementById("addBannerSlogan2")?.value.trim() || "SMK NEGERI 1 MARISA";
+
+            if (!url) return window.showModalInfo("Lengkapi Data", "Silakan masukkan URL gambar banner!");
+
+            if (!Array.isArray(window.cloudState.bannerSliderImages)) {
+                window.cloudState.bannerSliderImages = [...DEFAULT_BANNER_IMAGES];
+            }
+
+            window.cloudState.bannerSliderImages.push({
+                url: url,
+                slogan1: s1,
+                slogan2: s2
+            });
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Banner Terpasang 🖼️", "Banner baru berhasil ditambahkan dan langsung aktif di slider beranda.");
+            window.openFeature('banner-jadwal', 'Banner & Jadwal PKL');
+        };
+
+        window.bukaModalEditBanner = function(index) {
+            const b = (window.cloudState.bannerSliderImages || [])[index];
+            if (!b) return;
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:950; color:#d97706; margin-bottom:4px;">✏️ Edit Banner Slide</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Perbarui gambar atau teks slogan banner.</p>
+
+                <div class="form-group">
+                    <label class="form-label">Tautan / URL Gambar:</label>
+                    <input type="url" id="editBannerUrl" class="form-control" value="${b.url || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Slogan Utama:</label>
+                    <input type="text" id="editBannerSlogan1" class="form-control" value="${b.slogan1 || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Sub-Slogan:</label>
+                    <input type="text" id="editBannerSlogan2" class="form-control" value="${b.slogan2 || ''}">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanEditBanner(${index})" class="btn-action btn-amber" style="font-weight:900; padding:10px 18px;">
+                        💾 Simpan Perubahan
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanEditBanner = function(index) {
+            const url = document.getElementById("editBannerUrl")?.value.trim();
+            const s1 = document.getElementById("editBannerSlogan1")?.value.trim();
+            const s2 = document.getElementById("editBannerSlogan2")?.value.trim();
+
+            if (!url) return window.showModalInfo("Lengkapi Data", "URL gambar banner tidak boleh kosong!");
+
+            if (window.cloudState.bannerSliderImages[index]) {
+                window.cloudState.bannerSliderImages[index].url = url;
+                window.cloudState.bannerSliderImages[index].slogan1 = s1;
+                window.cloudState.bannerSliderImages[index].slogan2 = s2;
+
+                window.simpanDatabasePersisten(true);
+                window.closeDynamicModal();
+                window.showModalInfo("Perubahan Tersimpan ✏️", "Slide banner berhasil diperbarui.");
+                window.openFeature('banner-jadwal', 'Banner & Jadwal PKL');
+            }
+        };
+
+        window.hapusBannerSlide = function(index) {
+            if ((window.cloudState.bannerSliderImages || []).length <= 1) {
+                return window.showModalInfo("Tidak Dapat Dihapus", "Minimal harus tersisa 1 slide banner aktif di beranda.");
+            }
+            window.showConfirmDialog("Hapus Slide Banner?", "Apakah Anda yakin ingin menghapus banner ini dari slider beranda?", () => {
+                window.cloudState.bannerSliderImages.splice(index, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature('banner-jadwal', 'Banner & Jadwal PKL');
+            });
+        };
+
+        window.resetBannerSlideBawaan = function() {
+            window.showConfirmDialog("Reset ke Bawaan?", "Kembalikan banner slide ke gambar dan slogan resmi bawaan?", () => {
+                window.cloudState.bannerSliderImages = [...DEFAULT_BANNER_IMAGES];
+                window.simpanDatabasePersisten(true);
+                window.openFeature('banner-jadwal', 'Banner & Jadwal PKL');
+            });
         };
 
         window.renderPresensiGPS = function() { 
