@@ -7198,32 +7198,6 @@
                             }
                         });
                         window.openFeature("master-siswa", "Data Siswa");
-                    } else if (type === 'Akun') {
-                        json.forEach(row => {
-                            const nama = (row['Nama Pengguna'] || row['nama'] || row['Nama'] || '').toString().trim();
-                            const username = (row['Username'] || row['username'] || '').toString().trim();
-                            const pass = (row['Password'] || row['Kata Sandi'] || row['password'] || '123456').toString().trim();
-                            let role = (row['Peran'] || row['role'] || row['Role'] || 'siswa').toString().trim().toLowerCase();
-                            if (role.includes('guru')) role = 'guru';
-                            else if (role.includes('industri') || role.includes('dudi')) role = 'industri';
-                            else if (role.includes('admin') || role.includes('panitia')) role = 'admin';
-                            else role = 'siswa';
-                            const identitas = (row['Identitas'] || row['identitas'] || username).toString().trim();
-
-                            if (!nama || !username) return;
-
-                            const existingIdx = window.cloudState.registeredUsers.findIndex(u => u.username.toLowerCase() === username.toLowerCase() && u.role === role);
-                            if (existingIdx !== -1) {
-                                window.cloudState.registeredUsers[existingIdx].nama = nama;
-                                window.cloudState.registeredUsers[existingIdx].pass = pass;
-                                window.cloudState.registeredUsers[existingIdx].identitas = identitas;
-                                updatedCount++;
-                            } else {
-                                window.cloudState.registeredUsers.push({ role, nama, username, pass, identitas });
-                                addedCount++;
-                            }
-                        });
-                        window.openFeature("kelola-akun", "Buat Akun & Kredensial");
                     } else if (type === 'Guru') {
                         json.forEach(row => {
                             const nama = (row['Nama Guru'] || row['nama'] || row['Nama'] || row['NAMA GURU'] || '').toString().trim();
