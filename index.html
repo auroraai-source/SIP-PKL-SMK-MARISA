@@ -1429,7 +1429,7 @@
             guru: [
                 { id: "dashboard", label: "Beranda Guru", icon: "📊" },
                 { id: "siswa-bimbingan", label: "Siswa Bimbingan", icon: "👥" },
-                { id: "tag-lokasi-dudi", label: "Kunci Titik GPS DUDI", icon: "📌" },
+                { id: "tag-lokasi-dudi", label: "Koleksi Titik GPS DUDI", icon: "📌" },
                 { id: "validasi-jurnal", label: "Validasi Jurnal Siswa", icon: "📋" },
                 { id: "agenda-kunjungan", label: "Agenda Kunjungan DUDI", icon: "🚗" },
                 { id: "penilaian", label: "Penilaian Bimbingan", icon: "🏆" },
@@ -1445,6 +1445,7 @@
                 { id: "tag-lokasi-dudi", label: "Koleksi Titik GPS DUDI", icon: "📌" },
                 { id: "penempatan", label: "Alokasi Guru & Siswa", icon: "🔄" },
                 { id: "rekap-absensi", label: "Rekap Presensi Global", icon: "📈" },
+                { id: "rekap-masuk-pulang", label: "Rekap Presensi Masuk & Pulang", icon: "⏱️" },
                 { id: "jam-geofence", label: "Jam & Geofence GPS", icon: "📍" },
                 { id: "periode-pkl", label: "Periode Pelaksanaan PKL", icon: "📅" },
                 { id: "dokumen", label: "Manajemen Dokumen", icon: "📁" },
@@ -1587,6 +1588,9 @@
                     break;
                 case "rekap-absensi":
                     contentHtml = window.renderRekapAbsensiGlobal();
+                    break;
+                case "rekap-masuk-pulang":
+                    contentHtml = window.renderRekapPresensiMasukPulang();
                     break;
                 case "dokumen":
                     contentHtml = window.renderManajemenDokumen();
@@ -2226,6 +2230,7 @@
                 { id: "tag-lokasi-dudi", icon: "📌", title: "Koleksi Titik GPS DUDI" },
                 { id: "penempatan", icon: "🔄", title: "Alokasi Guru & Siswa" },
                 { id: "rekap-absensi", icon: "📈", title: "Rekap Presensi Global" },
+                { id: "rekap-masuk-pulang", icon: "⏱️", title: "Rekap Presensi Masuk & Pulang" },
                 { id: "jam-geofence", icon: "📍", title: "Jam & Geofence GPS" },
                 { id: "periode-pkl", icon: "📅", title: "Periode Pelaksanaan PKL" },
                 { id: "dokumen", icon: "📁", title: "Manajemen Dokumen" },
@@ -2620,6 +2625,37 @@
             }
 
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
+
+            if (tipeAbsen === 'Pulang' && window.cloudState.activeRole === 'siswa') {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const sudahIsiJurnalHariIni = (window.cloudState.jurnal || []).some(j => 
+                    (j.siswa === profile.nama || j.user_id === (profile.identitas || profile.nama)) &&
+                    j.tanggal === todayStr
+                );
+
+                if (!sudahIsiJurnalHariIni) {
+                    window.openDynamicModal(`
+                        <div style="text-align:center; padding:10px 4px;">
+                            <div style="font-size:42px; margin-bottom:8px;">⚠️</div>
+                            <h3 style="font-size:16px; font-weight:900; color:#ef4444; margin-bottom:6px;">Wajib Mengisi Jurnal Harian Dahulu!</h3>
+                            <p style="font-size:12px; color:#475569; line-height:1.5; margin-bottom:16px;">
+                                Halo <b>${profile.nama}</b>, Anda belum membuat dan mengirimkan <b>Jurnal Harian PKL</b> untuk hari ini ke Guru Pembimbing & Panitia.<br><br>
+                                Sistem mewajibkan pengisian jurnal kegiatan sebelum Anda diizinkan melakukan <b>Presensi Pulang</b>.
+                            </p>
+                            <div style="display:flex; flex-direction:column; gap:8px;">
+                                <button type="button" onclick="window.closeDynamicModal(); window.openFeature('jurnal', 'Jurnal Harian PKL'); setTimeout(() => window.bukaModalTambahJurnal(), 250);" class="btn-action btn-blue" style="padding:12px; font-size:13px; font-weight:900; border-radius:12px; box-shadow:0 4px 12px rgba(2,132,199,0.3);">
+                                    📖 Isi & Kirim Jurnal Harian Sekarang ➔
+                                </button>
+                                <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#e2e8f0; color:#475569; padding:9px; font-size:11.5px; border-radius:10px;">
+                                    Tutup
+                                </button>
+                            </div>
+                        </div>
+                    `);
+                    return;
+                }
+            }
+
             const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
             const namaInd = penempatan ? penempatan.industri : "PT. Telkom Marisa";
             const dataInd = (window.cloudState.industri || []).find(i => window.isIndustriMatch(i.nama, namaInd)) || {
@@ -5523,6 +5559,175 @@
                     </table>
                 </div>
             </div>`;
+        };
+
+        window.renderRekapPresensiMasukPulang = function() {
+            const allAbsensi = window.cloudState.absensi || [];
+            const allJurnal = window.cloudState.jurnal || [];
+
+            // Gabungkan data presensi Masuk & Pulang berdasarkan Tanggal & Nama Siswa
+            const pairMap = new Map();
+
+            allAbsensi.forEach(ab => {
+                const key = `${ab.tanggal}_${ab.nama}`;
+                if (!pairMap.has(key)) {
+                    pairMap.set(key, {
+                        tanggal: ab.tanggal,
+                        nama: ab.nama,
+                        industri: ab.industri || '-',
+                        masuk: null,
+                        pulang: null
+                    });
+                }
+                const entry = pairMap.get(key);
+                if (ab.tipe_absen === 'Masuk') {
+                    entry.masuk = ab;
+                } else if (ab.tipe_absen === 'Pulang') {
+                    entry.pulang = ab;
+                }
+                if (ab.industri && ab.industri !== '-') {
+                    entry.industri = ab.industri;
+                }
+            });
+
+            const sortedEntries = Array.from(pairMap.values()).sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+
+            let rows = "";
+            sortedEntries.forEach((item, idx) => {
+                // Cek apakah siswa ini sudah mengisi jurnal pada tanggal tersebut
+                const jurnalAda = allJurnal.find(j => (j.siswa === item.nama || j.user_id === item.nama) && j.tanggal === item.tanggal);
+
+                rows += `<tr>
+                    <td>${idx + 1}</td>
+                    <td>
+                        <b>👨‍🎓 ${item.nama}</b>
+                        <div style="font-size:10px; color:#64748b;">🏢 ${item.industri}</div>
+                    </td>
+                    <td><b>${item.tanggal}</b></td>
+                    <td>
+                        ${item.masuk ? `
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                ${item.masuk.foto_selfie ? `<img src="${item.masuk.foto_selfie}" alt="Foto" style="width:30px; height:30px; object-fit:cover; border-radius:6px; border:1px solid #7dd3fc; cursor:pointer;" onclick="window.bukaPratinjauFotoSelfie('${item.masuk.foto_selfie}', '${item.nama}', '${item.tanggal} Masuk')">` : ''}
+                                <div>
+                                    <span class="badge-status badge-blue" style="font-size:10.5px;">${item.masuk.jam} WITA</span>
+                                    <div style="font-size:9.5px; color:#0369a1; font-weight:800; margin-top:1px;">${item.masuk.status || 'Hadir'}</div>
+                                </div>
+                            </div>
+                        ` : `<span class="badge-status badge-red" style="font-size:10px;">Belum Masuk</span>`}
+                    </td>
+                    <td>
+                        ${item.pulang ? `
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                ${item.pulang.foto_selfie ? `<img src="${item.pulang.foto_selfie}" alt="Foto" style="width:30px; height:30px; object-fit:cover; border-radius:6px; border:1px solid #86efac; cursor:pointer;" onclick="window.bukaPratinjauFotoSelfie('${item.pulang.foto_selfie}', '${item.nama}', '${item.tanggal} Pulang')">` : ''}
+                                <div>
+                                    <span class="badge-status badge-green" style="font-size:10.5px;">${item.pulang.jam} WITA</span>
+                                    <div style="font-size:9.5px; color:#15803d; font-weight:800; margin-top:1px;">${item.pulang.status || 'Hadir'}</div>
+                                </div>
+                            </div>
+                        ` : `<span class="badge-status badge-amber" style="font-size:10px;">Belum Pulang</span>`}
+                    </td>
+                    <td>
+                        ${jurnalAda ? `
+                            <span class="badge-status badge-green" style="font-size:10px;">✓ Terkirim</span>
+                            <div style="font-size:9.5px; color:#475569; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:1px;" title="${jurnalAda.kegiatan || ''}">${jurnalAda.kegiatan || 'Jurnal harian'}</div>
+                        ` : `<span class="badge-status badge-red" style="font-size:10px;">✕ Belum Isi</span>`}
+                    </td>
+                </tr>`;
+            });
+
+            return `
+            <div class="card" style="border: 2px solid #38bdf8; background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">LOG PRESENSI LENGKAP HARIAN</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">⏱️ Rekap Presensi Masuk & Pulang Siswa</h3>
+                        <p style="font-size:11px; color:#475569; margin-top:2px;">
+                            Pantau perbandingan jam kedatangan, jam kepulangan, dan pemenuhan jurnal harian siswa secara berpasangan per hari.
+                        </p>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.unduhExcelRekapMasukPulang()" class="btn-action btn-emerald" style="padding:8px 14px; font-size:11.5px; font-weight:900; box-shadow:0 3px 10px rgba(16,185,129,0.3);">
+                            📊 Unduh Rekap Excel
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px;">No</th>
+                                <th>Nama Siswa & Industri</th>
+                                <th>Tanggal</th>
+                                <th>Presensi Masuk</th>
+                                <th>Presensi Pulang</th>
+                                <th>Jurnal Harian</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada data presensi siswa yang tercatat</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.unduhExcelRekapMasukPulang = function() {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+
+            const allAbsensi = window.cloudState.absensi || [];
+            const allJurnal = window.cloudState.jurnal || [];
+            const pairMap = new Map();
+
+            allAbsensi.forEach(ab => {
+                const key = `${ab.tanggal}_${ab.nama}`;
+                if (!pairMap.has(key)) {
+                    pairMap.set(key, {
+                        tanggal: ab.tanggal,
+                        nama: ab.nama,
+                        industri: ab.industri || '-',
+                        masukJam: '-',
+                        masukStatus: '-',
+                        pulangJam: '-',
+                        pulangStatus: '-'
+                    });
+                }
+                const entry = pairMap.get(key);
+                if (ab.tipe_absen === 'Masuk') {
+                    entry.masukJam = ab.jam ? `${ab.jam} WITA` : '-';
+                    entry.masukStatus = ab.status || 'Hadir';
+                } else if (ab.tipe_absen === 'Pulang') {
+                    entry.pulangJam = ab.jam ? `${ab.jam} WITA` : '-';
+                    entry.pulangStatus = ab.status || 'Hadir';
+                }
+                if (ab.industri && ab.industri !== '-') entry.industri = ab.industri;
+            });
+
+            const data = [
+                ["No", "Nama Siswa", "Tempat PKL / Industri", "Tanggal", "Jam Masuk", "Status Masuk", "Jam Pulang", "Status Pulang", "Status Jurnal Harian", "Uraian Jurnal"]
+            ];
+
+            let counter = 1;
+            Array.from(pairMap.values()).sort((a, b) => b.tanggal.localeCompare(a.tanggal)).forEach(item => {
+                const jurnal = allJurnal.find(j => (j.siswa === item.nama || j.user_id === item.nama) && j.tanggal === item.tanggal);
+                data.push([
+                    counter++,
+                    item.nama,
+                    item.industri,
+                    item.tanggal,
+                    item.masukJam,
+                    item.masukStatus,
+                    item.pulangJam,
+                    item.pulangStatus,
+                    jurnal ? "Sudah Diisi (Terkirim)" : "Belum Mengisi",
+                    jurnal ? (jurnal.kegiatan || '-') : '-'
+                ]);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Rekap Masuk-Pulang");
+            XLSX.writeFile(wb, `Rekap_Presensi_Masuk_Pulang_SMKN1_Marisa_${new Date().toISOString().split('T')[0]}.xlsx`);
         };
 
         window.renderManajemenDokumen = function() {
