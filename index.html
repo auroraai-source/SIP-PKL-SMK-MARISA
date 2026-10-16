@@ -1434,7 +1434,9 @@
                 { id: "agenda-kunjungan", label: "Agenda Kunjungan DUDI", icon: "🚗" },
                 { id: "penilaian", label: "Penilaian Bimbingan", icon: "🏆" },
                 { id: "laporan", label: "Validasi Laporan Akhir", icon: "📄" },
-                { id: "dokumen", label: "Dokumen PKL", icon: "📁" }
+                { id: "dokumen", label: "Dokumen PKL", icon: "📁" },
+                { id: "rekap-absensi", label: "Rekap Presensi Global", icon: "📈" },
+                { id: "rekap-jurnal", label: "Rekap Jurnal Harian PKL", icon: "📖" }
             ],
             admin: [
                 { id: "dashboard", label: "Beranda Panitia", icon: "📊" },
@@ -5520,6 +5522,7 @@
             let rows = "";
             list.forEach((ab, idx) => {
                 rows += `<tr>
+                    <td><input type="checkbox" class="cb-absensi" value="${idx}"></td>
                     <td>${idx + 1}</td>
                     <td>
                         ${ab.foto_selfie ? `<img src="${ab.foto_selfie}" alt="Foto" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid #7dd3fc; cursor:pointer;" onclick="window.bukaPratinjauFotoSelfie('${ab.foto_selfie}', '${ab.nama}', '${ab.tanggal} ${ab.jam}')">` : '<span style="color:#94a3b8;">-</span>'}
@@ -5530,6 +5533,9 @@
                     <td>${ab.jam} WITA</td>
                     <td>${ab.industri || '-'}</td>
                     <td><span class="badge-status ${ab.status === 'Tepat Waktu' ? 'badge-green' : 'badge-amber'}">${ab.status || 'Hadir'}</span></td>
+                    <td>
+                        <button onclick="window.konfirmasiHapusAbsensi(${idx})" class="btn-action btn-red" style="padding:4px 8px; font-size:11px;">Hapus</button>
+                    </td>
                 </tr>`;
             });
 
@@ -5541,12 +5547,17 @@
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📈 Rekap Presensi Global</h3>
                         <p style="font-size:11px; color:#64748b;">Pantau kehadiran real-time seluruh siswa PKL dari berbagai industri DUDI.</p>
                     </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.hapusMasal('absensi')" class="btn-action btn-red" style="padding:8px 14px; font-size:11.5px; font-weight:900; box-shadow:0 3px 10px rgba(239,68,68,0.3);">🗑️ Hapus Masal</button>
+                        <button onclick="window.unduhExcelRekapMasukPulang()" class="btn-action btn-emerald" style="padding:8px 14px; font-size:11.5px; font-weight:900;">📊 Unduh Excel</button>
+                    </div>
                 </div>
 
                 <div class="table-wrap">
                     <table>
                         <thead>
                             <tr>
+                                <th style="width:36px;"><input type="checkbox" onchange="window.toggleAllCheckboxes('absensi', this.checked)"></th>
                                 <th>No</th>
                                 <th>Foto</th>
                                 <th>Nama Siswa</th>
@@ -5555,14 +5566,23 @@
                                 <th>Jam</th>
                                 <th>Industri</th>
                                 <th>Status</th>
+                                <th style="width:80px;">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="8" class="empty-placeholder">Belum ada riwayat absensi masuk/pulang hari ini</td></tr>'}
+                            ${rows || '<tr><td colspan="10" class="empty-placeholder">Belum ada riwayat absensi masuk/pulang hari ini</td></tr>'}
                         </tbody>
                     </table>
                 </div>
             </div>`;
+        };
+
+        window.konfirmasiHapusAbsensi = function(idx) {
+            window.showConfirmDialog("Hapus Presensi", "Hapus data presensi ini secara permanen?", () => {
+                window.cloudState.absensi.splice(idx, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("rekap-absensi", "Rekap Presensi Global");
+            });
         };
 
         window.renderRekapJurnalHarian = function() {
@@ -5581,6 +5601,7 @@
                 const hasBukti = (j.file_bukti && j.file_bukti !== '');
 
                 rows += `<tr class="item-rekap-jurnal-row" data-siswa="${(j.siswa || '').toLowerCase()}" data-industri="${(j.industri || '').toLowerCase()}" data-status="${(j.status || '').toLowerCase()}">
+                    <td><input type="checkbox" class="cb-jurnal" value="${idx}"></td>
                     <td>${idx + 1}</td>
                     <td>
                         <b>👨‍🎓 ${j.siswa || '-'}</b>
@@ -5617,6 +5638,7 @@
                         <button onclick="window.bukaModalDetailJurnalAdmin(${idx})" class="btn-action btn-blue" style="padding:4px 8px; font-size:11px;">
                             🔍 Rincian
                         </button>
+                        <button onclick="window.konfirmasiHapusJurnal(${idx})" class="btn-action btn-red" style="padding:4px 8px; font-size:11px;">Hapus</button>
                     </td>
                 </tr>`;
             });
@@ -5632,6 +5654,9 @@
                         </p>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.hapusMasal('jurnal')" class="btn-action btn-red" style="padding:8px 14px; font-size:11.5px; font-weight:900; box-shadow:0 3px 10px rgba(239,68,68,0.3);">
+                            🗑️ Hapus Masal
+                        </button>
                         <button onclick="window.unduhExcelRekapJurnal()" class="btn-action btn-emerald" style="padding:8px 14px; font-size:11.5px; font-weight:900; box-shadow:0 3px 10px rgba(16,185,129,0.3);">
                             📊 Unduh Rekap Excel
                         </button>
@@ -5668,6 +5693,7 @@
                     <table>
                         <thead>
                             <tr>
+                                <th style="width:36px;"><input type="checkbox" onchange="window.toggleAllCheckboxes('jurnal', this.checked)"></th>
                                 <th style="width:36px;">No</th>
                                 <th>Nama Siswa & Industri</th>
                                 <th>Tanggal</th>
@@ -5675,15 +5701,23 @@
                                 <th>Guru Pembimbing</th>
                                 <th style="text-align:center;">Bukti</th>
                                 <th>Status</th>
-                                <th style="width:130px;">Aksi</th>
+                                <th style="width:200px;">Aksi</th>
                             </tr>
                         </thead>
                         <tbody id="tbodyRekapJurnalContainer">
-                            ${rows || '<tr><td colspan="8" class="empty-placeholder">Belum ada jurnal kegiatan yang dikirimkan oleh siswa PKL</td></tr>'}
+                            ${rows || '<tr><td colspan="9" class="empty-placeholder">Belum ada jurnal kegiatan yang dikirimkan oleh siswa PKL</td></tr>'}
                         </tbody>
                     </table>
                 </div>
             </div>`;
+        };
+
+        window.konfirmasiHapusJurnal = function(idx) {
+            window.showConfirmDialog("Hapus Jurnal", "Hapus data jurnal ini secara permanen?", () => {
+                window.cloudState.jurnal.splice(idx, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("rekap-jurnal", "Rekap Jurnal Harian PKL");
+            });
         };
 
         window.filterTabelRekapJurnal = function(keyword) {
