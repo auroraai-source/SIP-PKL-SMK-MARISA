@@ -5182,13 +5182,17 @@
 
             if (!kegiatan) return window.showModalInfo("Lengkapi Jurnal", "Uraian kegiatan hari ini wajib diisi!");
 
+            // Ambil nama industri riil dari penempatan siswa
+            const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
+            const namaIndRiil = penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "DUDI Magang";
+
             window.cloudState.jurnal.unshift({
                 id: "jur_" + Date.now(),
                 user_id: profile.identitas || profile.nama,
                 siswa: profile.nama,
                 guru_pembimbing: guru,
                 panitia_admin: panitia,
-                industri: "DUDI Magang",
+                industri: namaIndRiil,
                 tanggal: tgl,
                 kegiatan: kegiatan,
                 kendala: kendala,
