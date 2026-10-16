@@ -881,10 +881,10 @@
                     </svg>
                 </div>
                 <div class="topbar-user-info">
-                    <div id="topbarUserName" style="display: none;">Pengguna</div>
                     <div class="topbar-role-badge-yellow" id="topbarUserRoleBadge">
                         PANITIA PKL
                     </div>
+                    <div id="topbarUserName" style="font-size: 8.5px; font-weight: 800; color: #ffffff; margin-top: 3.5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65px;">Pengguna</div>
                 </div>
             </div>
         </div>
@@ -5038,11 +5038,20 @@
             `);
         };
 
+        window.hapusJurnalSiswa = function(originalIdx) {
+            window.showConfirmDialog("Hapus Jurnal", "Apakah Anda yakin ingin menghapus catatan jurnal harian ini secara permanen?", () => {
+                window.cloudState.jurnal.splice(originalIdx, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("jurnal", "Jurnal Harian PKL");
+            });
+        };
+
         window.renderJurnalKegiatan = function() {
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
             const myJurnal = (window.cloudState.jurnal || []).filter(j => j.siswa === profile.nama);
             let rows = "";
             myJurnal.forEach((jur, idx) => {
+                const originalIdx = window.cloudState.jurnal.indexOf(jur);
                 rows += `<tr>
                     <td>${idx + 1}</td>
                     <td>${jur.tanggal}</td>
@@ -5050,6 +5059,7 @@
                     <td>${jur.guru_pembimbing || '-'}</td>
                     <td>${jur.file_bukti ? `<a href="${jur.file_bukti}" target="_blank" class="btn-action btn-blue" style="text-decoration:none; padding:3px 8px; font-size:10px;">📎 Lihat Bukti</a>` : '<span style="color:#94a3b8;">-</span>'}</td>
                     <td><span class="badge-status ${jur.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${jur.status || 'Menunggu'}</span></td>
+                    <td><button onclick="window.hapusJurnalSiswa(${originalIdx})" class="btn-action btn-red" style="padding:4px 8px; font-size:11px;">Hapus</button></td>
                 </tr>`;
             });
 
@@ -5076,10 +5086,11 @@
                                 <th>Pembimbing</th>
                                 <th>Bukti File</th>
                                 <th>Status</th>
+                                <th>Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada jurnal kegiatan yang dikirimkan</td></tr>'}
+                            ${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada jurnal kegiatan yang dikirimkan</td></tr>'}
                         </tbody>
                     </table>
                 </div>
