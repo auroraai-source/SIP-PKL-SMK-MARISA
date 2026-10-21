@@ -2023,6 +2023,27 @@
             </div>`;
         };
 
+        window.hitungJarakMeterHaversine = function(lat1, lon1, lat2, lon2) {
+            const R = 6371000; // Radius bumi dalam meter
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return Math.round(R * c);
+        };
+
+        window.hentikanStreamKamera = function() {
+            if (window.liveCameraStream) {
+                window.liveCameraStream.getTracks().forEach(t => t.stop());
+                window.liveCameraStream = null;
+            }
+            const video = document.getElementById("selfieVideoElement");
+            if (video) video.srcObject = null;
+        };
+
         window.bukaModalAmbilPresensiSelfieGPS = function(tipeAbsen) {
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
 
@@ -2066,23 +2087,56 @@
                 radius: 50
             };
 
+            const indLat = parseFloat(dataInd.lat) || 0.45612;
+            const indLng = parseFloat(dataInd.lng) || 121.94210;
+            const indRadius = 50; // Standar baku radius 50 meter
+
             window.tempSelfieBase64 = null;
+            window.currentSelfieLocation = null;
             window.selectedKategoriKehadiran = "hadir_lokasi";
 
             window.openDynamicModal(`
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">📷 Presensi ${tipeAbsen}: Selfie & GPS</h3>
                 <div style="font-size:11px; color:#475569; margin-bottom:10px;">Lokasi Magang: <b>${dataInd.nama}</b></div>
 
-                <div class="form-group" style="margin-bottom:12px;">
+                <div class="form-group" style="margin-bottom:10px;">
                     <label class="form-label" style="font-weight:800; color:#0f172a;">Kategori Kehadiran:</label>
-                    <select id="presensiKategoriSelect" class="form-control" style="font-weight:750; color:#0284c7;">
+                    <select id="presensiKategoriSelect" class="form-control" style="font-weight:750; color:#0284c7;" onchange="window.evaluasiLokasiDanKamera('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${dataInd.nama.replace(/'/g, "\\'")}')">
                         <option value="hadir_lokasi">🏢 Hadir di Lokasi Industri (Radius 50m)</option>
-                        <option value="tugas_luar">🚗 Tugas Luar / Dinas Lapangan</option>
+                        <option value="tugas_luar">🚗 Dinas Luar / Tugas Lapangan</option>
                         <option value="izin_sakit">📋 Izin / Sakit Resmi</option>
                     </select>
                 </div>
 
-                <div style="position:relative; width:100%; height:200px; background:#0f172a; border-radius:18px; overflow:hidden; border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; margin-bottom:10px;">
+                <!-- Indikator Status Geofence GPS -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:#f8fafc; border:1px solid #bfdbfe; border-radius:12px; padding:7px 12px;">
+                    <span style="font-size:11px; font-weight:800; color:#334155;">📍 Status Lokasi:</span>
+                    <span id="badgeGpsPresensiStatus" class="badge-status badge-amber">Memeriksa GPS...</span>
+                </div>
+
+                <!-- Notifikasi Peringatan Jika di Luar Area Industri (Kamera Tidak Terbuka) -->
+                <div id="gpsNotifOutsideBox" style="display:none; background:#fee2e2; border:2px solid #ef4444; border-radius:18px; padding:16px 14px; text-align:center; color:#991b1b; margin-bottom:12px;">
+                    <div style="font-size:34px; margin-bottom:6px;">📍🚫</div>
+                    <div style="font-size:13.5px; font-weight:900; color:#b91c1c; text-transform:uppercase;">Anda Tidak Berada di Area Industri!</div>
+                    <div style="font-size:11.5px; color:#475569; margin:8px 0; line-height:1.45;">
+                        Kamera <b>tidak dapat dibuka</b> karena posisi Anda terdeteksi di luar radius lokasi industri yang telah ditentukan.
+                    </div>
+                    <div style="background:#ffffff; border:1px solid #fca5a5; border-radius:12px; padding:10px; font-size:11px; text-align:left; color:#1e293b; margin-top:8px;">
+                        <div>🏢 <b>Nama Industri:</b> ${dataInd.nama}</div>
+                        <div>🌐 <b>Koordinat DUDI:</b> Lat ${indLat.toFixed(5)}, Lng ${indLng.toFixed(5)}</div>
+                        <div>🎯 <b>Radius Izin:</b> ${indRadius} Meter</div>
+                        <div>📏 <b>Jarak Terdeteksi:</b> <span id="textJarakGpsNotif" style="color:#dc2626; font-weight:900;">-</span></div>
+                    </div>
+                    <div style="font-size:10px; color:#64748b; margin-top:10px; line-height:1.4;">
+                        <i>*Jika Anda sedang menjalankan dinas luar atau izin/sakit resmi, silakan ubah pilihan <b>Kategori Kehadiran</b> di atas.</i>
+                    </div>
+                    <button type="button" onclick="window.evaluasiLokasiDanKamera('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${dataInd.nama.replace(/'/g, "\\'")}')" class="btn-action btn-blue" style="margin-top:10px; padding:6px 14px; font-size:11px; font-weight:800;">
+                        🔄 Cek Ulang Titik GPS
+                    </button>
+                </div>
+
+                <!-- Wadah Kamera (Hanya terbuka jika dalam radius 50m atau memilih Dinas Luar/Izin/Sakit) -->
+                <div id="cameraPreviewWrap" style="display:none; position:relative; width:100%; height:200px; background:#0f172a; border-radius:18px; overflow:hidden; border:2px solid #38bdf8; align-items:center; justify-content:center; margin-bottom:10px;">
                     <video id="selfieVideoElement" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
                     <img id="selfieCapturedPreview" src="" alt="Selfie" style="display:none; width:100%; height:100%; object-fit:cover;">
                     <div id="selfieCameraLoading" style="position:absolute; color:#fff; font-size:12px; font-weight:800; background:rgba(0,0,0,0.6); padding:6px 12px; border-radius:8px;">
@@ -2090,7 +2144,8 @@
                     </div>
                 </div>
 
-                <div style="display:flex; gap:8px; margin-bottom:12px;">
+                <!-- Tombol Kamera (Jepret/Unggah) -->
+                <div id="cameraActionButtonsWrap" style="display:none; gap:8px; margin-bottom:12px;">
                     <button type="button" onclick="window.jepretFotoSelfie()" id="btnJepretSelfie" class="btn-action btn-blue" style="flex:1; padding:10px;">
                         📸 Jepret Wajah (Selfie)
                     </button>
@@ -2102,13 +2157,152 @@
 
                 <div style="display:flex; justify-content:flex-end; gap:8px;">
                     <button type="button" onclick="window.tutupModalPresensiSelfie()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button type="button" onclick="window.simpanPresensiSelfieFinal('${tipeAbsen}', '${dataInd.nama}')" class="btn-action btn-emerald" style="font-weight:900; padding:10px 16px;">
+                    <button type="button" id="btnSimpanPresensiAction" onclick="window.simpanPresensiSelfieFinal('${tipeAbsen}', '${dataInd.nama.replace(/'/g, "\\'")}', ${indLat}, ${indLng}, ${indRadius})" class="btn-action btn-emerald" style="font-weight:900; padding:10px 16px;">
                         ✓ Simpan Presensi ${tipeAbsen}
                     </button>
                 </div>
             `);
 
-            window.mulaiStreamKameraSelfie();
+            // Langsung evaluasi GPS dan aturan pembukaan kamera
+            window.evaluasiLokasiDanKamera(tipeAbsen, indLat, indLng, indRadius, dataInd.nama);
+        };
+
+        window.evaluasiLokasiDanKamera = function(tipeAbsen, targetLat, targetLng, targetRadius, targetNamaInd) {
+            const selectEl = document.getElementById("presensiKategoriSelect");
+            const kat = selectEl ? selectEl.value : "hadir_lokasi";
+            window.selectedKategoriKehadiran = kat;
+
+            const badgeStatus = document.getElementById("badgeGpsPresensiStatus");
+            const notifBox = document.getElementById("gpsNotifOutsideBox");
+            const cameraWrap = document.getElementById("cameraPreviewWrap");
+            const btnCamWrap = document.getElementById("cameraActionButtonsWrap");
+            const btnSimpan = document.getElementById("btnSimpanPresensiAction");
+            const textJarak = document.getElementById("textJarakGpsNotif");
+
+            // KONDISI PENGECUALIAN: Dinas Luar atau Izin/Sakit
+            if (kat === 'tugas_luar' || kat === 'izin_sakit') {
+                if (notifBox) notifBox.style.display = 'none';
+                if (cameraWrap) {
+                    cameraWrap.style.display = 'flex';
+                }
+                if (btnCamWrap) btnCamWrap.style.display = 'flex';
+                if (btnSimpan) {
+                    btnSimpan.disabled = false;
+                    btnSimpan.style.opacity = '1';
+                }
+
+                if (badgeStatus) {
+                    badgeStatus.className = "badge-status badge-blue";
+                    badgeStatus.innerText = (kat === 'tugas_luar') ? "🚗 DINAS LUAR (KAMERA TERBUKA)" : "📋 IZIN/SAKIT (KAMERA TERBUKA)";
+                }
+
+                // Ambil koordinat siswa opsional untuk catatan presensi tugas luar/izin
+                if ("geolocation" in navigator) {
+                    navigator.geolocation.getCurrentPosition(
+                        pos => {
+                            window.currentSelfieLocation = {
+                                lat: pos.coords.latitude,
+                                lng: pos.coords.longitude,
+                                distance: 0,
+                                inRadius: true
+                            };
+                        },
+                        () => {
+                            window.currentSelfieLocation = { lat: targetLat, lng: targetLng, distance: 0, inRadius: true };
+                        },
+                        { enableHighAccuracy: true, timeout: 8000 }
+                    );
+                }
+
+                window.mulaiStreamKameraSelfie();
+                return;
+            }
+
+            // KONDISI HADIR DI LOKASI: Wajib GPS dalam radius 50 meter
+            window.hentikanStreamKamera();
+            if (cameraWrap) cameraWrap.style.display = 'none';
+            if (btnCamWrap) btnCamWrap.style.display = 'none';
+            if (notifBox) notifBox.style.display = 'none';
+
+            if (badgeStatus) {
+                badgeStatus.className = "badge-status badge-amber";
+                badgeStatus.innerText = "🛰️ Memeriksa Titik GPS...";
+            }
+
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        const curLat = pos.coords.latitude;
+                        const curLng = pos.coords.longitude;
+                        const distance = window.hitungJarakMeterHaversine(curLat, curLng, targetLat, targetLng);
+                        const isInRadius = (distance <= targetRadius);
+
+                        window.currentSelfieLocation = {
+                            lat: curLat,
+                            lng: curLng,
+                            distance: distance,
+                            inRadius: isInRadius
+                        };
+
+                        if (isInRadius) {
+                            // Berada di dalam radius 50m: Kamera dibuka
+                            if (notifBox) notifBox.style.display = 'none';
+                            if (cameraWrap) cameraWrap.style.display = 'flex';
+                            if (btnCamWrap) btnCamWrap.style.display = 'flex';
+                            if (btnSimpan) {
+                                btnSimpan.disabled = false;
+                                btnSimpan.style.opacity = '1';
+                            }
+                            if (badgeStatus) {
+                                badgeStatus.className = "badge-status badge-green";
+                                badgeStatus.innerText = `🟢 DI AREA INDUSTRI (${distance}m <= 50m)`;
+                            }
+                            window.mulaiStreamKameraSelfie();
+                        } else {
+                            // Di luar radius 50m: Kamera tetap terkunci dan tampilkan notifikasi
+                            window.hentikanStreamKamera();
+                            if (cameraWrap) cameraWrap.style.display = 'none';
+                            if (btnCamWrap) btnCamWrap.style.display = 'none';
+                            if (textJarak) textJarak.innerText = `${distance} Meter (${distance - targetRadius}m di luar batas)`;
+                            if (notifBox) notifBox.style.display = 'block';
+                            if (btnSimpan) {
+                                btnSimpan.disabled = true;
+                                btnSimpan.style.opacity = '0.5';
+                            }
+                            if (badgeStatus) {
+                                badgeStatus.className = "badge-status badge-red";
+                                badgeStatus.innerText = `🔴 DI LUAR RADIUS (${distance}m > 50m)`;
+                            }
+                        }
+                    },
+                    err => {
+                        // GPS ditolak atau error
+                        window.hentikanStreamKamera();
+                        if (cameraWrap) cameraWrap.style.display = 'none';
+                        if (btnCamWrap) btnCamWrap.style.display = 'none';
+                        if (textJarak) textJarak.innerText = "Satelit GPS tidak terdeteksi";
+                        if (notifBox) notifBox.style.display = 'block';
+                        if (btnSimpan) {
+                            btnSimpan.disabled = true;
+                            btnSimpan.style.opacity = '0.5';
+                        }
+                        if (badgeStatus) {
+                            badgeStatus.className = "badge-status badge-red";
+                            badgeStatus.innerText = "🔴 IZIN GPS DITOLAK";
+                        }
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
+            } else {
+                window.hentikanStreamKamera();
+                if (cameraWrap) cameraWrap.style.display = 'none';
+                if (btnCamWrap) btnCamWrap.style.display = 'none';
+                if (notifBox) notifBox.style.display = 'block';
+                if (badgeStatus) {
+                    badgeStatus.className = "badge-status badge-red";
+                    badgeStatus.innerText = "🔴 GPS TIDAK DIDUKUNG";
+                }
+            }
         };
 
         window.mulaiStreamKameraSelfie = function() {
@@ -2132,10 +2326,7 @@
         };
 
         window.tutupModalPresensiSelfie = function() {
-            if (window.liveCameraStream) {
-                window.liveCameraStream.getTracks().forEach(t => t.stop());
-                window.liveCameraStream = null;
-            }
+            window.hentikanStreamKamera();
             window.closeDynamicModal();
         };
 
@@ -2184,19 +2375,33 @@
             }
         };
 
-        window.simpanPresensiSelfieFinal = function(tipeAbsen, industriNama) {
+        window.simpanPresensiSelfieFinal = function(tipeAbsen, industriNama, indLat, indLng, indRadius) {
+            const kat = document.getElementById("presensiKategoriSelect")?.value || "hadir_lokasi";
+
+            // Validasi keamanan: Jika Hadir di Lokasi, tolak penyimpanan jika di luar radius 50m
+            if (kat === 'hadir_lokasi') {
+                if (!window.currentSelfieLocation || !window.currentSelfieLocation.inRadius) {
+                    const jarak = window.currentSelfieLocation ? window.currentSelfieLocation.distance : "-";
+                    return window.showModalInfo(
+                        "Di Luar Area Industri ❌",
+                        `Anda terdeteksi berjarak <b>${jarak} meter</b> dari industri <b>${industriNama}</b>.<br><br>` +
+                        `Koordinat Industri: <b>${indLat}, ${indLng}</b> (Maksimal: 50 Meter).<br><br>` +
+                        `Presensi di lokasi tidak dapat disimpan di luar area kantor. Silakan pilih <b>Dinas Luar</b> atau <b>Izin / Sakit</b> jika ditugaskan di luar.`
+                    );
+                }
+            }
+
             if (!window.tempSelfieBase64) {
                 return window.showModalInfo("Foto Belum Diambil", "Silakan jepret wajah selfie Anda terlebih dahulu!");
             }
 
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
-            const kat = document.getElementById("presensiKategoriSelect")?.value || "hadir_lokasi";
             const now = new Date();
             const jamStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
             const tglStr = now.toISOString().split('T')[0];
 
-            let katText = "Hadir di Lokasi";
-            if (kat === 'tugas_luar') katText = "Tugas Luar";
+            let katText = "Hadir di Lokasi Industri";
+            if (kat === 'tugas_luar') katText = "Dinas Luar / Lapangan";
             else if (kat === 'izin_sakit') katText = "Izin / Sakit";
 
             const itemAbsen = {
@@ -2209,6 +2414,9 @@
                 tanggal: tglStr,
                 jam: jamStr,
                 status: "Tepat Waktu",
+                jarak_meter: window.currentSelfieLocation ? window.currentSelfieLocation.distance : 0,
+                latitude: window.currentSelfieLocation ? window.currentSelfieLocation.lat : indLat,
+                longitude: window.currentSelfieLocation ? window.currentSelfieLocation.lng : indLng,
                 foto_selfie: window.tempSelfieBase64
             };
 
@@ -2216,7 +2424,7 @@
             window.simpanDatabasePersisten(true);
 
             window.tutupModalPresensiSelfie();
-            window.showModalInfo("Presensi Berhasil ✅", `Presensi <b>${tipeAbsen}</b> Anda berhasil dicatat pukul <b>${jamStr} WITA</b>.`);
+            window.showModalInfo("Presensi Berhasil ✅", `Presensi <b>${tipeAbsen}</b> [${katText}] berhasil dicatat pukul <b>${jamStr} WITA</b>.`);
             window.openFeature("dashboard", "Beranda");
         };
 
