@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SIP-PKL SMK Negeri 1 Marisa</title>
+    <!-- SheetJS untuk olah berkas Excel -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Supabase Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
     <style>
@@ -46,65 +48,395 @@
             flex-direction: column;
             overflow-x: hidden;
         }
-        .hud-wrapper { width: 100%; max-width: 480px; margin: 0 auto; padding: 24px 16px 40px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
-        .hud-header { background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%); border: 2px solid #fde047; border-radius: 24px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 12px 30px rgba(15, 82, 186, 0.35); margin-bottom: 20px; position: relative; overflow: hidden; color: #ffffff; }
-        .hud-header::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background: linear-gradient(90deg, transparent, #fde047, transparent); animation: scanline 3s infinite linear; }
-        @keyframes scanline { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+
+        .hud-wrapper {
+            width: 100%;
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 24px 16px 40px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .hud-header {
+            background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%);
+            border: 2px solid #fde047;
+            border-radius: 24px;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 12px 30px rgba(15, 82, 186, 0.35);
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+            color: #ffffff;
+        }
+        .hud-header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #fde047, transparent);
+            animation: scanline 3s infinite linear;
+        }
+        @keyframes scanline {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
         .hud-title-sub { font-size: 13px; color: #e0f2fe; font-weight: 700; letter-spacing: 0.5px; }
         .hud-title-main { font-size: 20px; font-weight: 950; color: #ffffff; margin: 2px 0; letter-spacing: 0.5px; }
         .hud-title-badge { font-size: 10px; color: #fde047; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
-        .badge-logo { width: 60px; height: 60px; border-radius: 16px; background: #ffffff; border: 2px solid #eab308; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); flex-shrink: 0; padding: 2px; }
+        .badge-logo {
+            width: 60px;
+            height: 60px;
+            border-radius: 16px;
+            background: #ffffff;
+            border: 2px solid #eab308;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+            flex-shrink: 0;
+            padding: 2px;
+        }
         .badge-logo img { width: 100%; height: 100%; object-fit: contain; }
-        .hud-card { background: #ffffff; border: 1.5px solid #bfdbfe; border-radius: 24px; padding: 24px 20px; box-shadow: var(--glow-blue); }
-        .portal-grid { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
-        .portal-card { background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%); border: 1.5px solid #bfdbfe; border-radius: 18px; padding: 16px 18px; display: flex; align-items: center; gap: 14px; cursor: pointer; transition: all 0.25s ease; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.04); }
-        .portal-card:hover, .portal-card:active { transform: translateY(-2px); background: #ffffff; border-color: #0284c7; box-shadow: 0 8px 24px rgba(2, 132, 199, 0.25); }
+
+        .hud-card {
+            background: #ffffff;
+            border: 1.5px solid #bfdbfe;
+            border-radius: 24px;
+            padding: 24px 20px;
+            box-shadow: var(--glow-blue);
+        }
+        .portal-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 14px;
+        }
+        .portal-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%);
+            border: 1.5px solid #bfdbfe;
+            border-radius: 18px;
+            padding: 16px 18px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.04);
+        }
+        .portal-card:hover, .portal-card:active {
+            transform: translateY(-2px);
+            background: #ffffff;
+            border-color: #0284c7;
+            box-shadow: 0 8px 24px rgba(2, 132, 199, 0.25);
+        }
         .portal-card.role-siswa { border-left: 5px solid #0284c7; }
         .portal-card.role-guru { border-left: 5px solid #10b981; }
         .portal-card.role-industri { border-left: 5px solid #f59e0b; }
         .portal-card.role-orangtua { border-left: 5px solid #8b5cf6; }
         .portal-card.role-admin { border-left: 5px solid #06b6d4; }
-        .portal-icon { width: 46px; height: 46px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; background: #e0f2fe; border: 1px solid #bae6fd; }
+        .portal-icon {
+            width: 46px;
+            height: 46px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+            background: #e0f2fe;
+            border: 1px solid #bae6fd;
+        }
         .portal-info { flex: 1; }
         .portal-title { font-size: 14px; font-weight: 850; color: #0f172a; }
         .portal-desc { font-size: 11px; color: #64748b; margin-top: 2px; }
         .portal-arrow { font-size: 16px; color: #0284c7; font-weight: 900; }
+
         .form-group { margin-bottom: 14px; position: relative; }
         .form-label { font-size: 11px; font-weight: 750; color: #334155; margin-bottom: 6px; display: block; }
         .form-control-wrap { position: relative; display: flex; align-items: center; }
-        .form-control { width: 100%; background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 12px 14px; font-size: 13px; color: #0f172a; outline: none; transition: all 0.2s ease; }
-        .form-control:focus { border-color: #0284c7; background: #ffffff; box-shadow: 0 0 12px rgba(2, 132, 199, 0.25); }
-        .btn-eye-toggle { position: absolute; right: 12px; background: none; border: none; color: #64748b; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
-        .btn-action-primary { width: 100%; background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%); border: none; color: #ffffff; padding: 14px; border-radius: 16px; font-size: 13px; font-weight: 900; cursor: pointer; box-shadow: 0 8px 22px rgba(15, 82, 186, 0.35); transition: all 0.2s ease; letter-spacing: 0.5px; text-align: center; }
-        .btn-action-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(15, 82, 186, 0.45); }
-        #appScreen { display: none; width: 100%; min-height: 100vh; flex-direction: column; background: linear-gradient(180deg, #dbeafe 0%, #f0f9ff 240px, #f8fafc 100%); }
-        .app-topbar { background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%); padding: 14px 16px 16px; display: grid; grid-template-columns: 44px 1fr 70px; align-items: center; position: sticky; top: 0; z-index: 50; box-shadow: 0 6px 20px rgba(15, 82, 186, 0.3); gap: 8px; }
-        .btn-burger-menu { width: 38px; height: 38px; background: rgba(255, 255, 255, 0.2); border: 1.5px solid rgba(255, 255, 255, 0.7); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; transition: all 0.2s ease; backdrop-filter: blur(8px); flex-shrink: 0; }
-        .btn-burger-menu:hover, .btn-burger-menu:active { background: rgba(255, 255, 255, 0.32); transform: scale(0.96); }
-        .burger-line { width: 18px; height: 2.2px; background-color: #ffffff; border-radius: 2px; }
-        .topbar-center-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; width: 100%; padding: 0 2px; }
-        .topbar-center-title { font-size: 19px; font-weight: 950; color: #ffffff; letter-spacing: 0.8px; line-height: 1.1; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
-        .topbar-center-desc { font-size: 10.5px; font-weight: 800; color: #fde047; letter-spacing: 0.3px; line-height: 1.25; margin-top: 2px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .topbar-center-school { font-size: 10px; font-weight: 750; color: #e0f2fe; letter-spacing: 0.3px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .topbar-right-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; gap: 3px; }
-        .topbar-user-info { display: flex; flex-direction: column; align-items: center; width: 100%; }
-        .topbar-role-badge-yellow { font-size: 8.5px; font-weight: 950; color: #0f172a; background: #fde047; border: 1px solid #eab308; padding: 1.5px 5px; border-radius: 6px; letter-spacing: 0.3px; text-transform: uppercase; text-align: center; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.15); width: 100%; overflow: hidden; text-overflow: ellipsis; }
-        .topbar-logo-badge { width: 44px; height: 44px; border-radius: 12px; background: #ffffff; padding: 2px; border: 2px solid #fde047; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25); flex-shrink: 0; overflow: hidden; transition: transform 0.2s ease; }
-        .app-sidebar-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 90; display: none; opacity: 0; transition: opacity 0.3s ease; }
+        .form-control {
+            width: 100%;
+            background: #f8fafc;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 14px;
+            padding: 12px 14px;
+            font-size: 13px;
+            color: #0f172a;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+        .form-control:focus {
+            border-color: #0284c7;
+            background: #ffffff;
+            box-shadow: 0 0 12px rgba(2, 132, 199, 0.25);
+        }
+        .btn-eye-toggle {
+            position: absolute;
+            right: 12px;
+            background: none;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-action-primary {
+            width: 100%;
+            background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%);
+            border: none;
+            color: #ffffff;
+            padding: 14px;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 900;
+            cursor: pointer;
+            box-shadow: 0 8px 22px rgba(15, 82, 186, 0.35);
+            transition: all 0.2s ease;
+            letter-spacing: 0.5px;
+            text-align: center;
+        }
+        .btn-action-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 26px rgba(15, 82, 186, 0.45);
+        }
+
+        #appScreen {
+            display: none;
+            width: 100%;
+            min-height: 100vh;
+            flex-direction: column;
+            background: linear-gradient(180deg, #dbeafe 0%, #f0f9ff 240px, #f8fafc 100%);
+        }
+        .app-topbar {
+            background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%);
+            padding: 14px 16px 16px;
+            display: grid;
+            grid-template-columns: 44px 1fr 70px;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            box-shadow: 0 6px 20px rgba(15, 82, 186, 0.3);
+            gap: 8px;
+        }
+        .btn-burger-menu {
+            width: 38px;
+            height: 38px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1.5px solid rgba(255, 255, 255, 0.7);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            backdrop-filter: blur(8px);
+            flex-shrink: 0;
+        }
+        .btn-burger-menu:hover, .btn-burger-menu:active {
+            background: rgba(255, 255, 255, 0.32);
+            transform: scale(0.96);
+        }
+        .burger-line {
+            width: 18px;
+            height: 2.2px;
+            background-color: #ffffff;
+            border-radius: 2px;
+        }
+        .topbar-center-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            width: 100%;
+            padding: 0 2px;
+        }
+        .topbar-center-title {
+            font-size: 19px;
+            font-weight: 950;
+            color: #ffffff;
+            letter-spacing: 0.8px;
+            line-height: 1.1;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        }
+        .topbar-center-desc {
+            font-size: 10.5px;
+            font-weight: 800;
+            color: #fde047;
+            letter-spacing: 0.3px;
+            line-height: 1.25;
+            margin-top: 2px;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .topbar-center-school {
+            font-size: 10px;
+            font-weight: 750;
+            color: #e0f2fe;
+            letter-spacing: 0.3px;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .topbar-right-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            gap: 3px;
+        }
+        .topbar-user-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+        .topbar-role-badge-yellow {
+            font-size: 8.5px;
+            font-weight: 950;
+            color: #0f172a;
+            background: #fde047;
+            border: 1px solid #eab308;
+            padding: 1.5px 5px;
+            border-radius: 6px;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+            text-align: center;
+            white-space: nowrap;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .topbar-logo-badge {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: #ffffff;
+            padding: 2px;
+            border: 2px solid #fde047;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+
+        .app-sidebar-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 90;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
         .app-sidebar-backdrop.active { display: block; opacity: 1; }
-        .app-sidebar { width: 290px; background: #ffffff; border-right: 2px solid #bfdbfe; padding: 20px 16px; display: flex; flex-direction: column; gap: 8px; position: fixed; top: 0; bottom: 0; left: -310px; z-index: 95; transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 10px 0 35px rgba(0, 0, 0, 0.15); overflow-y: auto; }
+        .app-sidebar {
+            width: 290px;
+            background: #ffffff;
+            border-right: 2px solid #bfdbfe;
+            padding: 20px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: -310px;
+            z-index: 95;
+            transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 10px 0 35px rgba(0, 0, 0, 0.15);
+            overflow-y: auto;
+        }
         .app-sidebar.open { left: 0; }
-        .sidebar-close-btn { background: #fee2e2; border: 1px solid #fca5a5; color: #b91c1c; border-radius: 10px; padding: 8px 12px; font-size: 12px; font-weight: 800; cursor: pointer; align-self: flex-end; margin-bottom: 10px; }
-        .sidebar-nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; font-size: 13px; font-weight: 800; color: #334155; cursor: pointer; transition: all 0.2s ease; }
-        .sidebar-nav-item:hover, .sidebar-nav-item.active { background: #e0f2fe; color: #0284c7; border: 1.5px solid #bae6fd; }
-        .app-main-content { flex: 1; max-width: 480px; width: 100%; margin: 0 auto; padding: 16px 14px 44px; display: flex; flex-direction: column; gap: 14px; }
-        .card { background: #ffffff; border: 1.5px solid #bfdbfe; border-radius: 22px; padding: 18px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05); }
-        .badge-status { padding: 4px 10px; border-radius: 10px; font-size: 11px; font-weight: 850; display: inline-block; }
+        .sidebar-close-btn {
+            background: #fee2e2;
+            border: 1px solid #fca5a5;
+            color: #b91c1c;
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            align-self: flex-end;
+            margin-bottom: 10px;
+        }
+        .sidebar-nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            font-size: 13px;
+            font-weight: 800;
+            color: #334155;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .sidebar-nav-item:hover, .sidebar-nav-item.active {
+            background: #e0f2fe;
+            color: #0284c7;
+            border: 1.5px solid #bae6fd;
+        }
+
+        .app-main-content {
+            flex: 1;
+            max-width: 480px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 16px 14px 44px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .card {
+            background: #ffffff;
+            border: 1.5px solid #bfdbfe;
+            border-radius: 22px;
+            padding: 18px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+        }
+        .badge-status {
+            padding: 4px 10px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 850;
+            display: inline-block;
+        }
         .badge-blue { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
         .badge-green { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
         .badge-amber { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
         .badge-red { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
-        .btn-action { border: none; border-radius: 10px; padding: 7px 12px; font-size: 11px; font-weight: 850; cursor: pointer; transition: all 0.2s ease; }
+
+        .btn-action {
+            border: none;
+            border-radius: 10px;
+            padding: 7px 12px;
+            font-size: 11px;
+            font-weight: 850;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
         .btn-blue { background: #0284c7; color: #ffffff; }
         .btn-blue:hover { background: #0369a1; }
         .btn-amber { background: #f59e0b; color: #ffffff; }
@@ -113,51 +445,291 @@
         .btn-red:hover { background: #dc2626; }
         .btn-emerald { background: #10b981; color: #ffffff; }
         .btn-emerald:hover { background: #059669; }
-        .table-wrap { width: 100%; overflow-x: auto; border-radius: 14px; border: 1.5px solid #e2e8f0; margin-top: 10px; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; background: #ffffff; white-space: nowrap; }
-        th, td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
-        th { background: #f8fafc; font-weight: 850; color: #475569; }
-        .empty-placeholder { text-align: center; padding: 24px 12px; color: #94a3b8; font-weight: 600; }
-        .banner-carousel-wrap { position: relative; width: 100%; height: 310px; border-radius: 26px; overflow: hidden; box-shadow: 0 12px 30px rgba(15, 82, 186, 0.25); border: 2px solid #93c5fd; background: #0284c7; }
-        .banner-slide { position: absolute; inset: 0; opacity: 0; transition: opacity 0.6s ease; display: flex; align-items: flex-end; padding: 20px; }
+
+        .table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            border-radius: 14px;
+            border: 1.5px solid #e2e8f0;
+            margin-top: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            text-align: left;
+            background: #ffffff;
+            white-space: nowrap;
+        }
+        th, td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        th {
+            background: #f8fafc;
+            font-weight: 850;
+            color: #475569;
+        }
+        .empty-placeholder {
+            text-align: center;
+            padding: 24px 12px;
+            color: #94a3b8;
+            font-weight: 600;
+        }
+
+        .banner-carousel-wrap {
+            position: relative;
+            width: 100%;
+            height: 310px;
+            border-radius: 26px;
+            overflow: hidden;
+            box-shadow: 0 12px 30px rgba(15, 82, 186, 0.25);
+            border: 2px solid #93c5fd;
+            background: #0284c7;
+        }
+        .banner-slide {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            transition: opacity 0.6s ease;
+            display: flex;
+            align-items: flex-end;
+            padding: 20px;
+        }
         .banner-slide.active { opacity: 1; }
-        .banner-slide-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-        .banner-slide-overlay { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0, 0, 0, 0) 40%, rgba(2, 44, 105, 0.45) 100%); }
-        .banner-slogan-wrap { position: relative; z-index: 2; color: #ffffff; width: 100%; text-align: center; padding-bottom: 6px; }
-        .banner-slogan-title { font-size: 24px; font-weight: 950; letter-spacing: 0.5px; line-height: 1.15; text-transform: uppercase; text-shadow: 0 3px 8px rgba(0, 0, 0, 0.8), 0 1px 3px rgba(0, 0, 0, 0.9); }
-        .banner-slogan-sub { font-size: 12.5px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; margin-top: 4px; color: #fde047; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85); }
-        .banner-dots-wrap { position: absolute; bottom: 10px; right: 14px; display: flex; gap: 5px; z-index: 3; }
-        .banner-dot { width: 8px; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.5); cursor: pointer; transition: all 0.2s ease; }
-        .banner-dot.active { width: 20px; background: #fde047; }
-        .absensi-digital-card { background: linear-gradient(180deg, #f0f9ff 0%, #ffffff 100%); border: 2px solid #93c5fd; border-radius: 24px; padding: 18px 16px; box-shadow: 0 8px 24px rgba(2, 132, 199, 0.12); }
-        .absensi-header-wrap { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1.5px dashed #bfdbfe; }
+        .banner-slide-bg {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .banner-slide-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0) 40%, rgba(2, 44, 105, 0.45) 100%);
+        }
+        .banner-slogan-wrap {
+            position: relative;
+            z-index: 2;
+            color: #ffffff;
+            width: 100%;
+            text-align: center;
+            padding-bottom: 6px;
+        }
+        .banner-slogan-title {
+            font-size: 24px;
+            font-weight: 950;
+            letter-spacing: 0.5px;
+            line-height: 1.15;
+            text-transform: uppercase;
+            text-shadow: 0 3px 8px rgba(0, 0, 0, 0.8), 0 1px 3px rgba(0, 0, 0, 0.9);
+        }
+        .banner-slogan-sub {
+            font-size: 12.5px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-top: 4px;
+            color: #fde047;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85);
+        }
+        .banner-dots-wrap {
+            position: absolute;
+            bottom: 10px;
+            right: 14px;
+            display: flex;
+            gap: 5px;
+            z-index: 3;
+        }
+        .banner-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .banner-dot.active {
+            width: 20px;
+            background: #fde047;
+        }
+
+        .absensi-digital-card {
+            background: linear-gradient(180deg, #f0f9ff 0%, #ffffff 100%);
+            border: 2px solid #93c5fd;
+            border-radius: 24px;
+            padding: 18px 16px;
+            box-shadow: 0 8px 24px rgba(2, 132, 199, 0.12);
+        }
+        .absensi-header-wrap {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+            padding-bottom: 10px;
+            border-bottom: 1.5px dashed #bfdbfe;
+        }
         .absensi-title-main { font-size: 15px; font-weight: 950; color: #0f172a; letter-spacing: 0.5px; text-transform: uppercase; }
         .absensi-status-badge { font-size: 10px; font-weight: 900; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; }
-        .absensi-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .btn-absensi-box { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); border: 2px solid #7dd3fc; border-radius: 18px; padding: 14px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15); }
-        .btn-absensi-box:hover, .btn-absensi-box:active { transform: translateY(-2px); border-color: #0284c7; background: linear-gradient(135deg, #bae6fd 0%, #93c5fd 100%); box-shadow: 0 8px 20px rgba(2, 132, 199, 0.25); }
-        .btn-absensi-box.done-card { background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border-color: #4ade80; }
-        .btn-absensi-icon-wrap { width: 44px; height: 44px; border-radius: 12px; background: #ffffff; border: 1.5px solid #38bdf8; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08); }
+        .absensi-btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .btn-absensi-box {
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+            border: 2px solid #7dd3fc;
+            border-radius: 18px;
+            padding: 14px 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);
+        }
+        .btn-absensi-box:hover, .btn-absensi-box:active {
+            transform: translateY(-2px);
+            border-color: #0284c7;
+            background: linear-gradient(135deg, #bae6fd 0%, #93c5fd 100%);
+            box-shadow: 0 8px 20px rgba(2, 132, 199, 0.25);
+        }
+        .btn-absensi-box.done-card {
+            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+            border-color: #4ade80;
+        }
+        .btn-absensi-icon-wrap {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: #ffffff;
+            border: 1.5px solid #38bdf8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+        }
         .btn-absensi-text { font-size: 13px; font-weight: 900; color: #0f172a; line-height: 1.2; text-transform: uppercase; }
-        .mentor-info-card { background: linear-gradient(180deg, #e0f2fe 0%, #bae6fd 40%, #0284c7 100%); border: 2px solid #7dd3fc; border-radius: 26px; padding: 18px 16px; color: #0f172a; box-shadow: 0 10px 28px rgba(2, 132, 199, 0.2); position: relative; overflow: hidden; }
+
+        .mentor-info-card {
+            background: linear-gradient(180deg, #e0f2fe 0%, #bae6fd 40%, #0284c7 100%);
+            border: 2px solid #7dd3fc;
+            border-radius: 26px;
+            padding: 18px 16px;
+            color: #0f172a;
+            box-shadow: 0 10px 28px rgba(2, 132, 199, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
         .mentor-label { font-size: 11px; font-weight: 900; color: #0369a1; letter-spacing: 0.5px; text-transform: uppercase; }
         .mentor-name { font-size: 18px; font-weight: 950; color: #0f172a; margin-top: 2px; }
-        .details-white-sheet { background: #ffffff; border-radius: 20px; padding: 16px 14px; margin-top: 14px; color: #0f172a; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06); }
-        .detail-row-item { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; }
+        .details-white-sheet {
+            background: #ffffff;
+            border-radius: 20px;
+            padding: 16px 14px;
+            margin-top: 14px;
+            color: #0f172a;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+        }
+        .detail-row-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            font-weight: 700;
+        }
         .detail-left { display: flex; align-items: center; gap: 8px; color: #475569; font-weight: 800; font-size: 11px; }
-        .detail-icon-round { width: 28px; height: 28px; border-radius: 10px; background: #e0f2fe; border: 1px solid #bae6fd; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+        .detail-icon-round {
+            width: 28px;
+            height: 28px;
+            border-radius: 10px;
+            background: #e0f2fe;
+            border: 1px solid #bae6fd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
         .detail-right { color: #0f172a; font-weight: 900; text-align: right; }
-        .admin-welcome-card { background: #ffffff; border: 2px solid #bfdbfe; border-radius: 22px; padding: 18px; box-shadow: 0 4px 16px rgba(2, 132, 199, 0.1); margin-bottom: 14px; }
-        .admin-menu-box-wrap { background: #ffffff; border: 1.5px solid #bfdbfe; border-radius: 22px; padding: 18px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05); }
-        .admin-grid-12 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
-        .admin-item-card { background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%); border: 1.5px solid #bae6fd; border-radius: 18px; padding: 16px 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); min-height: 115px; }
-        .admin-item-card:hover, .admin-item-card:active { transform: translateY(-2px); border-color: #0284c7; background: #ffffff; box-shadow: 0 6px 20px rgba(2, 132, 199, 0.22); }
+
+        .admin-welcome-card {
+            background: #ffffff;
+            border: 2px solid #bfdbfe;
+            border-radius: 22px;
+            padding: 18px;
+            box-shadow: 0 4px 16px rgba(2, 132, 199, 0.1);
+            margin-bottom: 14px;
+        }
+        .admin-menu-box-wrap {
+            background: #ffffff;
+            border: 1.5px solid #bfdbfe;
+            border-radius: 22px;
+            padding: 18px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+        }
+        .admin-grid-12 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .admin-item-card {
+            background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);
+            border: 1.5px solid #bae6fd;
+            border-radius: 18px;
+            padding: 16px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+            min-height: 115px;
+        }
+        .admin-item-card:hover, .admin-item-card:active {
+            transform: translateY(-2px);
+            border-color: #0284c7;
+            background: #ffffff;
+            box-shadow: 0 6px 20px rgba(2, 132, 199, 0.22);
+        }
         .admin-item-icon { font-size: 28px; margin-bottom: 6px; }
         .admin-item-title { font-size: 12px; font-weight: 850; color: #0f172a; line-height: 1.3; }
         .admin-item-link { font-size: 10px; font-weight: 900; color: #0284c7; margin-top: 4px; }
-        .modal-backdrop-custom { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); z-index: 100; display: none; align-items: center; justify-content: center; padding: 16px; }
-        .modal-card-custom { background: #ffffff; border-radius: 22px; width: 100%; max-width: 440px; max-height: 90vh; overflow-y: auto; padding: 22px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25); animation: modalFadeIn 0.25s ease-out; }
-        @keyframes modalFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+        .modal-backdrop-custom {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 100;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .modal-card-custom {
+            background: #ffffff;
+            border-radius: 22px;
+            width: 100%;
+            max-width: 460px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 22px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+            animation: modalFadeIn 0.25s ease-out;
+        }
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -170,33 +742,66 @@
                 <div class="hud-title-badge">SISTEM INFORMASI PRAKTIK KERJA LAPANGAN</div>
             </div>
             <div class="badge-logo" title="SMK Negeri 1 Marisa">
-                <img src="https://placehold.co/60x60/eab308/ffffff?text=SMK" alt="Logo SMK Negeri 1 Marisa">
+                <img src="Logo SMK.png" alt="Logo SMK Negeri 1 Marisa" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                <svg viewBox="0 0 100 100" style="display: none; width: 100%; height: 100%;">
+                    <path d="M 50 5 Q 85 10 90 35 Q 90 70 50 95 Q 10 70 10 35 Q 15 10 50 5 Z" fill="#facc15" stroke="#dc2626" stroke-width="4"/>
+                    <circle cx="50" cy="42" r="18" fill="#0284c7" stroke="#0f172a" stroke-width="2"/>
+                    <circle cx="50" cy="42" r="9" fill="#f8fafc"/>
+                    <path d="M 28 62 Q 50 56 50 66 Q 50 56 72 62 L 70 73 Q 50 67 50 76 Q 50 67 30 73 Z" fill="#16a34a" stroke="#ca8a04" stroke-width="2"/>
+                    <path d="M 20 80 Q 50 74 80 80 L 76 88 Q 50 82 24 88 Z" fill="#ffffff" stroke="#ca8a04" stroke-width="1.5"/>
+                    <text x="50" y="86" font-size="5.5" font-weight="900" text-anchor="middle" fill="#0f172a">SMKN 1 MARISA</text>
+                </svg>
             </div>
         </div>
 
         <div class="hud-card">
             <h3 style="font-size: 15px; font-weight: 900; color: #0284c7; text-align: center;">PILIH RUANG PORTAL AKSES</h3>
             <p style="font-size: 11px; color: #64748b; text-align: center; margin-top: 4px;">Pilih ruang sesuai dengan peran resmi Anda</p>
+
             <div class="portal-grid">
                 <div class="portal-card role-siswa" onclick="window.masukPilihanEkosistem('siswa')">
                     <div class="portal-icon">👨‍🎓</div>
-                    <div class="portal-info"><div class="portal-title">ROOM SISWA PKL</div><div class="portal-desc">Presensi Selfie, GPS & Jurnal Harian</div></div><div class="portal-arrow">➔</div>
+                    <div class="portal-info">
+                        <div class="portal-title">ROOM SISWA PKL</div>
+                        <div class="portal-desc">Presensi Selfie, GPS & Jurnal Harian</div>
+                    </div>
+                    <div class="portal-arrow">➔</div>
                 </div>
+
                 <div class="portal-card role-guru" onclick="window.masukPilihanEkosistem('guru')">
                     <div class="portal-icon">👩‍🏫</div>
-                    <div class="portal-info"><div class="portal-title">ROOM GURU PEMBIMBING</div><div class="portal-desc">Validasi Jurnal & Monitoring Lapangan</div></div><div class="portal-arrow">➔</div>
+                    <div class="portal-info">
+                        <div class="portal-title">ROOM GURU PEMBIMBING</div>
+                        <div class="portal-desc">Validasi Jurnal & Monitoring Lapangan</div>
+                    </div>
+                    <div class="portal-arrow">➔</div>
                 </div>
+
                 <div class="portal-card role-industri" onclick="window.masukPilihanEkosistem('industri')">
                     <div class="portal-icon">🏭</div>
-                    <div class="portal-info"><div class="portal-title">ROOM INDUSTRI MITRA DUDI</div><div class="portal-desc">Pengesahan Jurnal & Evaluasi Magang</div></div><div class="portal-arrow">➔</div>
+                    <div class="portal-info">
+                        <div class="portal-title">ROOM INDUSTRI MITRA DUDI</div>
+                        <div class="portal-desc">Lembar Observasi PKL & Nilai Magang</div>
+                    </div>
+                    <div class="portal-arrow">➔</div>
                 </div>
+
                 <div class="portal-card role-orangtua" onclick="window.masukPilihanEkosistem('orangtua')">
                     <div class="portal-icon">👨‍👩‍👧</div>
-                    <div class="portal-info"><div class="portal-title">ROOM ORANG TUA / WALI</div><div class="portal-desc">Pantau Kehadiran & Kegiatan Ananda</div></div><div class="portal-arrow">➔</div>
+                    <div class="portal-info">
+                        <div class="portal-title">ROOM ORANG TUA / WALI</div>
+                        <div class="portal-desc">Pantau Kehadiran & Kegiatan Ananda</div>
+                    </div>
+                    <div class="portal-arrow">➔</div>
                 </div>
+
                 <div class="portal-card role-admin" onclick="window.masukPilihanEkosistem('admin')">
                     <div class="portal-icon">👨‍💼</div>
-                    <div class="portal-info"><div class="portal-title">ROOM PANITIA / ADMIN PKL</div><div class="portal-desc">Kelola Akun, Master Data, Alokasi & Rekap</div></div><div class="portal-arrow">➔</div>
+                    <div class="portal-info">
+                        <div class="portal-title">ROOM PANITIA / ADMIN PKL</div>
+                        <div class="portal-desc">Kelola Akun, Master Data, Rekap & Observasi</div>
+                    </div>
+                    <div class="portal-arrow">➔</div>
                 </div>
             </div>
         </div>
@@ -206,6 +811,7 @@
         <button onclick="window.kembaliKeGerbangEkosistem()" style="align-self: flex-start; background: #ffffff; border: 1.5px solid #bfdbfe; border-radius: 12px; padding: 8px 14px; font-size: 11px; font-weight: 800; color: #0284c7; cursor: pointer; margin-bottom: 14px;">
             ‹ Kembali ke Pilihan Ruang
         </button>
+
         <div class="hud-card">
             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1.5px solid #e2e8f0;">
                 <div id="boundRoleIcon" style="width: 46px; height: 46px; border-radius: 14px; background: #e0f2fe; display: flex; align-items: center; justify-content: center; font-size: 24px;">👨‍🎓</div>
@@ -214,11 +820,13 @@
                     <div id="textPetunjukAkun" style="font-size: 11px; color: #64748b; margin-top: 2px;">Akun Terdaftar di Sistem</div>
                 </div>
             </div>
+
             <form onsubmit="window.submitOnlineAuth(event)">
                 <div class="form-group">
                     <label id="labelLoginUsername" class="form-label">Username / NISN:</label>
                     <input type="text" id="loginUsernameInput" class="form-control" placeholder="Masukkan username resmi" required>
                 </div>
+
                 <div id="groupLoginPassword" class="form-group">
                     <label class="form-label">Kata Sandi (Password):</label>
                     <div class="form-control-wrap">
@@ -226,10 +834,14 @@
                         <button type="button" class="btn-eye-toggle" onclick="window.togglePasswordEye('loginPassInput', this)">👁️</button>
                     </div>
                 </div>
-                <button type="submit" id="btnSubmitLoginAction" class="btn-action-primary" style="margin-top: 6px;">MASUK KE ROOM SEKARANG ⚡</button>
+
+                <button type="submit" id="btnSubmitLoginAction" class="btn-action-primary" style="margin-top: 6px;">
+                    MASUK KE ROOM SEKARANG ⚡
+                </button>
             </form>
+
             <div id="linkLupaSandiWrap" style="text-align: center; margin-top: 14px;">
-                <button type="button" onclick="window.showModalInfo('Lupa Sandi', 'Hubungi Panitia PKL untuk mereset kata sandi Anda.')" style="background: none; border: none; color: #0284c7; font-size: 11px; font-weight: 800; cursor: pointer;">
+                <button type="button" onclick="window.bukaModalLupaPassword()" style="background: none; border: none; color: #0284c7; font-size: 11px; font-weight: 800; cursor: pointer;">
                     Lupa Kata Sandi? Hubungi Panitia
                 </button>
             </div>
@@ -238,44 +850,82 @@
 
     <div id="appScreen">
         <div class="app-topbar">
+            <!-- Kiri: Tombol Burger Menu -->
             <div style="display: flex; align-items: center; flex-shrink: 0;">
-                <button class="btn-burger-menu" onclick="window.toggleDrawerSidebar()" aria-label="Buka Menu">
-                    <div class="burger-line"></div><div class="burger-line"></div><div class="burger-line"></div>
+                <button class="btn-burger-menu" id="btnBurgerMenu" onclick="window.toggleDrawerSidebar()" aria-label="Buka Menu">
+                    <div class="burger-line"></div>
+                    <div class="burger-line"></div>
+                    <div class="burger-line"></div>
                 </button>
             </div>
+
+            <!-- Tengah: SIP-PKL Title -->
             <div class="topbar-center-wrap">
-                <div class="topbar-center-title">SIP-PKL</div>
+                <div class="topbar-center-title" id="topbarRoleTitle">SIP-PKL</div>
                 <div class="topbar-center-desc">Sistem Informasi Pengelolaan PKL</div>
                 <div class="topbar-center-school">SMK Negeri 1 Marisa</div>
             </div>
+
+            <!-- Kanan: Logo SMK dan Lencana Pengguna -->
             <div class="topbar-right-wrap">
-                <div class="topbar-logo-badge" title="SMK Negeri 1 Marisa"><img src="https://placehold.co/44x44/eab308/ffffff?text=SMK" alt="Logo"></div>
+                <div class="topbar-logo-badge" title="SMK Negeri 1 Marisa">
+                    <img src="Logo SMK.png" alt="Logo SMKN 1 Marisa" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                    <svg viewBox="0 0 100 100" style="display: none; width: 100%; height: 100%;">
+                        <path d="M 50 5 Q 85 10 90 35 Q 90 70 50 95 Q 10 70 10 35 Q 15 10 50 5 Z" fill="#facc15" stroke="#dc2626" stroke-width="4"/>
+                        <circle cx="50" cy="42" r="18" fill="#0284c7" stroke="#0f172a" stroke-width="2"/>
+                        <circle cx="50" cy="42" r="9" fill="#f8fafc"/>
+                        <path d="M 28 62 Q 50 56 50 66 Q 50 56 72 62 L 70 73 Q 50 67 50 76 Q 50 67 30 73 Z" fill="#16a34a" stroke="#ca8a04" stroke-width="2"/>
+                        <path d="M 20 80 Q 50 74 80 80 L 76 88 Q 50 82 24 88 Z" fill="#ffffff" stroke="#ca8a04" stroke-width="1.5"/>
+                        <text x="50" y="86" font-size="5.5" font-weight="900" text-anchor="middle" fill="#0f172a">SMKN 1 MARISA</text>
+                    </svg>
+                </div>
                 <div class="topbar-user-info">
-                    <div class="topbar-role-badge-yellow" id="topbarUserRoleBadge">PANITIA PKL</div>
+                    <div class="topbar-role-badge-yellow" id="topbarUserRoleBadge">
+                        PANITIA PKL
+                    </div>
                     <div id="topbarUserName" style="font-size: 8.5px; font-weight: 800; color: #ffffff; margin-top: 3.5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65px;">Pengguna</div>
                 </div>
             </div>
         </div>
+
         <div class="app-sidebar-backdrop" id="sidebarBackdrop" onclick="window.closeDrawerSidebar()"></div>
         <div class="app-sidebar" id="appSidebar">
             <button class="sidebar-close-btn" onclick="window.closeDrawerSidebar()">✕ Tutup Menu</button>
             <div style="padding: 10px 8px; border-bottom: 1.5px solid #e2e8f0; margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
-                <div style="width: 44px; height: 44px; border-radius: 12px; background: #ffffff; border: 1.5px solid #eab308; padding: 2px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="https://placehold.co/44x44/eab308/ffffff?text=SMK" alt="Logo"></div>
-                <div><div style="font-size: 10px; color: #64748b; font-weight: 800; letter-spacing: 0.5px;">SMK NEGERI 1 MARISA</div><div id="sidebarRoleLabel" style="font-size: 13px; font-weight: 900; color: #0284c7; margin-top: 1px;">PANITIA PKL</div></div>
+                <div style="width: 44px; height: 44px; border-radius: 12px; background: #ffffff; border: 1.5px solid #eab308; padding: 2px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <img src="Logo SMK.png" alt="Logo SMKN 1 Marisa" style="width: 100%; height: 100%; object-fit: contain;">
+                </div>
+                <div>
+                    <div style="font-size: 10px; color: #64748b; font-weight: 800; letter-spacing: 0.5px;">SMK NEGERI 1 MARISA</div>
+                    <div id="sidebarRoleLabel" style="font-size: 13px; font-weight: 900; color: #0284c7; margin-top: 1px;">PANITIA PKL</div>
+                </div>
             </div>
-            <div id="sidebarNavContainer" style="display: flex; flex-direction: column; gap: 6px;"></div>
+            <div id="sidebarNavContainer" style="display: flex; flex-direction: column; gap: 6px;">
+                <!-- Navigasi dinamis dirender di sini -->
+            </div>
             <div style="margin-top: auto; padding-top: 16px; border-top: 1.5px solid #e2e8f0;">
-                <button onclick="window.handleOnlineLogout()" class="btn-action btn-red" style="width: 100%; padding: 10px; font-size: 12px;">🚪 Keluar (Logout)</button>
+                <button onclick="window.handleOnlineLogout()" class="btn-action btn-red" style="width: 100%; padding: 10px; font-size: 12px;">
+                    🚪 Keluar (Logout)
+                </button>
             </div>
         </div>
+
         <div class="app-main-content" id="mainAppContent">
-            <div id="mobileBackButtonWrap" style="display: none;"><button onclick="window.openFeature('dashboard', 'Beranda')" class="btn-action" style="background: #ffffff; border: 1.5px solid #bfdbfe; color: #0284c7; font-size: 11px;">‹ Kembali ke Beranda</button></div>
-            <div id="mainFeatureContainer"></div>
+            <div id="mobileBackButtonWrap" style="display: none;">
+                <button onclick="window.openFeature('dashboard', 'Beranda')" class="btn-action" style="background: #ffffff; border: 1.5px solid #bfdbfe; color: #0284c7; font-size: 11px;">
+                    ‹ Kembali ke Beranda
+                </button>
+            </div>
+            <div id="mainFeatureContainer">
+                <!-- Fitur aktif dirender di sini -->
+            </div>
         </div>
     </div>
 
-    <!-- Modals -->
-    <div id="modalDynamicBackdrop" class="modal-backdrop-custom"><div id="modalDynamicCard" class="modal-card-custom"></div></div>
+    <div id="modalDynamicBackdrop" class="modal-backdrop-custom">
+        <div id="modalDynamicCard" class="modal-card-custom"></div>
+    </div>
+
     <div id="modalInfoBackdrop" class="modal-backdrop-custom">
         <div class="modal-card-custom" style="text-align: center;">
             <h3 id="modalInfoTitle" style="font-size: 16px; font-weight: 900; color: #0284c7; margin-bottom: 8px;">Informasi</h3>
@@ -283,6 +933,7 @@
             <button onclick="window.closeModalInfo()" class="btn-action-primary" style="padding: 10px 24px; width: auto; min-width: 120px;">Mengerti</button>
         </div>
     </div>
+
     <div id="modalConfirmBackdrop" class="modal-backdrop-custom">
         <div class="modal-card-custom" style="text-align: center;">
             <h3 id="modalConfirmTitle" style="font-size: 16px; font-weight: 900; color: #ef4444; margin-bottom: 8px;">Konfirmasi</h3>
@@ -295,79 +946,153 @@
     </div>
 
     <script>
-        // Modal Utilities
-        window.openDynamicModal = function(html) {
-            const bd = document.getElementById("modalDynamicBackdrop");
-            const cd = document.getElementById("modalDynamicCard");
-            if(bd && cd) { cd.innerHTML = html; bd.style.display = "flex"; }
-        };
-        window.closeDynamicModal = function() {
-            const bd = document.getElementById("modalDynamicBackdrop");
-            if(bd) bd.style.display = "none";
-        };
-        window.showModalInfo = function(title, msg) {
-            const bd = document.getElementById("modalInfoBackdrop");
-            if(bd) {
-                document.getElementById("modalInfoTitle").innerText = title;
-                document.getElementById("modalInfoMessage").innerHTML = msg;
-                bd.style.display = "flex";
-            } else { alert(title + "\n" + msg); }
-        };
-        window.closeModalInfo = function() {
-            const bd = document.getElementById("modalInfoBackdrop");
-            if(bd) bd.style.display = "none";
-        };
-        window.showConfirmDialog = function(title, msg, onOk) {
-            const bd = document.getElementById("modalConfirmBackdrop");
-            if(bd) {
-                document.getElementById("modalConfirmTitle").innerText = title;
-                document.getElementById("modalConfirmMessage").innerHTML = msg;
-                document.getElementById("btnModalConfirmOk").onclick = function() {
-                    window.closeModalConfirm();
-                    if(onOk) onOk();
-                };
-                bd.style.display = "flex";
+        (function() {
+            window.addEventListener('error', function(event) {
+                if (event && (
+                    (event.message && (event.message.includes('WebSocket') || event.message.includes('Canvas') || event.message.includes('SecurityError'))) ||
+                    (event.error && String(event.error).includes('SecurityError'))
+                )) {
+                    event.preventDefault();
+                    return true;
+                }
+            }, true);
+
+            window.addEventListener('unhandledrejection', function(event) {
+                if (event && event.reason && (
+                    String(event.reason).includes('WebSocket') ||
+                    String(event.reason).includes('Canvas') ||
+                    String(event.reason).includes('SecurityError')
+                )) {
+                    event.preventDefault();
+                }
+            });
+
+            function MockWebSocket(url, protocols) {
+                this.url = url;
+                this.protocols = protocols;
+                this.readyState = 3;
+                setTimeout(() => {
+                    if (typeof this.onclose === 'function') {
+                        this.onclose({ code: 1000, reason: "Fallback HTTP sync active", wasClean: true });
+                    }
+                }, 50);
             }
-        };
-        window.closeModalConfirm = function() {
-            const bd = document.getElementById("modalConfirmBackdrop");
-            if(bd) bd.style.display = "none";
-        };
-        window.toggleAllCheckboxes = function(type, isChecked) {
-            const cbs = document.querySelectorAll('.cb-' + type);
-            cbs.forEach(cb => cb.checked = isChecked);
-        };
-        window.unggahKeStorageAmanLimit = async function(base64, bucket, path) {
-            return base64; // Stub
-        };
+            MockWebSocket.prototype.send = function() {};
+            MockWebSocket.prototype.close = function() { this.readyState = 3; };
+            MockWebSocket.prototype.addEventListener = function() {};
+            MockWebSocket.prototype.removeEventListener = function() {};
+            MockWebSocket.CONNECTING = 0;
+            MockWebSocket.OPEN = 1;
+            MockWebSocket.CLOSING = 2;
+            MockWebSocket.CLOSED = 3;
+            window.MockWebSocket = MockWebSocket;
+        })();
 
         const STORAGE_KEY_DB = "SIP_PKL_MARISA_MASTER_DB";
         const STORAGE_KEY_SESSION = "SIP_PKL_MARISA_USER_SESSION";
-        const DEFAULT_PKL_CONFIG = { tglAwal: "15 Juli 2026", tglPenarikan: "15 November 2026", durasi: "4 Bulan (120 Hari)" };
-        const DEFAULT_BANNER_IMAGES = [
-            { url: "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80", slogan1: "SMK BISA! SMK HEBAT!", slogan2: "SIAP KERJA, SANTUN, MANDIRI, KREATIF" },
-            { url: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1000&q=80", slogan1: "INTEGRITAS & DISIPLIN TINGGI", slogan2: "UNGGUL DI DUNIA USAHA & DUNIA INDUSTRI" }
+        const STORAGE_KEY_CLOUD_CFG = "SIP_PKL_MARISA_SUPABASE_CFG";
+
+        const DAFTAR_JURUSAN_SMKN1 = [
+            "Akuntansi (AK)",
+            "Bisnis Digital (BD)",
+            "Nautika Kapal Penangkap Ikan (NKPI)",
+            "Desain pemodelan dan Informasi Bangunan (DPIB)",
+            "Teknik Sepeda Motor (TSM)",
+            "Teknik Kendaraan Ringan (TKR)",
+            "Teknik Jaringan Komputer & Telekomunikasi (TJKT)",
+            "Teknik Pemesinan (TP)",
+            "Teknik Konstruksi dan Perumahan (TKP)"
         ];
 
+        const DEFAULT_PKL_CONFIG = {
+            tglAwal: "15 Juli 2026",
+            tglPenarikan: "15 November 2026",
+            durasi: "4 Bulan (120 Hari)"
+        };
+
+        const DEFAULT_BANNER_IMAGES = [
+            { 
+                url: "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80", 
+                slogan1: "SMK BISA! SMK HEBAT!", 
+                slogan2: "SIAP KERJA, SANTUN, MANDIRI, KREATIF" 
+            },
+            { 
+                url: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1000&q=80", 
+                slogan1: "INTEGRITAS & DISIPLIN TINGGI", 
+                slogan2: "UNGGUL DI DUNIA USAHA & DUNIA INDUSTRI" 
+            }
+        ];
+
+        const DEFAULT_OBSERVASI_CONFIG = {
+            judul: "Lembar Observasi PKL",
+            link: "https://docs.google.com/forms",
+            deskripsi: "Lembar observasi dan evaluasi pelaksanaan praktik siswa magang di industri mitra.",
+            aktif: true
+        };
+
         window.cloudState = {
-            userProfile: null, activeRole: "siswa", currentFeature: "dashboard",
-            bannerSliderImages: DEFAULT_BANNER_IMAGES, pklConfig: DEFAULT_PKL_CONFIG,
-            linkObservasi: { judul: "", url: "" },
-            jamConfig: { masukMulai: "06:30", masukTepatWaktu: "08:15", masukBatasAkhir: "15:00", pulangMulai: "16:00", pulangBatasAkhir: "23:00" },
+            userProfile: null,
+            activeRole: "siswa",
+            currentFeature: "dashboard",
+            bannerSliderImages: DEFAULT_BANNER_IMAGES,
+            pklConfig: DEFAULT_PKL_CONFIG,
+            observasiConfig: DEFAULT_OBSERVASI_CONFIG,
+            jamConfig: {
+                masukMulai: "06:30",
+                masukTepatWaktu: "08:15",
+                masukBatasAkhir: "15:00",
+                pulangMulai: "16:00",
+                pulangBatasAkhir: "23:00",
+                masuk: "08:15",
+                pulang: "16:00",
+                toleransi: 50
+            },
             registeredUsers: [
                 { role: "admin", nama: "Panitia PKL SMKN 1 Marisa", username: "Panitia PKL", pass: "SMKBisa2000", identitas: "PANITIA-2026" },
-                { role: "industri", nama: "PT. Telkom Marisa", username: "telkom", pass: "dudi123", identitas: "telkom" }
+                { role: "guru", nama: "Wilasia S. Talaa, S.ST", username: "198501012010012001", pass: "guru123", identitas: "198501012010012001" },
+                { role: "siswa", nama: "Ahmad Dani", username: "1001", pass: "siswa123", identitas: "1001" },
+                { role: "industri", nama: "PT. Telkom Marisa", username: "telkom_marisa", pass: "dudi123", identitas: "telkom_marisa" }
             ],
-            siswa: [], guru: [], industri: [{ nama: "PT. Telkom Marisa", lat: "0", lng: "0", radius: 100 }], penempatan: [], penugasanMonitoring: [], absensi: [], jurnal: [], dokumen: [], nilai: [], agendaKunjungan: [], laporanAkhir: [], pengaduan: []
+            siswa: [
+                { nama: "Ahmad Dani", nis: "1001", jk: "L", kelas: "Teknik Jaringan Komputer & Telekomunikasi (TJKT)", noHp: "081234567890" },
+                { nama: "Nurul Hidayah", nis: "1002", jk: "P", kelas: "Akuntansi (AK)", noHp: "081234567891" }
+            ],
+            guru: [
+                { nama: "Wilasia S. Talaa, S.ST", nip: "198501012010012001", mapel: "Teknik Jaringan Komputer & Telekomunikasi (TJKT)", noHp: "08111222333" }
+            ],
+            industri: [
+                { id: "ind_1", nama: "PT. Telkom Marisa", alamat: "Jl. Trans Sulawesi No. 12", pimpinan: "Bapak Anton", noWa: "081234567890", radius: 50, masuk: "08:00", pulang: "16:00", lat: "0.45612", lng: "121.94210" }
+            ],
+            penempatan: [
+                { id: "pen_1", guru: "Wilasia S. Talaa, S.ST", industri: "PT. Telkom Marisa", siswa: ["Ahmad Dani"] }
+            ],
+            penugasanMonitoring: [],
+            absensi: [],
+            jurnal: [],
+            dokumen: [
+                { id: "doc_1", judul: "Buku Panduan Pelaksanaan PKL 2026", peruntukan: "Semua", link: "https://drive.google.com", tgl: "2026-07-15" }
+            ],
+            nilai: [],
+            agendaKunjungan: [],
+            laporanAkhir: [],
+            pengaduan: []
         };
 
         try {
             const rawStored = localStorage.getItem(STORAGE_KEY_DB);
             if (rawStored) {
                 const parsed = JSON.parse(rawStored);
-                delete parsed.userProfile; delete parsed.activeRole; delete parsed.currentFeature;
+                delete parsed.userProfile;
+                delete parsed.activeRole;
+                delete parsed.currentFeature;
                 Object.assign(window.cloudState, parsed);
+                if (!window.cloudState.observasiConfig) {
+                    window.cloudState.observasiConfig = DEFAULT_OBSERVASI_CONFIG;
+                }
             }
+        } catch(e) {}
+
+        try {
             const rawSession = localStorage.getItem(STORAGE_KEY_SESSION);
             if (rawSession) {
                 const parsedSession = JSON.parse(rawSession);
@@ -378,22 +1103,143 @@
             }
         } catch(e) {}
 
-        window.isGuruMatch = (a, b) => { if (!a || !b) return false; return a.toLowerCase().trim() === b.toLowerCase().trim(); };
-        window.isIndustriMatch = (a, b) => { 
-            if (!a || !b) return false; 
-            if (Array.isArray(a)) return a.some(item => item && item.toLowerCase().trim() === b.toLowerCase().trim()); 
-            if (typeof a === 'string' && a.includes(',')) return a.split(',').some(item => item && item.toLowerCase().trim() === b.toLowerCase().trim()); 
-            return a.toLowerCase().trim() === b.toLowerCase().trim(); 
-        };
-
-        window.getSanitizedCloudPayload = () => {
+        window.getSanitizedCloudPayload = function() {
             return {
-                registeredUsers: window.cloudState.registeredUsers || [], siswa: window.cloudState.siswa || [], guru: window.cloudState.guru || [], industri: window.cloudState.industri || [], penempatan: window.cloudState.penempatan || [], penugasanMonitoring: window.cloudState.penugasanMonitoring || [], absensi: window.cloudState.absensi || [], jurnal: window.cloudState.jurnal || [], dokumen: window.cloudState.dokumen || [], nilai: window.cloudState.nilai || [], agendaKunjungan: window.cloudState.agendaKunjungan || [], laporanAkhir: window.cloudState.laporanAkhir || [], pengaduan: window.cloudState.pengaduan || [], bannerSliderImages: window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES, pklConfig: window.cloudState.pklConfig || DEFAULT_PKL_CONFIG, linkObservasi: window.cloudState.linkObservasi || { judul: "", url: "" }, jamConfig: window.cloudState.jamConfig || {}
+                registeredUsers: window.cloudState.registeredUsers || [],
+                siswa: window.cloudState.siswa || [],
+                guru: window.cloudState.guru || [],
+                industri: window.cloudState.industri || [],
+                penempatan: window.cloudState.penempatan || [],
+                penugasanMonitoring: window.cloudState.penugasanMonitoring || [],
+                absensi: window.cloudState.absensi || [],
+                jurnal: window.cloudState.jurnal || [],
+                dokumen: window.cloudState.dokumen || [],
+                nilai: window.cloudState.nilai || [],
+                agendaKunjungan: window.cloudState.agendaKunjungan || [],
+                laporanAkhir: window.cloudState.laporanAkhir || [],
+                pengaduan: window.cloudState.pengaduan || [],
+                bannerSliderImages: window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES,
+                pklConfig: window.cloudState.pklConfig || DEFAULT_PKL_CONFIG,
+                observasiConfig: window.cloudState.observasiConfig || DEFAULT_OBSERVASI_CONFIG,
+                jamConfig: window.cloudState.jamConfig || {
+                    masukMulai: "06:30",
+                    masukTepatWaktu: "08:15",
+                    masukBatasAkhir: "15:00",
+                    pulangMulai: "16:00",
+                    pulangBatasAkhir: "23:00"
+                }
             };
         };
 
-        window.simpanDatabasePersisten = (push = true) => {
-            try { localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(window.getSanitizedCloudPayload())); } catch(e) {}
+        window.simpanDatabasePersisten = function(pushToCloud = true) {
+            const payload = window.getSanitizedCloudPayload();
+            try {
+                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(payload));
+            } catch(e) {}
+            if (pushToCloud && typeof window.kirimSnapshotKeSupabase === 'function') {
+                window.kirimSnapshotKeSupabase(payload, true);
+            }
+        };
+
+        window.isCloudConnected = false;
+        window.supabaseClient = null;
+
+        window.getSupabaseCredentials = function() {
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY_CLOUD_CFG);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    if (parsed.url && parsed.key) return parsed;
+                }
+            } catch(e) {}
+            return {
+                url: "https://tobyuffkjowdmcvygwht.supabase.co",
+                key: "sb_publishable_RWHKkL2iW9UpPKIm7boZIQ_sft-6be_"
+            };
+        };
+
+        window.inisialisasiSupabaseClient = function() {
+            if (typeof supabase !== 'undefined') {
+                try {
+                    const creds = window.getSupabaseCredentials();
+                    window.supabaseClient = supabase.createClient(creds.url, creds.key, {
+                        auth: { persistSession: false }
+                    });
+                    window.isCloudConnected = true;
+                } catch(err) {
+                    window.isCloudConnected = false;
+                }
+            }
+        };
+
+        window.kirimSnapshotKeSupabase = async function(payload, silent = false) {
+            if (!window.supabaseClient) return false;
+            try {
+                const cleanData = window.getSanitizedCloudPayload();
+                let ok = false;
+                const resState = await window.supabaseClient.from('app_state').upsert({ id: 1, payload: cleanData }, { onConflict: 'id' });
+                if (!resState.error) ok = true;
+                const resCloud = await window.supabaseClient.from('app_cloud_db').upsert({ id: 'master', payload: cleanData }, { onConflict: 'id' });
+                if (!resCloud.error) ok = true;
+                if (ok) {
+                    window.isCloudConnected = true;
+                    return true;
+                }
+                return false;
+            } catch (err) {
+                return false;
+            }
+        };
+
+        window.tarikDataDariCloud = async function(silent = true) {
+            if (!window.supabaseClient) return false;
+            try {
+                let cloudPayload = null;
+                const { data: dState } = await window.supabaseClient.from('app_state').select('payload').eq('id', 1).maybeSingle();
+                if (dState && dState.payload) {
+                    cloudPayload = dState.payload;
+                } else {
+                    const { data: dCloud } = await window.supabaseClient.from('app_cloud_db').select('payload').eq('id', 'master').maybeSingle();
+                    if (dCloud && dCloud.payload) cloudPayload = dCloud.payload;
+                }
+                if (cloudPayload) {
+                    window.terapkanDataRealtime(cloudPayload);
+                    window.isCloudConnected = true;
+                    return true;
+                }
+                return false;
+            } catch (err) {
+                return false;
+            }
+        };
+
+        window.terapkanDataRealtime = function(cloudData) {
+            if (!cloudData || typeof cloudData !== 'object') return;
+            const myUser = window.cloudState.userProfile;
+            const myRole = window.cloudState.activeRole;
+            const myFeature = window.cloudState.currentFeature;
+
+            if (Array.isArray(cloudData.registeredUsers)) window.cloudState.registeredUsers = cloudData.registeredUsers;
+            if (Array.isArray(cloudData.siswa)) window.cloudState.siswa = cloudData.siswa;
+            if (Array.isArray(cloudData.guru)) window.cloudState.guru = cloudData.guru;
+            if (Array.isArray(cloudData.industri)) window.cloudState.industri = cloudData.industri;
+            if (Array.isArray(cloudData.penempatan)) window.cloudState.penempatan = cloudData.penempatan;
+            if (Array.isArray(cloudData.penugasanMonitoring)) window.cloudState.penugasanMonitoring = cloudData.penugasanMonitoring;
+            if (Array.isArray(cloudData.absensi)) window.cloudState.absensi = cloudData.absensi;
+            if (Array.isArray(cloudData.jurnal)) window.cloudState.jurnal = cloudData.jurnal;
+            if (Array.isArray(cloudData.dokumen)) window.cloudState.dokumen = cloudData.dokumen;
+            if (Array.isArray(cloudData.nilai)) window.cloudState.nilai = cloudData.nilai;
+            if (Array.isArray(cloudData.agendaKunjungan)) window.cloudState.agendaKunjungan = cloudData.agendaKunjungan;
+            if (Array.isArray(cloudData.laporanAkhir)) window.cloudState.laporanAkhir = cloudData.laporanAkhir;
+            if (Array.isArray(cloudData.pengaduan)) window.cloudState.pengaduan = cloudData.pengaduan;
+            if (Array.isArray(cloudData.bannerSliderImages)) window.cloudState.bannerSliderImages = cloudData.bannerSliderImages;
+            if (cloudData.pklConfig) window.cloudState.pklConfig = cloudData.pklConfig;
+            if (cloudData.jamConfig) window.cloudState.jamConfig = cloudData.jamConfig;
+            if (cloudData.observasiConfig) window.cloudState.observasiConfig = cloudData.observasiConfig;
+
+            window.cloudState.userProfile = myUser;
+            window.cloudState.activeRole = myRole;
+            window.cloudState.currentFeature = myFeature;
         };
 
         const roleDefaults = {
@@ -404,60 +1250,124 @@
             industri: { label: "ROOM INDUSTRI MITRA DUDI", icon: "🏭", usernameLabel: "Username Mitra DUDI:", placeholder: "Masukkan ID Mitra Terdaftar", needPass: true }
         };
 
-        // KUNCI PERBAIKAN: roleMenus SUDAH BERSIH DARI GPS DAN MENGGUNAKAN LEMBAR OBSERVASI
         const roleMenus = {
-            siswa: [{ id: "dashboard", label: "Beranda Siswa", icon: "📊" }, { id: "presensi", label: "Presensi GPS", icon: "📍" }],
-            guru: [{ id: "dashboard", label: "Beranda Guru", icon: "📊" }, { id: "siswa-bimbingan", label: "Siswa Bimbingan", icon: "👥" }],
-            industri: [{ id: "dashboard", label: "Beranda Industri", icon: "📊" }, { id: "siswa-magang", label: "Daftar Siswa Magang", icon: "👥" }],
-            orangtua: [{ id: "dashboard", label: "Beranda Wali Siswa", icon: "📊" }],
+            siswa: [
+                { id: "dashboard", label: "Beranda Siswa", icon: "📊" },
+                { id: "presensi", label: "Presensi GPS & Selfie", icon: "📍" },
+                { id: "jurnal", label: "Jurnal Harian PKL", icon: "📖" },
+                { id: "dokumen", label: "Panduan & Dokumen", icon: "📁" },
+                { id: "laporan", label: "Laporan Akhir PKL", icon: "📄" },
+                { id: "aduan", label: "Laporkan Masalah", icon: "⚠️" }
+            ],
+            guru: [
+                { id: "dashboard", label: "Beranda Guru", icon: "📊" },
+                { id: "siswa-bimbingan", label: "Siswa Bimbingan", icon: "👥" },
+                { id: "validasi-jurnal", label: "Validasi Jurnal Siswa", icon: "📋" },
+                { id: "agenda-kunjungan", label: "Agenda Kunjungan DUDI", icon: "🚗" },
+                { id: "penilaian", label: "Penilaian Bimbingan", icon: "🏆" },
+                { id: "laporan", label: "Validasi Laporan Akhir", icon: "📄" },
+                { id: "dokumen", label: "Dokumen PKL", icon: "📁" },
+                { id: "rekap-absensi", label: "Rekap Presensi Global", icon: "📈" },
+                { id: "rekap-jurnal", label: "Rekap Jurnal Siswa", icon: "📖" }
+            ],
             admin: [
                 { id: "dashboard", label: "Beranda Panitia", icon: "📊" },
                 { id: "kelola-akun", label: "Buat Akun & Kredensial", icon: "🔑" },
                 { id: "master-siswa", label: "Data Master Siswa", icon: "👨‍🎓" },
                 { id: "master-guru", label: "Data Master Guru", icon: "👩‍🏫" },
                 { id: "master-industri", label: "Mitra Industri DUDI", icon: "🏭" },
-                { id: "lembar-observasi", label: "Link Aplikasi Eksternal", icon: "🔗" },
+                { id: "lembar-observasi", label: "Lembar Observasi PKL", icon: "📋" },
                 { id: "penempatan", label: "Alokasi Guru & Siswa", icon: "🔄" },
-                { id: "periode-pkl", label: "Periode Pelaksanaan PKL", icon: "📅" }
+                { id: "rekap-absensi", label: "Rekap Presensi Global", icon: "📈" },
+                { id: "rekap-masuk-pulang", label: "Rekap Presensi Masuk & Pulang", icon: "⏱️" },
+                { id: "rekap-jurnal", label: "Rekap Jurnal Siswa", icon: "📖" },
+                { id: "jam-geofence", label: "Jam & Geofence GPS", icon: "📍" },
+                { id: "periode-pkl", label: "Periode Pelaksanaan PKL", icon: "📅" },
+                { id: "dokumen", label: "Manajemen Dokumen", icon: "📁" },
+                { id: "laporan", label: "Pantau Laporan Akhir", icon: "📄" },
+                { id: "aduan", label: "Laporan Pengaduan", icon: "⚠️" },
+                { id: "database-cloud", label: "Database Cloud [Supabase]", icon: "☁️" },
+                { id: "banner-jadwal", label: "Banner Gambar Slider", icon: "🖼️" }
+            ],
+            industri: [
+                { id: "dashboard", label: "Beranda Industri", icon: "📊" },
+                { id: "lembar-observasi-dudi", label: "Lembar Observasi PKL", icon: "📋" },
+                { id: "siswa-magang", label: "Daftar Siswa Magang", icon: "👥" },
+                { id: "validasi-jurnal", label: "Pengesahan Jurnal", icon: "📋" },
+                { id: "penilaian-industri", label: "Lembar Nilai Berstempel", icon: "🏆" }
+            ],
+            orangtua: [
+                { id: "dashboard", label: "Beranda Wali Siswa", icon: "📊" },
+                { id: "presensi-ananda", label: "Presensi Harian Ananda", icon: "📍" },
+                { id: "jurnal-ananda", label: "Log Jurnal Ananda", icon: "📖" },
+                { id: "dokumen", label: "Panduan Resmi PKL", icon: "📁" },
+                { id: "aduan", label: "Kontak Sekolah", icon: "⚠️" }
             ]
         };
 
-        window.toggleDrawerSidebar = () => {
-            document.getElementById("appSidebar").classList.toggle("open");
-            document.getElementById("sidebarBackdrop").classList.toggle("active");
-        };
-        window.closeDrawerSidebar = () => {
-            document.getElementById("appSidebar").classList.remove("open");
-            document.getElementById("sidebarBackdrop").classList.remove("active");
+        window.toggleDrawerSidebar = function() {
+            const sidebar = document.getElementById("appSidebar");
+            const backdrop = document.getElementById("sidebarBackdrop");
+            if (!sidebar || !backdrop) return;
+            const isOpen = sidebar.classList.contains("open");
+            if (isOpen) {
+                sidebar.classList.remove("open");
+                backdrop.classList.remove("active");
+            } else {
+                sidebar.classList.add("open");
+                backdrop.classList.add("active");
+            }
         };
 
-        window.renderSidebar = () => {
+        window.closeDrawerSidebar = function() {
+            const sidebar = document.getElementById("appSidebar");
+            const backdrop = document.getElementById("sidebarBackdrop");
+            if (sidebar) sidebar.classList.remove("open");
+            if (backdrop) backdrop.classList.remove("active");
+        };
+
+        window.renderSidebar = function() {
+            const navContainer = document.getElementById("sidebarNavContainer");
+            if (!navContainer) return;
             const role = window.cloudState.activeRole || "siswa";
             const menus = roleMenus[role] || roleMenus.siswa;
             let html = "";
             menus.forEach(m => {
                 const isActive = (window.cloudState.currentFeature === m.id);
-                html += `<div class="sidebar-nav-item ${isActive ? 'active' : ''}" onclick="window.openFeature('${m.id}', '${m.label}')"><span>${m.icon}</span><span>${m.label}</span></div>`;
+                html += `
+                <div class="sidebar-nav-item ${isActive ? 'active' : ''}" onclick="window.openFeature('${m.id}', '${m.label}')">
+                    <span>${m.icon}</span>
+                    <span>${m.label}</span>
+                </div>`;
             });
-            document.getElementById("sidebarNavContainer").innerHTML = html;
+            navContainer.innerHTML = html;
         };
 
-        const createPlaceholder = (title, desc) => `
-            <div class="card">
-                <h3 style="font-size: 16px; font-weight: 900; color: #0f172a;">${title}</h3>
-                <p style="font-size: 12px; color: #64748b; margin-top: 6px;">${desc}</p>
-            </div>
-        `;
+        window.openFeature = function(featureId, title, isBackgroundSync = false) {
+            // Pengamanan sandi untuk Database Cloud Supabase
+            if (featureId === 'database-cloud' && !window.isSupabaseUnlocked) {
+                window.bukaModalOtorisasiSupabase();
+                return;
+            }
 
-        window.renderPresensiGPS = () => createPlaceholder("Presensi GPS", "Fitur Presensi diaktifkan melalui modal di beranda.");
-        window.renderSiswaBimbinganList = () => createPlaceholder("Siswa Bimbingan / Magang", "Menampilkan daftar siswa yang dibimbing.");
-        
-        window.openFeature = (featureId, title, isBackgroundSync = false) => {
+            // Aksi langsung buka tautan observasi untuk industri jika menu diklik
+            if (featureId === 'lembar-observasi-dudi') {
+                window.bukaTautanObservasiIndustri();
+                return;
+            }
+
             window.cloudState.currentFeature = featureId;
             const role = window.cloudState.activeRole || "siswa";
             const backWrap = document.getElementById("mobileBackButtonWrap");
-            if (backWrap) backWrap.style.display = (featureId === 'dashboard') ? 'none' : 'block';
-            if (!isBackgroundSync) window.closeDrawerSidebar();
+            const mainContainer = document.getElementById("mainFeatureContainer");
+
+            if (backWrap) {
+                backWrap.style.display = (featureId === 'dashboard') ? 'none' : 'block';
+            }
+
+            if (!isBackgroundSync) {
+                window.closeDrawerSidebar();
+            }
 
             let contentHtml = "";
             switch(featureId) {
@@ -465,121 +1375,418 @@
                     if (role === 'siswa') contentHtml = window.renderSiswaOfficialDashboard();
                     else if (role === 'guru') contentHtml = window.renderGuruOfficialDashboard();
                     else if (role === 'industri') contentHtml = window.renderIndustriOfficialDashboard();
+                    else if (role === 'orangtua') contentHtml = window.renderOrangTuaDashboard();
                     else if (role === 'admin') contentHtml = window.renderAdminDashboard();
-                    else contentHtml = createPlaceholder("Dashboard", "Beranda Utama");
                     break;
-                case "kelola-akun": contentHtml = createPlaceholder("Kelola Akun", "Fitur Manajemen Akun."); break;
-                case "master-siswa": contentHtml = createPlaceholder("Master Siswa", "Fitur Master Data Siswa."); break;
-                case "master-guru": contentHtml = createPlaceholder("Master Guru", "Fitur Master Data Guru."); break;
-                case "master-industri": contentHtml = createPlaceholder("Master Industri", "Fitur Master Data Industri."); break;
-                case "penempatan": contentHtml = createPlaceholder("Penempatan", "Fitur Penempatan PKL."); break;
-                case "lembar-observasi": contentHtml = window.renderAplikasiEksternal(); break;
-                case "periode-pkl": contentHtml = createPlaceholder("Periode PKL", "Fitur Pengaturan Waktu PKL."); break;
-                case "presensi": contentHtml = window.renderPresensiGPS(); break;
-                case "siswa-bimbingan": case "siswa-magang": contentHtml = window.renderSiswaBimbinganList(); break;
-                default: contentHtml = createPlaceholder(title || 'Fitur', 'Halaman sedang dimuat...');
+                case "kelola-akun":
+                    contentHtml = window.renderKelolaAkunPengguna();
+                    break;
+                case "master-siswa":
+                    contentHtml = window.renderMasterSiswaTable();
+                    break;
+                case "master-guru":
+                    contentHtml = window.renderMasterGuruTable();
+                    break;
+                case "master-industri":
+                    contentHtml = window.renderMasterIndustriTable();
+                    break;
+                case "lembar-observasi":
+                    contentHtml = window.renderLembarObservasiAdmin();
+                    break;
+                case "penempatan":
+                    contentHtml = window.renderPenempatanGuru();
+                    break;
+                case "rekap-absensi":
+                    contentHtml = window.renderRekapAbsensiGlobal();
+                    break;
+                case "rekap-masuk-pulang":
+                    contentHtml = window.renderRekapPresensiMasukPulang();
+                    break;
+                case "rekap-jurnal":
+                    contentHtml = window.renderRekapJurnalAdmin();
+                    break;
+                case "jam-geofence":
+                    contentHtml = window.renderJamGeofenceGPS();
+                    break;
+                case "periode-pkl":
+                    contentHtml = window.renderPeriodePKLPanel();
+                    break;
+                case "database-cloud":
+                    contentHtml = window.renderDatabaseCloud();
+                    break;
+                case "banner-jadwal":
+                    contentHtml = window.renderBannerJadwalPKL();
+                    break;
+                case "presensi":
+                    contentHtml = window.renderPresensiGPS();
+                    break;
+                case "jurnal":
+                    contentHtml = window.renderJurnalKegiatan();
+                    break;
+                case "siswa-bimbingan":
+                case "siswa-magang":
+                    contentHtml = window.renderSiswaBimbinganList();
+                    break;
+                case "validasi-jurnal":
+                    contentHtml = window.renderValidasiJurnalList();
+                    break;
+                case "agenda-kunjungan":
+                    contentHtml = window.renderAgendaKunjungan();
+                    break;
+                case "penilaian":
+                case "penilaian-industri":
+                    contentHtml = window.renderPenilaianIndustri();
+                    break;
+                case "presensi-ananda":
+                    contentHtml = window.renderPresensiAnandaOnly();
+                    break;
+                case "jurnal-ananda":
+                    contentHtml = window.renderJurnalAnandaOnly();
+                    break;
+                case "dokumen":
+                    contentHtml = window.renderManajemenDokumen();
+                    break;
+                case "laporan":
+                    contentHtml = window.renderLaporanAkhir();
+                    break;
+                case "aduan":
+                    contentHtml = window.renderPengaduanMasalah();
+                    break;
+                default:
+                    contentHtml = `<div class="card"><h3 style="font-size:15px; font-weight:900;">${title || 'Fitur'}</h3><p style="font-size:12px; color:#64748b; margin-top:6px;">Halaman sedang disiapkan...</p></div>`;
             }
 
-            document.getElementById("mainFeatureContainer").innerHTML = contentHtml;
+            if (mainContainer) {
+                mainContainer.innerHTML = contentHtml;
+            }
             window.renderSidebar();
         };
 
-        window.masukPilihanEkosistem = (role) => {
+        window.masukPilihanEkosistem = function(role) {
             window.cloudState.activeRole = role;
             const def = roleDefaults[role] || roleDefaults.siswa;
+
             document.getElementById("gatewayScreen").style.display = "none";
             document.getElementById("loginScreen").style.display = "flex";
+
             document.getElementById("boundRoleIcon").innerText = def.icon;
             document.getElementById("boundRoleText").innerText = def.label;
             document.getElementById("labelLoginUsername").innerText = def.usernameLabel;
-            document.getElementById("loginUsernameInput").placeholder = def.placeholder;
+            const userInput = document.getElementById("loginUsernameInput");
+            userInput.placeholder = def.placeholder;
+            userInput.value = "";
+            document.getElementById("loginPassInput").value = "";
+
+            const groupPass = document.getElementById("groupLoginPassword");
+            const linkLupa = document.getElementById("linkLupaSandiWrap");
+
+            if (role === 'orangtua') {
+                groupPass.style.display = "none";
+                linkLupa.style.display = "none";
+                document.getElementById("textPetunjukAkun").innerText = "Masuk cukup dengan mengetik Nama Lengkap Siswa";
+            } else {
+                groupPass.style.display = "block";
+                linkLupa.style.display = "block";
+                document.getElementById("textPetunjukAkun").innerText = "Akun Resmi dari Panitia PKL";
+            }
         };
 
-        window.kembaliKeGerbangEkosistem = () => {
+        window.kembaliKeGerbangEkosistem = function() {
             document.getElementById("gatewayScreen").style.display = "flex";
             document.getElementById("loginScreen").style.display = "none";
             document.getElementById("appScreen").style.display = "none";
         };
 
-        window.submitOnlineAuth = (event) => {
-            event.preventDefault();
-            const role = window.cloudState.activeRole;
-            const username = document.getElementById("loginUsernameInput").value.trim();
-            const pass = document.getElementById("loginPassInput").value.trim();
-
-            if (role === 'admin' && username.toLowerCase() === 'panitia pkl' && pass === 'SMKBisa2000') {
-                return window.suksesLogin({ nama: "Panitia PKL SMKN 1 Marisa", role: "admin", identitas: "PANITIA-2026" });
+        window.togglePasswordEye = function(inputId, btn) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            if (input.type === "password") {
+                input.type = "text";
+                btn.innerText = "🙈";
+            } else {
+                input.type = "password";
+                btn.innerText = "👁️";
             }
-
-            let user = (window.cloudState.registeredUsers || []).find(u => u.username.toLowerCase() === username.toLowerCase() && u.role === role && u.pass === pass);
-            if (user) return window.suksesLogin(user);
-
-            window.showModalInfo("Login Gagal", "Username atau Password salah!");
         };
 
-        window.suksesLogin = (profile) => {
-            window.cloudState.userProfile = profile; window.cloudState.activeRole = profile.role;
+        window.submitOnlineAuth = async function(event) {
+            if (event) event.preventDefault();
+            const role = window.cloudState.activeRole;
+            const username = document.getElementById("loginUsernameInput")?.value.trim();
+            const pass = document.getElementById("loginPassInput")?.value.trim();
+
+            if (!username) return window.showModalInfo("Identitas Kosong", "Mohon masukkan data identitas Anda!");
+
+            if (role === 'orangtua') {
+                const found = (window.cloudState.siswa || []).find(s => s.nama.toLowerCase().includes(username.toLowerCase()));
+                const namaAnanda = found ? found.nama : username;
+                window.suksesLogin({
+                    nama: `Wali dari ${namaAnanda}`,
+                    namaAnanda: namaAnanda,
+                    role: "orangtua",
+                    identitas: namaAnanda
+                });
+                return;
+            }
+
+            if (!pass) return window.showModalInfo("Kata Sandi Kosong", "Silakan masukkan kata sandi Anda!");
+
+            if (role === 'admin' && (username.toLowerCase() === 'panitia pkl' || username.toLowerCase() === 'admin') && pass === 'SMKBisa2000') {
+                window.suksesLogin({ nama: "Panitia PKL SMKN 1 Marisa", role: "admin", identitas: "PANITIA-2026" });
+                return;
+            }
+
+            let user = (window.cloudState.registeredUsers || []).find(u => 
+                u.username.toLowerCase() === username.toLowerCase() && 
+                u.role === role && 
+                u.pass === pass
+            );
+
+            if (user) {
+                window.suksesLogin({
+                    nama: user.nama,
+                    role: user.role,
+                    identitas: user.identitas || user.username
+                });
+                return;
+            }
+
+            window.showModalInfo("Login Gagal", `Username atau kata sandi tidak cocok untuk <b>${roleDefaults[role]?.label}</b>.<br><br>Periksa kembali akun Anda atau hubungi Panitia.`);
+        };
+
+        window.suksesLogin = function(profile) {
+            window.cloudState.userProfile = profile;
+            window.cloudState.activeRole = profile.role;
             try { localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(profile)); } catch(e) {}
+
             document.getElementById("gatewayScreen").style.display = "none";
             document.getElementById("loginScreen").style.display = "none";
             document.getElementById("appScreen").style.display = "flex";
-            document.getElementById("topbarUserName").innerText = profile.nama;
-            window.renderSidebar(); window.openFeature("dashboard", "Beranda Utama");
+
+            document.getElementById("topbarRoleTitle").innerText = "SIP-PKL";
+            document.getElementById("topbarUserName").innerText = `${profile.nama}`;
+            const roleBadge = document.getElementById("topbarUserRoleBadge");
+            if (roleBadge) {
+                const roleLabels = { siswa: "SISWA PKL", guru: "GURU PEMBIMBING", industri: "MITRA DUDI", orangtua: "WALI MURID", admin: "PANITIA PKL" };
+                roleBadge.innerText = roleLabels[profile.role] || (profile.role).toUpperCase();
+            }
+            document.getElementById("sidebarRoleLabel").innerText = (roleDefaults[profile.role]?.label || profile.role).toUpperCase();
+
+            window.renderSidebar();
+            window.openFeature("dashboard", "Beranda Utama");
         };
 
-        window.handleOnlineLogout = () => {
+        window.handleOnlineLogout = function() {
             window.cloudState.userProfile = null;
             try { localStorage.removeItem(STORAGE_KEY_SESSION); } catch(e) {}
+            window.closeDrawerSidebar();
             window.kembaliKeGerbangEkosistem();
         };
 
-        // --- RENDER DASHBOARDS ---
-        window.renderSiswaOfficialDashboard = () => `<div class="card"><h3 class="font-bold text-lg">Beranda Siswa</h3><p class="text-sm mt-2">Selamat datang di Panel Siswa.</p></div>`;
-        window.renderGuruOfficialDashboard = () => `<div class="card"><h3 class="font-bold text-lg">Beranda Guru</h3><p class="text-sm mt-2">Selamat datang di Panel Guru.</p></div>`;
+        window.renderAdminDashboard = function() {
+            const adminItems = [
+                { id: "kelola-akun", icon: "🔑", title: "Buat Akun & Kredensial" },
+                { id: "master-siswa", icon: "👨‍🎓", title: "Data Master Siswa" },
+                { id: "master-guru", icon: "👩‍🏫", title: "Data Master Guru" },
+                { id: "master-industri", icon: "🏭", title: "Mitra Industri DUDI" },
+                { id: "lembar-observasi", icon: "📋", title: "Lembar Observasi PKL" },
+                { id: "penempatan", icon: "🔄", title: "Alokasi Guru & Siswa" },
+                { id: "rekap-absensi", icon: "📈", title: "Rekap Presensi Global" },
+                { id: "rekap-masuk-pulang", icon: "⏱️", title: "Rekap Masuk & Pulang" },
+                { id: "rekap-jurnal", icon: "📖", title: "Rekap Jurnal Siswa" },
+                { id: "jam-geofence", icon: "📍", title: "Jam & Geofence GPS" },
+                { id: "periode-pkl", icon: "📅", title: "Periode Pelaksanaan PKL" },
+                { id: "dokumen", icon: "📁", title: "Manajemen Dokumen" },
+                { id: "laporan", icon: "📄", title: "Pantau Laporan Akhir" },
+                { id: "aduan", icon: "⚠️", title: "Laporan Pengaduan" },
+                { id: "database-cloud", icon: "☁️", title: "Database Cloud [Supabase]" },
+                { id: "banner-jadwal", icon: "🖼️", title: "Banner Gambar Slider" }
+            ];
 
-        window.renderAdminDashboard = () => {
             let gridCardsHtml = "";
-            roleMenus.admin.forEach(item => {
-                if(item.id === "dashboard") return;
+            adminItems.forEach(item => {
                 gridCardsHtml += `
-                <div class="admin-item-card" onclick="window.openFeature('${item.id}', '${item.label}')">
+                <div class="admin-item-card" onclick="window.openFeature('${item.id}', '${item.title}')">
                     <div class="admin-item-icon">${item.icon}</div>
-                    <div class="admin-item-title">${item.label}</div>
+                    <div class="admin-item-title">${item.title}</div>
                     <div class="admin-item-link">Buka Menu ➔</div>
                 </div>`;
             });
+
+            const currentCfg = Object.assign({}, DEFAULT_PKL_CONFIG, window.cloudState.pklConfig || {});
+
             return `
             <div class="admin-welcome-card">
-                <div style="font-size: 11px; font-weight: 900; color: #0284c7;">PANEL KONTROL ADMINISTRATOR / PANITIA PKL</div>
+                <div style="font-size: 11px; font-weight: 900; color: #0284c7; letter-spacing: 0.5px;">PANEL KONTROL ADMINISTRATOR / PANITIA PKL</div>
                 <h3 style="font-size: 18px; font-weight: 950; color: #0f172a; margin-top: 2px;">Selamat Bertugas, Tim Panitia PKL</h3>
+                <p style="font-size: 11px; color: #64748b; margin-top: 4px;">Kelola akun, alokasi pembimbing, rekap jurnal, observasi industri, dan sinkronisasi cloud.</p>
+
+                <div style="margin-top:12px; padding-top:10px; border-top:1.5px dashed #bfdbfe; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <div>
+                        <div style="font-size:10px; font-weight:800; color:#64748b; text-transform:uppercase;">PERIODE RESMI PKL AKTIF:</div>
+                        <div style="font-size:12.5px; font-weight:950; color:#0284c7;">
+                            📅 ${currentCfg.durasi}
+                            <span style="font-size:11px; font-weight:700; color:#475569;">(${currentCfg.tglAwal} s/d ${currentCfg.tglPenarikan})</span>
+                        </div>
+                    </div>
+                    <button onclick="window.openFeature('periode-pkl', 'Periode Pelaksanaan PKL')" class="btn-action btn-emerald" style="padding:8px 14px; font-size:11.5px; font-weight:900;">
+                        📅 Atur Periode PKL
+                    </button>
+                </div>
             </div>
+
             <div class="admin-menu-box-wrap">
-                <div style="font-size: 14px; font-weight: 900; margin-bottom: 12px;">MENU PENGELOLAAN SISTEM</div>
-                <div class="admin-grid-12">${gridCardsHtml}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 14px; font-weight: 900; color: #0f172a;">MENU PENGELOLAAN SISTEM (16 FITUR)</div>
+                    <span class="badge-status badge-blue">PANEL ADMIN</span>
+                </div>
+                <div class="admin-grid-12">
+                    ${gridCardsHtml}
+                </div>
             </div>`;
         };
 
-        window.renderIndustriOfficialDashboard = () => {
-            const profile = window.cloudState.userProfile || { nama: "Mitra Industri" };
-            
-            // KUNCI INTEGRASI: MENAMPILKAN TOMBOL APLIKASI EKSTERNAL DI DASHBOARD INDUSTRI
-            const linkData = window.cloudState.linkObservasi || { judul: "", url: "" };
-            let linkHtml = "";
-            if (linkData.url && linkData.url.trim() !== "") {
-                linkHtml = `
-                <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 2px solid #4ade80; border-radius: 20px; padding: 16px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15);">
-                    <div>
-                        <div style="font-size: 11px; font-weight: 900; color: #166534; letter-spacing: 0.5px;">APLIKASI TERINTEGRASI</div>
-                        <h3 style="font-size: 15px; font-weight: 900; color: #14532d; margin-top: 2px;">${linkData.judul || 'Lembar Observasi PKL'}</h3>
-                    </div>
-                    <a href="${linkData.url}" target="_blank" rel="noopener noreferrer" class="btn-action btn-emerald" style="padding: 10px 16px; font-size: 12px; font-weight: 900; text-decoration: none; white-space: nowrap; box-shadow: 0 4px 10px rgba(22, 101, 52, 0.2);">
-                        Buka Aplikasi ↗
-                    </a>
-                </div>`;
-            }
+        window.renderLembarObservasiAdmin = function() {
+            const obs = Object.assign({}, DEFAULT_OBSERVASI_CONFIG, window.cloudState.observasiConfig || {});
 
             return `
-            ${linkHtml}
+            <div class="card" style="border: 2px solid #38bdf8; background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">INTEGRASI APLIKASI EKSTERNAL DUDI</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📋 Lembar Observasi PKL</h3>
+                        <p style="font-size:11px; color:#475569; margin-top:2px; line-height:1.4;">
+                            Fitur ini terhubung langsung ke <b>Dashboard Industri Mitra DUDI</b>. Masukkan Judul Menu dan Tautan/Link Aplikasi (Web App, Google Form, atau APK) di bawah ini. Mitra industri dapat membuka tautan ini langsung di peramban mereka.
+                        </p>
+                    </div>
+                </div>
+
+                <div style="background:#ffffff; border:1.5px solid #bfdbfe; border-radius:18px; padding:16px; margin-bottom:14px; box-shadow:0 3px 12px rgba(2, 132, 199, 0.08);">
+                    <div class="form-group">
+                        <label class="form-label" style="font-size:12px; font-weight:850; color:#0f172a;">
+                            📝 Nama Judul Menu / Aplikasi:
+                        </label>
+                        <input type="text" id="cfgObsJudul" class="form-control" value="${obs.judul || 'Lembar Observasi PKL'}" placeholder="Contoh: Lembar Observasi PKL SMKN 1 Marisa" style="font-weight:750;">
+                        <div style="font-size:10px; color:#64748b; margin-top:3px;">Judul ini akan menjadi nama tombol/fitur di Dashboard Mitra Industri.</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="font-size:12px; font-weight:850; color:#0f172a;">
+                            🔗 Tautan / URL Link Aplikasi / APK:
+                        </label>
+                        <input type="url" id="cfgObsLink" class="form-control" value="${obs.link || ''}" placeholder="Contoh: https://docs.google.com/forms/... atau link APK" style="font-weight:750; color:#0284c7;">
+                        <div style="font-size:10px; color:#64748b; margin-top:3px;">Pastikan diawali dengan <b>https://</b> agar dapat langsung dibuka di peramban baru.</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="font-size:12px; font-weight:850; color:#0f172a;">
+                            ℹ️ Keterangan / Petunjuk Pengisian:
+                        </label>
+                        <textarea id="cfgObsDeskripsi" class="form-control" style="height:70px;" placeholder="Tuliskan petunjuk untuk pihak industri...">${obs.deskripsi || ''}</textarea>
+                    </div>
+
+                    <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+                        <input type="checkbox" id="cfgObsAktif" style="width:18px; height:18px; accent-color:#0284c7;" ${obs.aktif !== false ? 'checked' : ''}>
+                        <label for="cfgObsAktif" style="font-size:12px; font-weight:800; color:#0f172a; cursor:pointer;">
+                            Aktifkan fitur ini di Dashboard Mitra Industri DUDI
+                        </label>
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:16px;">
+                        <button type="button" onclick="window.ujiCobaLinkObservasi()" class="btn-action btn-blue" style="padding:10px 16px; font-size:11.5px;">
+                            🧪 Uji Coba Buka Link ↗
+                        </button>
+                        <button type="button" onclick="window.simpanPengaturanObservasi()" class="btn-action btn-emerald" style="padding:10px 22px; font-size:12.5px; font-weight:900; box-shadow:0 4px 14px rgba(16, 185, 129, 0.35);">
+                            💾 Simpan & Terapkan ke Dashboard Industri ⚡
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Pratinjau Tampilan di Dashboard Industri -->
+                <div style="background:#f8fafc; border:1.5px dashed #93c5fd; border-radius:18px; padding:14px;">
+                    <div style="font-size:11px; font-weight:850; color:#0284c7; text-transform:uppercase; margin-bottom:8px;">
+                        👁️ Pratinjau Tampilan di Ruang Industri Mitra DUDI:
+                    </div>
+                    <div style="background:#ffffff; border:1.5px solid #bfdbfe; border-radius:14px; padding:14px; box-shadow:0 3px 10px rgba(0,0,0,0.04);">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div style="font-size:14px; font-weight:900; color:#0284c7;" id="previewObsJudul">📋 ${obs.judul || 'Lembar Observasi PKL'}</div>
+                            <span class="badge-status badge-green">Terkoneksi</span>
+                        </div>
+                        <div style="font-size:11px; color:#475569; margin:4px 0 10px;" id="previewObsDeskripsi">${obs.deskripsi || 'Klik tombol di bawah untuk membuka aplikasi observasi di peramban.'}</div>
+                        <button type="button" class="btn-action btn-blue" style="width:100%; padding:10px; font-size:12px; font-weight:900;">
+                            🚀 Buka ${obs.judul || 'Lembar Observasi'} di Browser ↗
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        };
+
+        window.simpanPengaturanObservasi = function() {
+            const judul = document.getElementById("cfgObsJudul")?.value.trim() || DEFAULT_OBSERVASI_CONFIG.judul;
+            const link = document.getElementById("cfgObsLink")?.value.trim();
+            const deskripsi = document.getElementById("cfgObsDeskripsi")?.value.trim() || DEFAULT_OBSERVASI_CONFIG.deskripsi;
+            const aktif = document.getElementById("cfgObsAktif")?.checked !== false;
+
+            if (!link) {
+                return window.showModalInfo("Tautan Kosong", "Silakan masukkan link/URL aplikasi lembar observasi!");
+            }
+
+            window.cloudState.observasiConfig = { judul, link, deskripsi, aktif };
+            window.simpanDatabasePersisten(true);
+
+            window.showModalInfo(
+                "Pengaturan Observasi Disimpan! 📋",
+                `Tautan aplikasi <b>"${judul}"</b> telah berhasil disimpan dan langsung disinkronkan ke seluruh akun <b>Mitra Industri DUDI</b>.<br><br>Pihak industri sekarang dapat membuka aplikasi tersebut melalui dashboard mereka.`
+            );
+            window.openFeature("lembar-observasi", "Lembar Observasi PKL");
+        };
+
+        window.ujiCobaLinkObservasi = function() {
+            const link = document.getElementById("cfgObsLink")?.value.trim() || window.cloudState.observasiConfig?.link;
+            if (!link) {
+                return window.showModalInfo("Tautan Kosong", "Masukkan tautan/URL aplikasi terlebih dahulu untuk diuji coba!");
+            }
+            window.open(link, '_blank');
+        };
+
+        window.bukaTautanObservasiIndustri = function() {
+            const obs = window.cloudState.observasiConfig || DEFAULT_OBSERVASI_CONFIG;
+            if (!obs.link) {
+                return window.showModalInfo("Tautan Belum Tersedia", "Panitia PKL belum mengatur tautan Lembar Observasi PKL. Silakan hubungi Panitia.");
+            }
+            window.open(obs.link, '_blank');
+        };
+
+        window.renderIndustriOfficialDashboard = function() {
+            const profile = window.cloudState.userProfile || { nama: "Mitra Industri" };
+            const cfg = window.cloudState.pklConfig || DEFAULT_PKL_CONFIG;
+            const obs = window.cloudState.observasiConfig || DEFAULT_OBSERVASI_CONFIG;
+
+            const placements = (window.cloudState.penempatan || []).filter(p => {
+                if (!p.industri) return false;
+                const indList = Array.isArray(p.industri) ? p.industri : [p.industri];
+                return indList.some(i => i && i.toLowerCase().trim() === profile.nama.toLowerCase().trim());
+            });
+
+            let totalMagang = 0;
+            placements.forEach(p => { if (Array.isArray(p.siswa)) totalMagang += p.siswa.length; });
+
+            return `
+            <!-- Kartu Khusus Lembar Observasi PKL Terkoneksi -->
+            <div class="card" style="border: 2px solid #0284c7; background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%); box-shadow: 0 8px 24px rgba(2,132,199,0.18);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">FITUR INTEGRASI RESMI PANITIA</div>
+                    <span class="badge-status badge-green">Aktif & Siap Digunakan</span>
+                </div>
+                <h3 style="font-size:17px; font-weight:950; color:#0f172a;">📋 ${obs.judul || 'Lembar Observasi PKL'}</h3>
+                <p style="font-size:11.5px; color:#475569; margin:4px 0 14px; line-height:1.4;">
+                    ${obs.deskripsi || 'Aplikasi lembar observasi dan penilaian siswa magang telah disiapkan oleh Panitia PKL. Tekan tombol di bawah untuk membukanya langsung.'}
+                </p>
+                <button type="button" onclick="window.bukaTautanObservasiIndustri()" class="btn-action-primary" style="padding:12px; font-size:13px; font-weight:900; display:flex; align-items:center; justify-content:center; gap:8px;">
+                    🚀 Buka ${obs.judul || 'Lembar Observasi PKL'} di Browser ↗
+                </button>
+            </div>
+
             <div class="absensi-digital-card">
                 <div class="absensi-header-wrap">
                     <div class="absensi-title-main">EVALUASI PRAKTIK INDUSTRI</div>
@@ -588,47 +1795,637 @@
                 <div class="absensi-btn-grid">
                     <div class="btn-absensi-box" onclick="window.openFeature('siswa-magang', 'Siswa Magang')">
                         <div class="btn-absensi-icon-wrap">👥</div>
-                        <div><div class="btn-absensi-text">SISWA MAGANG</div></div>
+                        <div>
+                            <div class="btn-absensi-text">SISWA MAGANG</div>
+                            <div style="font-size: 10px; color: #0284c7; font-weight: 800;">${totalMagang} Siswa di Kantor</div>
+                        </div>
+                    </div>
+                    <div class="btn-absensi-box" onclick="window.openFeature('validasi-jurnal', 'Validasi Jurnal')">
+                        <div class="btn-absensi-icon-wrap">📑</div>
+                        <div>
+                            <div class="btn-absensi-text">PENGESAHAN JURNAL</div>
+                            <div style="font-size: 10px; color: #0284c7; font-weight: 800;">Periksa Harian</div>
+                        </div>
                     </div>
                 </div>
             </div>
-            `;
-        };
 
-        window.renderAplikasiEksternal = () => {
-            const linkData = window.cloudState.linkObservasi || { judul: "", url: "" };
-            return `
-            <div class="card" style="border: 2px solid #38bdf8; background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);">
-                <div style="margin-bottom:12px;">
-                    <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">PENGATURAN INTEGRASI</div>
-                    <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🔗 Tautan Aplikasi Eksternal (Lembar Observasi)</h3>
-                    <p style="font-size:11px; color:#475569; margin-top:2px; line-height:1.4;">
-                        Tautkan aplikasi luar (misal: Google Form, AppSheet, dll). Tautan ini akan muncul sebagai tombol di Dashboard Industri Mitra.
-                    </p>
+            <div class="mentor-info-card">
+                <div class="mentor-label">PERUSAHAAN / INSTANSI:</div>
+                <div class="mentor-name">${profile.nama}</div>
+
+                <div class="details-white-sheet">
+                    <div class="detail-row-item">
+                        <div class="detail-left"><div class="detail-icon-round">⏱️</div> JAM KERJA RESMI</div>
+                        <div class="detail-right">08:00 - 16:00 WITA</div>
+                    </div>
+                    <div class="detail-row-item">
+                        <div class="detail-left"><div class="detail-icon-round">📍</div> RADIUS PRESENSI</div>
+                        <div class="detail-right">50 Meter</div>
+                    </div>
+                    <div class="detail-row-item">
+                        <div class="detail-left"><div class="detail-icon-round">🏆</div> LEMBAR PENILAIAN</div>
+                        <div class="detail-right"><button onclick="window.openFeature('penilaian-industri', 'Penilaian')" class="btn-action btn-blue">Input Nilai</button></div>
+                    </div>
                 </div>
-                <div class="form-group" style="margin-bottom:12px;">
-                    <label class="form-label">Judul Tombol / Aplikasi:</label>
-                    <input type="text" id="inputJudulEksternal" class="form-control" placeholder="Contoh: Lembar Observasi PKL" value="${linkData.judul}">
-                </div>
-                <div class="form-group" style="margin-bottom:16px;">
-                    <label class="form-label">URL / Tautan Web:</label>
-                    <input type="url" id="inputUrlEksternal" class="form-control" placeholder="https://forms.gle/..." value="${linkData.url}">
-                </div>
-                <button onclick="window.simpanAplikasiEksternal()" class="btn-action btn-blue" style="width:100%; padding:12px; font-size:13px; font-weight:900;">
-                    💾 Simpan & Terapkan
-                </button>
             </div>`;
         };
 
-        window.simpanAplikasiEksternal = () => {
-            const judul = document.getElementById("inputJudulEksternal").value.trim();
-            const url = document.getElementById("inputUrlEksternal").value.trim();
-            window.cloudState.linkObservasi = { judul: judul || "Lembar Observasi PKL", url: url };
-            window.simpanDatabasePersisten(true);
-            window.showModalInfo("Tersimpan ✅", "Tautan aplikasi eksternal berhasil disimpan dan disiarkan ke Dashboard Industri.");
-            window.openFeature("lembar-observasi", "Aplikasi Eksternal");
+        window.renderSiswaOfficialDashboard = function() {
+            const profile = window.cloudState.userProfile || { nama: "Siswa PKL" };
+            const cfg = window.cloudState.pklConfig || DEFAULT_PKL_CONFIG;
+            const jc = window.cloudState.jamConfig || { masukMulai: "06:30", masukBatasAkhir: "15:00", pulangMulai: "16:00", pulangBatasAkhir: "23:00" };
+
+            const banners = (window.cloudState.bannerSliderImages && window.cloudState.bannerSliderImages.length > 0)
+                ? window.cloudState.bannerSliderImages
+                : DEFAULT_BANNER_IMAGES;
+
+            let slidesHtml = "";
+            let dotsHtml = "";
+            banners.forEach((b, idx) => {
+                slidesHtml += `
+                <div class="banner-slide ${idx === 0 ? 'active' : ''}">
+                    <img src="${b.url}" class="banner-slide-bg" alt="Banner" onerror="this.src='https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80'">
+                    <div class="banner-slide-overlay"></div>
+                    <div class="banner-slogan-wrap">
+                        <div class="banner-slogan-title">${b.slogan1 || 'SMK BISA! SMK HEBAT!'}</div>
+                        <div class="banner-slogan-sub">${b.slogan2 || 'SIAP KERJA, SANTUN, MANDIRI, KREATIF'}</div>
+                    </div>
+                </div>`;
+                dotsHtml += `<div class="banner-dot ${idx === 0 ? 'active' : ''}"></div>`;
+            });
+
+            const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
+            const guruName = penempatan ? penempatan.guru : "Wilasia S. Talaa, S.ST";
+            const industriName = penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "PT. Telkom Marisa";
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            const absenMasuk = (window.cloudState.absensi || []).find(a => a.nama === profile.nama && a.tipe_absen === 'Masuk' && a.tanggal === todayStr);
+            const absenPulang = (window.cloudState.absensi || []).find(a => a.nama === profile.nama && a.tipe_absen === 'Pulang' && a.tanggal === todayStr);
+
+            return `
+            <div class="banner-carousel-wrap">
+                ${slidesHtml}
+                <div class="banner-dots-wrap">
+                    ${dotsHtml}
+                </div>
+            </div>
+
+            <div class="absensi-digital-card">
+                <div class="absensi-header-wrap">
+                    <div>
+                        <div class="absensi-title-main">ABSENSI DIGITAL</div>
+                        <div style="font-size: 10px; color: #0284c7; font-weight: 800; margin-top: 2px;">
+                            ⏰ Masuk: ${jc.masukMulai} - ${jc.masukBatasAkhir} WITA &bull; Pulang: ${jc.pulangMulai} - ${jc.pulangBatasAkhir} WITA
+                        </div>
+                    </div>
+                    <div class="absensi-status-badge">${absenMasuk ? 'SUDAH ABSEN HARI INI' : 'BELUM ABSEN HARI INI'}</div>
+                </div>
+                <div class="absensi-btn-grid">
+                    <div class="btn-absensi-box ${absenMasuk ? 'done-card' : ''}" onclick="window.bukaModalAmbilPresensiSelfieGPS('Masuk')">
+                        <div class="btn-absensi-icon-wrap">${absenMasuk ? '✅' : '📷'}</div>
+                        <div>
+                            <div class="btn-absensi-text">PRESENSI MASUK</div>
+                            <div style="font-size: 10px; color: #475569; font-weight: 700; margin-top: 2px;">${absenMasuk ? absenMasuk.jam + ' WITA' : `${jc.masukMulai} - ${jc.masukBatasAkhir}`}</div>
+                        </div>
+                    </div>
+                    <div class="btn-absensi-box ${absenPulang ? 'done-card' : ''}" onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang')">
+                        <div class="btn-absensi-icon-wrap">${absenPulang ? '✅' : '🚪'}</div>
+                        <div>
+                            <div class="btn-absensi-text">PRESENSI PULANG</div>
+                            <div style="font-size: 10px; color: #475569; font-weight: 700; margin-top: 2px;">${absenPulang ? absenPulang.jam + ' WITA' : `${jc.pulangMulai} - ${jc.pulangBatasAkhir}`}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mentor-info-card">
+                <div class="mentor-label">NAMA GURU PEMBIMBING:</div>
+                <div class="mentor-name">${guruName}</div>
+
+                <div class="details-white-sheet">
+                    <div class="detail-row-item">
+                        <div class="detail-left"><div class="detail-icon-round">📅</div> TGL AWAL PKL</div>
+                        <div class="detail-right">${cfg.tglAwal}</div>
+                    </div>
+                    <div class="detail-row-item">
+                        <div class="detail-left"><div class="detail-icon-round">🔄</div> TGL PENARIKAN PKL</div>
+                        <div class="detail-right">${cfg.tglPenarikan}</div>
+                    </div>
+                    <div class="detail-row-item">
+                        <div class="detail-left"><div class="detail-icon-round">⏱️</div> DURASI DI INDUSTRI</div>
+                        <div class="detail-right">${cfg.durasi}</div>
+                    </div>
+                    <div class="detail-row-item">
+                        <div class="detail-left"><div class="detail-icon-round">🏢</div> TEMPAT PKL</div>
+                        <div class="detail-right">${industriName}</div>
+                    </div>
+                    <div style="margin-top:6px; text-align:right;">
+                        <button onclick="window.openFeature('jurnal', 'Jurnal PKL')" class="btn-action btn-blue" style="width:100%; padding:10px; font-size:12px;">
+                            📖 Buka & Isi Jurnal Harian PKL
+                        </button>
+                    </div>
+                </div>
+            </div>`;
         };
 
+        window.bukaModalAmbilPresensiSelfieGPS = function(tipeAbsen) {
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+
+            // Pengecekan syarat: Siswa wajib mengisi jurnal hari ini sebelum presensi pulang
+            if (tipeAbsen === 'Pulang' && window.cloudState.activeRole === 'siswa') {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const sudahIsiJurnal = (window.cloudState.jurnal || []).some(j => 
+                    (j.siswa === profile.nama || j.user_id === (profile.identitas || profile.nama)) &&
+                    j.tanggal === todayStr
+                );
+
+                if (!sudahIsiJurnal) {
+                    window.openDynamicModal(`
+                        <div style="text-align:center; padding:10px 4px;">
+                            <div style="font-size:42px; margin-bottom:8px;">⚠️</div>
+                            <h3 style="font-size:16px; font-weight:900; color:#ef4444; margin-bottom:6px;">Wajib Mengisi Jurnal Harian Dahulu!</h3>
+                            <p style="font-size:12px; color:#475569; line-height:1.5; margin-bottom:16px;">
+                                Halo <b>${profile.nama}</b>, Anda belum membuat dan mengirimkan <b>Jurnal Harian PKL</b> untuk hari ini ke Guru Pembimbing & Panitia.<br><br>
+                                Sistem mewajibkan pengisian jurnal kegiatan sebelum Anda diizinkan melakukan <b>Presensi Pulang</b>.
+                            </p>
+                            <div style="display:flex; flex-direction:column; gap:8px;">
+                                <button type="button" onclick="window.closeDynamicModal(); window.openFeature('jurnal', 'Jurnal Harian PKL'); setTimeout(() => window.bukaModalTambahJurnal(), 250);" class="btn-action btn-blue" style="padding:12px; font-size:13px; font-weight:900; border-radius:12px;">
+                                    📖 Isi & Kirim Jurnal Harian Sekarang ➔
+                                </button>
+                                <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#e2e8f0; color:#475569; padding:9px; font-size:11.5px; border-radius:10px;">
+                                    Tutup
+                                </button>
+                            </div>
+                        </div>
+                    `);
+                    return;
+                }
+            }
+
+            const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
+            const namaInd = penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri[0] : penempatan.industri) : "PT. Telkom Marisa";
+            const dataInd = (window.cloudState.industri || []).find(i => i.nama.toLowerCase().includes(namaInd.toLowerCase())) || {
+                nama: namaInd,
+                lat: "0.45612",
+                lng: "121.94210",
+                radius: 50
+            };
+
+            window.tempSelfieBase64 = null;
+            window.selectedKategoriKehadiran = "hadir_lokasi";
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">📷 Presensi ${tipeAbsen}: Selfie & GPS</h3>
+                <div style="font-size:11px; color:#475569; margin-bottom:10px;">Lokasi Magang: <b>${dataInd.nama}</b></div>
+
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label class="form-label" style="font-weight:800; color:#0f172a;">Kategori Kehadiran:</label>
+                    <select id="presensiKategoriSelect" class="form-control" style="font-weight:750; color:#0284c7;">
+                        <option value="hadir_lokasi">🏢 Hadir di Lokasi Industri (Radius 50m)</option>
+                        <option value="tugas_luar">🚗 Tugas Luar / Dinas Lapangan</option>
+                        <option value="izin_sakit">📋 Izin / Sakit Resmi</option>
+                    </select>
+                </div>
+
+                <div style="position:relative; width:100%; height:200px; background:#0f172a; border-radius:18px; overflow:hidden; border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; margin-bottom:10px;">
+                    <video id="selfieVideoElement" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+                    <img id="selfieCapturedPreview" src="" alt="Selfie" style="display:none; width:100%; height:100%; object-fit:cover;">
+                    <div id="selfieCameraLoading" style="position:absolute; color:#fff; font-size:12px; font-weight:800; background:rgba(0,0,0,0.6); padding:6px 12px; border-radius:8px;">
+                        Mengaktifkan Kamera...
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:8px; margin-bottom:12px;">
+                    <button type="button" onclick="window.jepretFotoSelfie()" id="btnJepretSelfie" class="btn-action btn-blue" style="flex:1; padding:10px;">
+                        📸 Jepret Wajah (Selfie)
+                    </button>
+                    <label class="btn-action btn-amber" style="padding:10px; cursor:pointer; font-size:11px; display:flex; align-items:center;">
+                        📁 Unggah
+                        <input type="file" accept="image/*" capture="user" style="display:none;" onchange="window.handleUploadSelfieFallback(this)">
+                    </label>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button type="button" onclick="window.tutupModalPresensiSelfie()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button type="button" onclick="window.simpanPresensiSelfieFinal('${tipeAbsen}', '${dataInd.nama}')" class="btn-action btn-emerald" style="font-weight:900; padding:10px 16px;">
+                        ✓ Simpan Presensi ${tipeAbsen}
+                    </button>
+                </div>
+            `);
+
+            window.mulaiStreamKameraSelfie();
+        };
+
+        window.mulaiStreamKameraSelfie = function() {
+            const video = document.getElementById("selfieVideoElement");
+            const loading = document.getElementById("selfieCameraLoading");
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+                    .then(stream => {
+                        window.liveCameraStream = stream;
+                        if (video) {
+                            video.srcObject = stream;
+                            if (loading) loading.style.display = "none";
+                        }
+                    })
+                    .catch(err => {
+                        if (loading) loading.innerText = "Kamera HP siap via tombol Unggah";
+                    });
+            } else {
+                if (loading) loading.innerText = "Gunakan tombol Unggah";
+            }
+        };
+
+        window.tutupModalPresensiSelfie = function() {
+            if (window.liveCameraStream) {
+                window.liveCameraStream.getTracks().forEach(t => t.stop());
+                window.liveCameraStream = null;
+            }
+            window.closeDynamicModal();
+        };
+
+        window.jepretFotoSelfie = function() {
+            const video = document.getElementById("selfieVideoElement");
+            const preview = document.getElementById("selfieCapturedPreview");
+            if (!video || !video.videoWidth) return window.showModalInfo("Kamera Belum Siap", "Silakan tunggu gambar kamera muncul atau unggah foto.");
+
+            const canvas = document.createElement("canvas");
+            canvas.width = 480;
+            canvas.height = 360;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(video, 0, 0, 480, 360);
+
+            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+            ctx.fillRect(0, 320, 480, 40);
+            ctx.fillStyle = "#fde047";
+            ctx.font = "bold 13px sans-serif";
+            const now = new Date();
+            ctx.fillText("SMKN 1 MARISA PKL | " + now.toLocaleDateString('id-ID') + " " + now.toLocaleTimeString('it-IT') + " WITA", 12, 345);
+
+            const base64 = canvas.toDataURL("image/jpeg", 0.65);
+            window.tempSelfieBase64 = base64;
+
+            if (preview) {
+                preview.src = base64;
+                preview.style.display = "block";
+                video.style.display = "none";
+            }
+        };
+
+        window.handleUploadSelfieFallback = function(inputEl) {
+            if (inputEl.files && inputEl.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    window.tempSelfieBase64 = e.target.result;
+                    const preview = document.getElementById("selfieCapturedPreview");
+                    const video = document.getElementById("selfieVideoElement");
+                    if (preview) {
+                        preview.src = e.target.result;
+                        preview.style.display = "block";
+                        if (video) video.style.display = "none";
+                    }
+                };
+                reader.readAsDataURL(inputEl.files[0]);
+            }
+        };
+
+        window.simpanPresensiSelfieFinal = function(tipeAbsen, industriNama) {
+            if (!window.tempSelfieBase64) {
+                return window.showModalInfo("Foto Belum Diambil", "Silakan jepret wajah selfie Anda terlebih dahulu!");
+            }
+
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const kat = document.getElementById("presensiKategoriSelect")?.value || "hadir_lokasi";
+            const now = new Date();
+            const jamStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            const tglStr = now.toISOString().split('T')[0];
+
+            let katText = "Hadir di Lokasi";
+            if (kat === 'tugas_luar') katText = "Tugas Luar";
+            else if (kat === 'izin_sakit') katText = "Izin / Sakit";
+
+            const itemAbsen = {
+                id: "abs_" + Date.now(),
+                user_id: profile.identitas || profile.nama,
+                nama: profile.nama,
+                tipe_absen: tipeAbsen,
+                kategori_hadir: katText,
+                industri: industriNama,
+                tanggal: tglStr,
+                jam: jamStr,
+                status: "Tepat Waktu",
+                foto_selfie: window.tempSelfieBase64
+            };
+
+            window.cloudState.absensi.unshift(itemAbsen);
+            window.simpanDatabasePersisten(true);
+
+            window.tutupModalPresensiSelfie();
+            window.showModalInfo("Presensi Berhasil ✅", `Presensi <b>${tipeAbsen}</b> Anda berhasil dicatat pukul <b>${jamStr} WITA</b>.`);
+            window.openFeature("dashboard", "Beranda");
+        };
+
+        window.renderJurnalKegiatan = function() {
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const myJurnal = (window.cloudState.jurnal || []).filter(j => j.siswa === profile.nama);
+
+            let rows = "";
+            myJurnal.forEach((j, idx) => {
+                rows += `<tr>
+                    <td><input type="checkbox" class="cb-jurnal-siswa" value="${idx}"></td>
+                    <td>${idx + 1}</td>
+                    <td>${j.tanggal}</td>
+                    <td style="white-space:normal; min-width:180px;">${j.kegiatan}</td>
+                    <td><span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span></td>
+                    <td>
+                        <button onclick="window.konfirmasiHapusJurnalSiswa(${idx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button>
+                    </td>
+                </tr>`;
+            });
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">LOG AKTIVITAS PKL</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📖 Jurnal Harian Siswa PKL</h3>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.bukaModalTambahJurnal()" class="btn-action btn-blue">+ Tulis Jurnal Baru</button>
+                        <button onclick="window.hapusMasalJurnalSiswa()" class="btn-action btn-red">🗑️ Hapus Terpilih</button>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px;"><input type="checkbox" onchange="window.toggleAllCheckboxes('jurnal-siswa', this.checked)"></th>
+                                <th style="width:40px;">No</th>
+                                <th>Hari/Tanggal</th>
+                                <th>Uraian Kegiatan</th>
+                                <th>Status</th>
+                                <th style="width:80px;">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada jurnal yang ditulis</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.bukaModalTambahJurnal = function() {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">📖 Tulis Jurnal Harian PKL</h3>
+                <div class="form-group">
+                    <label class="form-label">Tanggal Kegiatan:</label>
+                    <input type="date" id="jurTanggal" class="form-control" value="${todayStr}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Uraian Pekerjaan / Kegiatan:</label>
+                    <textarea id="jurKegiatan" class="form-control" style="height:85px;" placeholder="Tuliskan pekerjaan yang Anda selesaikan hari ini..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kendala & Pemecahan Masalah (Opsional):</label>
+                    <input type="text" id="jurKendala" class="form-control" placeholder="Tuliskan kendala dan solusinya...">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanJurnalBaru()" class="btn-action btn-blue">💾 Kirim Jurnal Sekarang</button>
+                </div>
+            `);
+        };
+
+        window.simpanJurnalBaru = function() {
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const tgl = document.getElementById("jurTanggal")?.value;
+            const kegiatan = document.getElementById("jurKegiatan")?.value.trim();
+            const kendala = document.getElementById("jurKendala")?.value.trim() || "-";
+
+            if (!kegiatan) return window.showModalInfo("Lengkapi Jurnal", "Uraian kegiatan hari ini wajib diisi!");
+
+            const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
+            const indName = penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "DUDI Mitra";
+
+            window.cloudState.jurnal.unshift({
+                id: "jur_" + Date.now(),
+                user_id: profile.identitas || profile.nama,
+                siswa: profile.nama,
+                industri: indName,
+                tanggal: tgl,
+                kegiatan: kegiatan,
+                kendala: kendala,
+                status: "Menunggu Verifikasi"
+            });
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Jurnal Terkirim 📖", "Jurnal harian Anda berhasil disimpan dan diteruskan ke Guru Pembimbing & Panitia. Fitur Presensi Pulang hari ini telah terbuka!");
+            window.openFeature("jurnal", "Jurnal Harian");
+        };
+
+        window.konfirmasiHapusJurnalSiswa = function(idx) {
+            window.showConfirmDialog("Hapus Jurnal", "Hapus catatan jurnal harian ini?", () => {
+                window.cloudState.jurnal.splice(idx, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("jurnal", "Jurnal Harian");
+            });
+        };
+
+        window.hapusMasalJurnalSiswa = function() {
+            const cbs = document.querySelectorAll('.cb-jurnal-siswa:checked');
+            if (cbs.length === 0) return window.showModalInfo("Pilih Jurnal", "Centang minimal 1 jurnal yang ingin dihapus!");
+
+            window.showConfirmDialog("Hapus Terpilih", `Hapus ${cbs.length} jurnal terpilih?`, () => {
+                const indices = Array.from(cbs).map(c => parseInt(c.value)).sort((a,b) => b - a);
+                indices.forEach(i => window.cloudState.jurnal.splice(i, 1));
+                window.simpanDatabasePersisten(true);
+                window.openFeature("jurnal", "Jurnal Harian");
+            });
+        };
+
+        window.renderRekapJurnalAdmin = function() {
+            const list = window.cloudState.jurnal || [];
+            let rows = "";
+            list.forEach((j, idx) => {
+                rows += `<tr>
+                    <td>${idx + 1}</td>
+                    <td><b>${j.siswa}</b></td>
+                    <td>${j.industri || '-'}</td>
+                    <td>${j.tanggal}</td>
+                    <td style="white-space:normal; min-width:180px;">${j.kegiatan}</td>
+                    <td><span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span></td>
+                </tr>`;
+            });
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">LOGBOOK TERPUSAT SELURUH SISWA</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📖 Rekap Jurnal Siswa PKL</h3>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>No</th>
+                                <th>Nama Siswa</th>
+                                <th>Industri</th>
+                                <th>Tanggal</th>
+                                <th>Kegiatan</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada data jurnal siswa</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.isSupabaseUnlocked = false;
+
+        window.bukaModalOtorisasiSupabase = function() {
+            window.openDynamicModal(`
+                <div style="text-align:center;">
+                    <div style="font-size:32px; margin-bottom:8px;">🔒</div>
+                    <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:4px;">Otorisasi Kredensial Supabase</h3>
+                    <p style="font-size:11px; color:#64748b; margin-bottom:14px;">Masukkan kata sandi otorisasi untuk membuka fitur Database Cloud:</p>
+                    
+                    <div class="form-group" style="text-align:left;">
+                        <label class="form-label">Kata Sandi Otorisasi:</label>
+                        <div class="form-control-wrap">
+                            <input type="password" id="inputSandiSupabase" class="form-control" placeholder="Masukkan kata sandi otorisasi" autofocus>
+                            <button type="button" class="btn-eye-toggle" onclick="window.togglePasswordEye('inputSandiSupabase', this)">👁️</button>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; justify-content:center; gap:8px; margin-top:16px;">
+                        <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff; padding:10px 18px;">Batal</button>
+                        <button onclick="window.verifikasiSandiSupabase()" class="btn-action btn-blue" style="padding:10px 22px; font-weight:900;">Buka Kunci 🔓</button>
+                    </div>
+                </div>
+            `);
+        };
+
+        window.verifikasiSandiSupabase = function() {
+            const inputPass = document.getElementById("inputSandiSupabase")?.value;
+            if (inputPass === "Supabase1980") {
+                window.isSupabaseUnlocked = true;
+                window.closeDynamicModal();
+                window.openFeature("database-cloud", "Database Cloud [Supabase]");
+            } else {
+                window.showModalInfo("Akses Ditolak ❌", "Kata sandi otorisasi yang Anda masukkan salah.");
+            }
+        };
+
+        window.renderDatabaseCloud = function() {
+            const creds = window.getSupabaseCredentials();
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">SERVER CLOUD REALTIME</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">☁️ Database Cloud [Supabase]</h3>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <button onclick="window.tarikDataDariCloud(false)" class="btn-action btn-blue">📥 Tarik Data Cloud</button>
+                        <button onclick="window.kirimSnapshotKeSupabase(window.cloudState)" class="btn-action btn-emerald">⚡ Unggah ke Cloud</button>
+                    </div>
+                </div>
+
+                <div style="background:#f0f9ff; border:1.5px solid #7dd3fc; border-radius:16px; padding:16px;">
+                    <div class="form-group">
+                        <label class="form-label">Project URL Supabase:</label>
+                        <input type="text" id="sbConfigUrl" class="form-control" value="${creds.url}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Anon / Public Key Supabase:</label>
+                        <input type="text" id="sbConfigKey" class="form-control" value="${creds.key}">
+                    </div>
+                    <button onclick="window.simpanKredensialCloudKustom()" class="btn-action btn-emerald" style="padding:8px 16px; font-size:11px;">💾 Simpan Kredensial</button>
+                </div>
+            </div>`;
+        };
+
+        window.simpanKredensialCloudKustom = function() {
+            const url = document.getElementById("sbConfigUrl")?.value.trim();
+            const key = document.getElementById("sbConfigKey")?.value.trim();
+            if (!url || !key) return window.showModalInfo("Lengkapi Data", "URL dan Anon Key wajib diisi!");
+
+            localStorage.setItem(STORAGE_KEY_CLOUD_CFG, JSON.stringify({ url, key }));
+            window.inisialisasiSupabaseClient();
+            window.showModalInfo("Tersimpan ✅", "Kredensial Supabase berhasil disimpan.");
+        };
+
+        window.openDynamicModal = function(htmlContent) {
+            const card = document.getElementById("modalDynamicCard");
+            const backdrop = document.getElementById("modalDynamicBackdrop");
+            if (card && backdrop) {
+                card.innerHTML = htmlContent;
+                backdrop.style.display = "flex";
+            }
+        };
+
+        window.closeDynamicModal = function() {
+            const backdrop = document.getElementById("modalDynamicBackdrop");
+            if (backdrop) backdrop.style.display = "none";
+        };
+
+        window.showModalInfo = function(title, msg) {
+            document.getElementById("modalInfoTitle").innerHTML = title;
+            document.getElementById("modalInfoMessage").innerHTML = msg;
+            document.getElementById("modalInfoBackdrop").style.display = "flex";
+        };
+
+        window.closeModalInfo = function() {
+            document.getElementById("modalInfoBackdrop").style.display = "none";
+        };
+
+        window.showConfirmDialog = function(title, msg, onConfirm) {
+            document.getElementById("modalConfirmTitle").innerHTML = title;
+            document.getElementById("modalConfirmMessage").innerHTML = msg;
+            const btnOk = document.getElementById("btnModalConfirmOk");
+            btnOk.onclick = function() {
+                window.closeModalConfirm();
+                if (typeof onConfirm === 'function') onConfirm();
+            };
+            document.getElementById("modalConfirmBackdrop").style.display = "flex";
+        };
+
+        window.closeModalConfirm = function() {
+            document.getElementById("modalConfirmBackdrop").style.display = "none";
+        };
+
+        window.toggleAllCheckboxes = function(type, isChecked) {
+            const cbs = document.querySelectorAll('.cb-' + type);
+            cbs.forEach(c => c.checked = isChecked);
+        };
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const savedSession = localStorage.getItem(STORAGE_KEY_SESSION);
+            if (savedSession) {
+                try {
+                    const prof = JSON.parse(savedSession);
+                    if (prof && prof.role) window.suksesLogin(prof);
+                } catch(e) {}
+            }
+            window.inisialisasiSupabaseClient();
+            if (window.supabaseClient) {
+                await window.tarikDataDariCloud(false);
+            }
+        });
     </script>
 </body>
 </html>
