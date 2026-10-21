@@ -1250,6 +1250,53 @@
             industri: { label: "ROOM INDUSTRI MITRA DUDI", icon: "🏭", usernameLabel: "Username Mitra DUDI:", placeholder: "Masukkan ID Mitra Terdaftar", needPass: true }
         };
 
+        const roleMenus = {
+            admin: [
+                { id: "dashboard", label: "Beranda Panitia", icon: "📊" },
+                { id: "kelola-akun", label: "Buat Akun & Kredensial", icon: "🔑" },
+                { id: "master-siswa", label: "Data Master Siswa", icon: "👨‍🎓" },
+                { id: "master-guru", label: "Data Master Guru", icon: "👩‍🏫" },
+                { id: "master-industri", label: "Mitra Industri DUDI", icon: "🏭" },
+                { id: "lembar-observasi", label: "Lembar Observasi PKL", icon: "📋" },
+                { id: "penempatan", label: "Alokasi Guru & Siswa", icon: "🔄" },
+                { id: "rekap-absensi", label: "Rekap Presensi Global", icon: "📈" },
+                { id: "rekap-masuk-pulang", label: "Rekap Presensi Masuk & Pulang", icon: "⏱️" },
+                { id: "rekap-jurnal", label: "Rekap Jurnal Siswa", icon: "📖" },
+                { id: "jam-geofence", label: "Jam & Geofence GPS", icon: "📍" },
+                { id: "periode-pkl", label: "Periode Pelaksanaan PKL", icon: "📅" },
+                { id: "dokumen", label: "Manajemen Dokumen", icon: "📁" },
+                { id: "laporan", label: "Pantau Laporan Akhir", icon: "📄" },
+                { id: "aduan", label: "Laporan Pengaduan", icon: "⚠️" },
+                { id: "database-cloud", label: "Database Cloud [Supabase]", icon: "☁️" },
+                { id: "banner-jadwal", label: "Banner Gambar Slider", icon: "🖼️" }
+            ],
+            siswa: [
+                { id: "dashboard", label: "Beranda Siswa", icon: "🏠" },
+                { id: "presensi", label: "Presensi GPS & Selfie", icon: "📍" },
+                { id: "jurnal", label: "Jurnal Harian PKL", icon: "📖" },
+                { id: "dokumen", label: "Panduan & Dokumen", icon: "📁" },
+                { id: "laporan", label: "Laporan Akhir PKL", icon: "📄" }
+            ],
+            guru: [
+                { id: "dashboard", label: "Beranda Pembimbing", icon: "🏠" },
+                { id: "siswa-bimbingan", label: "Siswa Bimbingan", icon: "👥" },
+                { id: "validasi-jurnal", label: "Validasi Jurnal Siswa", icon: "📋" },
+                { id: "agenda-kunjungan", label: "Agenda Kunjungan", icon: "🚗" },
+                { id: "penilaian", label: "Penilaian PKL", icon: "🏆" }
+            ],
+            industri: [
+                { id: "dashboard", label: "Beranda DUDI", icon: "🏠" },
+                { id: "lembar-observasi-dudi", label: "Lembar Observasi PKL", icon: "📋" },
+                { id: "siswa-magang", label: "Daftar Siswa Magang", icon: "👥" },
+                { id: "validasi-jurnal", label: "Pengesahan Jurnal", icon: "📋" }
+            ],
+            orangtua: [
+                { id: "dashboard", label: "Beranda Wali Siswa", icon: "🏠" },
+                { id: "presensi-ananda", label: "Presensi Ananda", icon: "📍" },
+                { id: "jurnal-ananda", label: "Jurnal Ananda", icon: "📖" }
+            ]
+        };
+
         window.openDynamicModal = function(htmlContent) {
             const card = document.getElementById("modalDynamicCard");
             const backdrop = document.getElementById("modalDynamicBackdrop");
@@ -1450,8 +1497,16 @@
             if (topbarUser) topbarUser.innerText = profile.nama || "Pengguna";
             if (sideRole) sideRole.innerText = roleName;
 
-            window.renderSidebar();
-            window.openFeature("dashboard", "Beranda");
+            try {
+                window.renderSidebar();
+            } catch(e) {
+                console.error("renderSidebar error:", e);
+            }
+            try {
+                window.openFeature("dashboard", "Beranda");
+            } catch(e) {
+                console.error("openFeature error:", e);
+            }
         };
 
         window.handleOnlineLogout = function() {
@@ -1994,7 +2049,7 @@
             const navContainer = document.getElementById("sidebarNavContainer");
             if (!navContainer) return;
             const role = window.cloudState.activeRole || "siswa";
-            const menus = roleMenus[role] || roleMenus.siswa;
+            const menus = (typeof roleMenus !== 'undefined' && roleMenus[role]) ? roleMenus[role] : (roleMenus?.siswa || []);
             let html = "";
             menus.forEach(m => {
                 const isActive = (window.cloudState.currentFeature === m.id);
@@ -3340,6 +3395,293 @@
                 <h3 style="font-size:16px; font-weight:950; color:#0f172a; margin-top:2px;">⚠️ Laporan Pengaduan Masalah</h3>
                 <p style="font-size:12px; color:#64748b; margin-top:6px;">Layanan pengaduan kendala teknis dan kondisi tempat magang.</p>
             </div>`;
+        };
+
+        window.renderRekapJurnalAdmin = function() {
+            const list = window.cloudState.jurnal || [];
+            let rows = "";
+            list.forEach((j, idx) => {
+                rows += `<tr>
+                    <td><input type="checkbox" class="cb-rekap-jurnal-admin" value="${idx}"></td>
+                    <td>${idx + 1}</td>
+                    <td><b>${j.siswa || '-'}</b></td>
+                    <td>${j.tanggal || '-'}</td>
+                    <td>${j.industri || '-'}</td>
+                    <td style="white-space:normal; min-width:180px;">${j.kegiatan || '-'}</td>
+                    <td>
+                        <span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">
+                            ${j.status === 'Disetujui' ? '✓ Tervalidasi Guru' : '⏳ Menunggu Guru'}
+                        </span>
+                    </td>
+                    <td>
+                        <button onclick="window.hapusJurnalAdmin(${idx})" class="btn-action btn-red" style="padding:4px 8px; font-size:10px;">🗑️</button>
+                    </td>
+                </tr>`;
+            });
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7;">LOGBOOK SISWA TERPUSAT</div>
+                        <h3 style="font-size:16px; font-weight:950; color:#0f172a;">📖 Rekap Jurnal Siswa</h3>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.bukaModalExportJurnalAdmin()" class="btn-action btn-blue" style="font-weight:900;">📥 Export Jurnal (Excel/PDF)</button>
+                        <button onclick="window.hapusMasalJurnalAdmin()" class="btn-action btn-red" style="font-weight:900;">🗑️ Hapus Terpilih</button>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px;"><input type="checkbox" onchange="window.toggleAllCheckboxes('rekap-jurnal-admin', this.checked)"></th>
+                                <th style="width:40px;">No</th>
+                                <th>Nama Siswa</th>
+                                <th>Tanggal</th>
+                                <th>Tempat PKL</th>
+                                <th>Uraian Kegiatan</th>
+                                <th>Status Validasi</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows || '<tr><td colspan="8" class="empty-placeholder">Belum ada catatan jurnal siswa yang masuk</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.hapusJurnalAdmin = function(idx) {
+            window.showConfirmDialog("Hapus Catatan Jurnal", "Hapus catatan jurnal siswa ini secara permanen?", () => {
+                window.cloudState.jurnal.splice(idx, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("rekap-jurnal", "Rekap Jurnal Siswa");
+            });
+        };
+
+        window.hapusMasalJurnalAdmin = function() {
+            const cbs = document.querySelectorAll('.cb-rekap-jurnal-admin:checked');
+            if (cbs.length === 0) return window.showModalInfo("Pilih Jurnal", "Centang minimal 1 catatan jurnal untuk dihapus!");
+            window.showConfirmDialog("Hapus Terpilih", `Hapus ${cbs.length} catatan jurnal yang dipilih?`, () => {
+                const indices = Array.from(cbs).map(c => parseInt(c.value)).sort((a,b) => b - a);
+                indices.forEach(i => window.cloudState.jurnal.splice(i, 1));
+                window.simpanDatabasePersisten(true);
+                window.openFeature("rekap-jurnal", "Rekap Jurnal Siswa");
+            });
+        };
+
+        window.bukaModalExportJurnalAdmin = function() {
+            let jurOptions = `<option value="Semua">-- Semua Jurusan / Kelas --</option>` + DAFTAR_JURUSAN_SMKN1.map(j => `<option value="${j}">${j}</option>`).join('');
+            let sisOptions = `<option value="Semua">-- Semua Siswa PKL --</option>` + (window.cloudState.siswa || []).map(s => `<option value="${s.nama}">${s.nama} (${s.kelas || ''})</option>`).join('');
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:950; color:#0284c7; margin-bottom:12px;">📥 Export Rekap Jurnal Siswa</h3>
+                <div class="form-group">
+                    <label class="form-label">Filter Kelas / Jurusan:</label>
+                    <select id="expJurusanJurnal" class="form-control">${jurOptions}</select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Filter Nama Siswa:</label>
+                    <select id="expSiswaJurnal" class="form-control">${sisOptions}</select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Format Dokumen:</label>
+                    <div style="display:flex; gap:10px; margin-top:4px;">
+                        <label style="font-size:12px; display:flex; align-items:center; gap:6px;">
+                            <input type="radio" name="formatExpJurnal" value="excel" checked> 📊 Microsoft Excel (.xlsx)
+                        </label>
+                        <label style="font-size:12px; display:flex; align-items:center; gap:6px;">
+                            <input type="radio" name="formatExpJurnal" value="pdf"> 📄 Cetak / PDF Resmi
+                        </label>
+                    </div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#ffffff;">Batal</button>
+                    <button onclick="window.prosesExportJurnalEksekusi()" class="btn-action btn-blue" style="font-weight:900;">📥 Unduh Sekarang</button>
+                </div>
+            `);
+        };
+
+        window.prosesExportJurnalEksekusi = function() {
+            const jur = document.getElementById("expJurusanJurnal")?.value || "Semua";
+            const sis = document.getElementById("expSiswaJurnal")?.value || "Semua";
+            const format = document.querySelector('input[name="formatExpJurnal"]:checked')?.value || "excel";
+
+            let dataJurnal = window.cloudState.jurnal || [];
+            if (sis !== "Semua") {
+                dataJurnal = dataJurnal.filter(j => (j.siswa || '').toLowerCase() === sis.toLowerCase());
+            }
+
+            if (dataJurnal.length === 0) {
+                return window.showModalInfo("Data Kosong", "Tidak ada catatan jurnal yang sesuai dengan kriteria yang dipilih.");
+            }
+
+            if (format === 'excel') {
+                if (typeof XLSX === 'undefined') return window.showModalInfo("SheetJS Tidak Siap", "Pustaka SheetJS belum termuat sempurna.");
+                const aoa = [
+                    ["JURNAL KEGIATAN HARIAN SISWA PKL - SMK NEGERI 1 MARISA"],
+                    ["Kategori Jurusan / Kelas:", jur],
+                    ["Nama Siswa Terpilih:", sis],
+                    ["Tanggal Unduh:", new Date().toLocaleDateString('id-ID')],
+                    [],
+                    ["No", "Nama Siswa", "Hari / Tanggal", "Tempat PKL / DUDI", "Uraian Kegiatan Praktik", "Status Validasi"]
+                ];
+                dataJurnal.forEach((j, i) => {
+                    aoa.push([i + 1, j.siswa || '-', j.tanggal || '-', j.industri || '-', j.kegiatan || '-', j.status === 'Disetujui' ? 'Disetujui Guru' : 'Menunggu']);
+                });
+                const ws = XLSX.utils.aoa_to_sheet(aoa);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Rekap Jurnal");
+                XLSX.writeFile(wb, `Rekap_Jurnal_PKL_${sis.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
+                window.closeDynamicModal();
+                window.showModalInfo("Berhasil Ekspor ✅", "Berkas Excel rekap jurnal telah berhasil diunduh.");
+            } else {
+                let rowsHtml = "";
+                dataJurnal.forEach((j, i) => {
+                    rowsHtml += `<tr>
+                        <td style="text-align:center; padding:6px; border:1px solid #333;">${i + 1}</td>
+                        <td style="padding:6px; border:1px solid #333;"><b>${j.siswa || '-'}</b></td>
+                        <td style="padding:6px; border:1px solid #333;">${j.tanggal || '-'}</td>
+                        <td style="padding:6px; border:1px solid #333;">${j.industri || '-'}</td>
+                        <td style="padding:6px; border:1px solid #333;">${j.kegiatan || '-'}</td>
+                        <td style="text-align:center; padding:6px; border:1px solid #333;">${j.status === 'Disetujui' ? 'Disetujui' : 'Menunggu'}</td>
+                    </tr>`;
+                });
+                const printWin = window.open('', '_blank');
+                if (printWin) {
+                    printWin.document.write(`
+                        <html>
+                        <head><title>Rekap Jurnal PKL - SMKN 1 Marisa</title></head>
+                        <body style="font-family:sans-serif; padding:20px;">
+                            <h2 style="text-align:center; margin:0;">SMK NEGERI 1 MARISA</h2>
+                            <h4 style="text-align:center; margin:4px 0 16px;">JURNAL KEGIATAN HARIAN PRAKTIK KERJA LAPANGAN</h4>
+                            <div style="font-size:12px; margin-bottom:12px;">
+                                <div><b>Jurusan / Kelas:</b> ${jur}</div>
+                                <div><b>Nama Siswa:</b> ${sis}</div>
+                            </div>
+                            <table style="width:100%; border-collapse:collapse; font-size:11px;" border="1">
+                                <thead>
+                                    <tr style="background:#f1f5f9;">
+                                        <th>No</th><th>Nama Siswa</th><th>Tanggal</th><th>Tempat PKL</th><th>Uraian Kegiatan</th><th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${rowsHtml}</tbody>
+                            </table>
+                        </body>
+                        </html>
+                    `);
+                    printWin.document.close();
+                    setTimeout(() => { printWin.print(); }, 400);
+                }
+                window.closeDynamicModal();
+            }
+        };
+
+        window.renderDatabaseCloud = function() {
+            const creds = window.getSupabaseCredentials();
+            const isConn = window.isCloudConnected;
+
+            return `
+            <div class="card" style="border:2px solid #0284c7; background:linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7;">SERVER & SINKRONISASI</div>
+                        <h3 style="font-size:16px; font-weight:950; color:#0f172a;">☁️ Database Cloud [Supabase]</h3>
+                    </div>
+                    <span class="badge-status ${isConn ? 'badge-green' : 'badge-amber'}">
+                        ${isConn ? '🟢 TERHUBUNG CLOUD' : '🟡 MODE LOKAL'}
+                    </span>
+                </div>
+
+                <div style="background:#ffffff; border:1.5px solid #bfdbfe; border-radius:18px; padding:16px;">
+                    <div class="form-group">
+                        <label class="form-label">Supabase Project URL:</label>
+                        <input type="text" id="cfgSupabaseUrl" class="form-control" value="${creds.url || ''}" placeholder="https://xxxx.supabase.co">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Supabase Anon Key / Public API Key:</label>
+                        <input type="password" id="cfgSupabaseKey" class="form-control" value="${creds.key || ''}" placeholder="sb_publishable_... atau eyJhbGci...">
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px;">
+                        <button onclick="window.simpanKredensialCloud()" class="btn-action btn-blue" style="padding:10px; font-weight:900;">
+                            💾 Simpan Konfigurasi
+                        </button>
+                        <button onclick="window.ujiKoneksiSupabase()" class="btn-action btn-emerald" style="padding:10px; font-weight:900;">
+                            ⚡ Uji Koneksi Cloud
+                        </button>
+                        <button onclick="window.tarikManualDariCloud()" class="btn-action btn-amber" style="padding:10px; font-weight:900;">
+                            🔄 Tarik dari Cloud (Pull)
+                        </button>
+                        <button onclick="window.kirimManualKeCloud()" class="btn-action btn-blue" style="padding:10px; font-weight:900;">
+                            ☁️ Kirim ke Cloud (Push)
+                        </button>
+                    </div>
+
+                    <div style="margin-top:14px; padding-top:12px; border-top:1px dashed #bfdbfe; display:flex; justify-content:space-between; align-items:center;">
+                        <button onclick="window.unduhBackupDataJSON()" class="btn-action" style="background:#64748b; color:#ffffff; padding:8px 14px;">
+                            📥 Cadangkan JSON Lokal
+                        </button>
+                        <span style="font-size:10px; color:#64748b; font-weight:700;">SIP-PKL SMKN 1 Marisa</span>
+                    </div>
+                </div>
+            </div>`;
+        };
+
+        window.simpanKredensialCloud = function() {
+            const url = document.getElementById("cfgSupabaseUrl")?.value.trim();
+            const key = document.getElementById("cfgSupabaseKey")?.value.trim();
+
+            if (!url || !key) return window.showModalInfo("Lengkapi Kredensial", "URL dan Anon Key wajib diisi!");
+
+            try {
+                localStorage.setItem(STORAGE_KEY_CLOUD_CFG, JSON.stringify({ url, key }));
+            } catch(e) {}
+
+            window.inisialisasiSupabaseClient();
+            window.showModalInfo("Kredensial Disimpan ✅", "Pengaturan koneksi Supabase telah diperbarui.");
+            window.openFeature("database-cloud", "Database Cloud [Supabase]");
+        };
+
+        window.ujiKoneksiSupabase = async function() {
+            if (!window.supabaseClient) window.inisialisasiSupabaseClient();
+            const ok = await window.kirimSnapshotKeSupabase(window.getSanitizedCloudPayload(), true);
+            if (ok) {
+                window.isCloudConnected = true;
+                window.showModalInfo("Koneksi Sukses ⚡", "Koneksi ke Supabase Cloud berhasil dan status data tersinkronisasi.");
+            } else {
+                window.showModalInfo("Koneksi Gagal ⚠️", "Tidak dapat terhubung ke tabel Supabase. Pastikan URL dan Key benar.");
+            }
+            window.openFeature("database-cloud", "Database Cloud [Supabase]");
+        };
+
+        window.tarikManualDariCloud = async function() {
+            const ok = await window.tarikDataDariCloud(false);
+            if (ok) {
+                window.simpanDatabasePersisten(false);
+                window.showModalInfo("Sinkron Berhasil 🔄", "Seluruh data terbaru dari cloud berhasil ditarik ke aplikasi.");
+            } else {
+                window.showModalInfo("Gagal Tarik Cloud", "Gagal mengambil data dari server cloud.");
+            }
+            window.openFeature("database-cloud", "Database Cloud [Supabase]");
+        };
+
+        window.kirimManualKeCloud = async function() {
+            const ok = await window.kirimSnapshotKeSupabase(window.getSanitizedCloudPayload(), false);
+            if (ok) {
+                window.showModalInfo("Unggah Berhasil ☁️", "Seluruh data aplikasi saat ini telah diunggah ke cloud.");
+            } else {
+                window.showModalInfo("Gagal Unggah", "Data gagal dikirim ke server Supabase.");
+            }
+        };
+
+        window.unduhBackupDataJSON = function() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(window.getSanitizedCloudPayload(), null, 2));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", `Backup_SIP_PKL_Marisa_${new Date().toISOString().split('T')[0]}.json`);
+            dlAnchor.click();
         };
 
         window.verifikasiSandiSupabase = function() {
