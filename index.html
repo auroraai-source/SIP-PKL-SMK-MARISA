@@ -992,6 +992,8 @@
         const STORAGE_KEY_DB = "SIP_PKL_MARISA_MASTER_DB";
         const STORAGE_KEY_SESSION = "SIP_PKL_MARISA_USER_SESSION";
         const STORAGE_KEY_CLOUD_CFG = "SIP_PKL_MARISA_SUPABASE_CFG";
+        const STORAGE_KEY_VAULT = "SIP_PKL_MARISA_SAFETY_VAULT";
+        const STORAGE_KEY_BACKUP_PEN = "SIP_PKL_MARISA_BACKUP_PENEMPATAN";
 
         const DAFTAR_JURUSAN_SMKN1 = [
             "Akuntansi (AK)",
@@ -1166,7 +1168,22 @@
             const payload = window.getSanitizedCloudPayload();
             try {
                 localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(payload));
+                
+                // Simpan juga salinan cadangan keamanan independen (Safety Vault)
+                localStorage.setItem(STORAGE_KEY_VAULT, JSON.stringify(payload));
+
+                // Simpan cadangan khusus alokasi jika jumlahnya lebih banyak atau sama
+                let existingBackupPen = [];
+                try {
+                    const rawPen = localStorage.getItem(STORAGE_KEY_BACKUP_PEN);
+                    if (rawPen) existingBackupPen = JSON.parse(rawPen);
+                } catch(e) {}
+
+                if (Array.isArray(payload.penempatan) && payload.penempatan.length >= existingBackupPen.length) {
+                    localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(payload.penempatan));
+                }
             } catch(e) {}
+
             if (pushToCloud && typeof window.kirimSnapshotKeSupabase === 'function') {
                 window.kirimSnapshotKeSupabase(payload, true);
             }
@@ -1288,43 +1305,126 @@
         };
 
         window.kirimSnapshotKeSupabase = async function(payload, silent = false) {
-            if (!window.supabaseClient) return false;
-            try {
-                const cleanData = window.getSanitizedCloudPayload();
-                let ok = false;
-                const resState = await window.supabaseClient.from('app_state').upsert({ id: 1, payload: cleanData }, { onConflict: 'id' });
-                if (!resState.error) ok = true;
-                const resCloud = await window.supabaseClient.from('app_cloud_db').upsert({ id: 'master', payload: cleanData }, { onConflict: 'id' });
-                if (!resCloud.error) ok = true;
-                if (ok) {
-                    window.isCloudConnected = true;
-                    return true;
+            if (!window.supabaseClient) {
+                if (!silent) {
+                    window.showModalInfo("Koneksi Belum Terhubung ❌", "Klien Supabase belum terhubung. Periksa konfigurasi URL & Key di menu Database Cloud.");
                 }
                 return false;
+            }
+            try {
+                const cleanData = window.getSanitizedCloudPayload();
+                let okState = false;
+                let okCloud = false;
+                let errMsg = "";
+
+                try {
+                    const resState = await window.supabaseClient.from('app_state').upsert({ id: 1, payload: cleanData }, { onConflict: 'id' });
+                    if (!resState.error) okState = true;
+                    else errMsg += "app_state: " + resState.error.message + "; ";
+                } catch(e) { errMsg += "app_state: " + e.message + "; "; }
+
+                try {
+                    const resCloud = await window.supabaseClient.from('app_cloud_db').upsert({ id: 'master', payload: cleanData }, { onConflict: 'id' });
+                    if (!resCloud.error) okCloud = true;
+                    else errMsg += "app_cloud_db: " + resCloud.error.message + "; ";
+                } catch(e) { errMsg += "app_cloud_db: " + e.message + "; "; }
+
+                if (okState || okCloud) {
+                    window.isCloudConnected = true;
+                    if (!silent) {
+                        const now = new Date();
+                        const timeStr = now.toLocaleDateString('id-ID') + " " + now.toLocaleTimeString('it-IT') + " WITA";
+                        window.showModalInfo("Berhasil Unggah ke Cloud! ⚡", `
+                            Seluruh database sistem berhasil diunggah dan disimpan permanen ke server Supabase Cloud pada <b>${timeStr}</b>.<br><br>
+                            <b>Ringkasan Data yang Disimpan ke Cloud:</b><br>
+                            &bull; 👨‍🎓 Data Siswa Master: <b>${cleanData.siswa.length}</b> siswa<br>
+                            &bull; 👩‍🏫 Data Guru Master: <b>${cleanData.guru.length}</b> guru<br>
+                            &bull; 🏭 Mitra Industri DUDI: <b>${cleanData.industri.length}</b> industri<br>
+                            &bull; 🔄 Alokasi Guru & Siswa: <b>${cleanData.penempatan.length}</b> kelompok penempatan<br>
+                            &bull; 🚗 Alokasi Guru Monitoring: <b>${cleanData.penugasanMonitoring.length}</b> surat tugas<br>
+                            &bull; 📍 Rekaman Presensi: <b>${cleanData.absensi.length}</b> data log<br>
+                            &bull; 📖 Jurnal Kegiatan: <b>${cleanData.jurnal.length}</b> catatan jurnal<br>
+                            &bull; 🔑 Akun & Kredensial: <b>${cleanData.registeredUsers.length}</b> akun<br><br>
+                            <span style="color:#16a34a; font-weight:800;">✓ Data tersinkronisasi aman dan siap diakses di seluruh perangkat (HP / Laptop)!</span>
+                        `);
+                    }
+                    return true;
+                } else {
+                    if (!silent) {
+                        window.showModalInfo("Gagal Mengunggah ke Cloud ❌", "Terjadi kendala saat menyimpan ke Supabase: " + (errMsg || "Tabel tidak merespons.") + "<br><br><i>Catatan: Seluruh data Anda tetap tersimpan aman di penyimpanan internal perangkat ini.</i>");
+                    }
+                    return false;
+                }
             } catch (err) {
+                if (!silent) window.showModalInfo("Galat Pengunggahan ❌", err.message);
                 return false;
             }
         };
 
         window.tarikDataDariCloud = async function(silent = true) {
-            if (!window.supabaseClient) return false;
+            if (!window.supabaseClient) {
+                if (!silent) {
+                    window.showModalInfo("Koneksi Belum Terhubung ❌", "Klien Supabase belum terinisialisasi. Cek konfigurasi URL & Key di menu Database Cloud.");
+                }
+                return false;
+            }
             try {
                 let cloudPayload = null;
-                const { data: dState } = await window.supabaseClient.from('app_state').select('payload').eq('id', 1).maybeSingle();
-                if (dState && dState.payload) {
-                    cloudPayload = dState.payload;
-                } else {
-                    const { data: dCloud } = await window.supabaseClient.from('app_cloud_db').select('payload').eq('id', 'master').maybeSingle();
-                    if (dCloud && dCloud.payload) cloudPayload = dCloud.payload;
+                // Coba ambil dari app_state id 1
+                try {
+                    const { data: dState } = await window.supabaseClient.from('app_state').select('payload').eq('id', 1).maybeSingle();
+                    if (dState && dState.payload) cloudPayload = dState.payload;
+                } catch(e) {}
+
+                // Jika tidak ada di app_state, coba ambil dari app_cloud_db master
+                if (!cloudPayload) {
+                    try {
+                        const { data: dCloud } = await window.supabaseClient.from('app_cloud_db').select('payload').eq('id', 'master').maybeSingle();
+                        if (dCloud && dCloud.payload) cloudPayload = dCloud.payload;
+                    } catch(e) {}
                 }
+
                 if (cloudPayload) {
                     window.terapkanDataRealtime(cloudPayload);
                     window.isCloudConnected = true;
+                    if (!silent) {
+                        const p = window.cloudState;
+                        window.showModalInfo("Data Cloud Berhasil Ditarik! 📥", `
+                            Database terbaru berhasil diambil dari Supabase Cloud dan digabungkan secara aman ke sistem.<br><br>
+                            <b>Ringkasan Database Saat Ini:</b><br>
+                            &bull; 👨‍🎓 Data Siswa: <b>${(p.siswa || []).length}</b> siswa<br>
+                            &bull; 👩‍🏫 Data Guru: <b>${(p.guru || []).length}</b> guru<br>
+                            &bull; 🏭 Mitra Industri DUDI: <b>${(p.industri || []).length}</b> industri<br>
+                            &bull; 🔄 Alokasi Guru & Siswa: <b>${(p.penempatan || []).length}</b> kelompok alokasi<br>
+                            &bull; 🚗 Alokasi Monitoring: <b>${(p.penugasanMonitoring || []).length}</b> tugas<br>
+                            &bull; 📍 Presensi Global: <b>${(p.absensi || []).length}</b> data<br>
+                            &bull; 📖 Jurnal Siswa: <b>${(p.jurnal || []).length}</b> log<br><br>
+                            <span style="color:#0284c7; font-weight:800;">✓ Data lokal telah diperbarui dengan sistem penggabungan aman (Smart Merge) tanpa menghapus data yang sudah ada.</span>
+                        `);
+                    }
                     return true;
+                } else {
+                    if (!silent) {
+                        window.showModalInfo("Data Cloud Belum Ada", "Tidak ditemukan payload data di tabel Supabase. Klik tombol <b>⚡ Unggah ke Cloud Sekarang</b> untuk mencadangkan data lokal ke server.");
+                    }
+                    return false;
                 }
-                return false;
             } catch (err) {
+                if (!silent) window.showModalInfo("Galat Tarik Data ❌", err.message);
                 return false;
+            }
+        };
+
+        window.handleManualUploadCloud = async function() {
+            window.showModalInfo("⏳ Mengunggah ke Cloud...", "Sedang mengunggah seluruh database siswa, guru, industri, alokasi penempatan, presensi, dan jurnal ke Supabase Cloud. Mohon tunggu sebentar...");
+            await window.kirimSnapshotKeSupabase(window.cloudState, false);
+        };
+
+        window.handleManualDownloadCloud = async function() {
+            window.showModalInfo("⏳ Menarik Data Cloud...", "Sedang mengunduh dan menyinkronkan database dari server Supabase Cloud. Mohon tunggu sebentar...");
+            const ok = await window.tarikDataDariCloud(false);
+            if (ok && window.cloudState.currentFeature) {
+                window.openFeature(window.cloudState.currentFeature, undefined, true);
             }
         };
 
@@ -1334,11 +1434,128 @@
             const myRole = window.cloudState.activeRole;
             const myFeature = window.cloudState.currentFeature;
 
-            if (Array.isArray(cloudData.registeredUsers)) window.cloudState.registeredUsers = cloudData.registeredUsers;
-            if (Array.isArray(cloudData.siswa)) window.cloudState.siswa = cloudData.siswa;
-            if (Array.isArray(cloudData.guru)) window.cloudState.guru = cloudData.guru;
-            if (Array.isArray(cloudData.industri)) window.cloudState.industri = cloudData.industri;
-            if (Array.isArray(cloudData.penempatan)) window.cloudState.penempatan = cloudData.penempatan;
+            // 1. SMART MERGE SISWA (Anti-Hapus: Pertahankan siswa lokal yang belum ada di cloud)
+            if (Array.isArray(cloudData.siswa)) {
+                const localSiswaMap = new Map();
+                (window.cloudState.siswa || []).forEach(s => {
+                    const key = window.normalizeTextCompact(s.nama) || s.nis;
+                    if (key) localSiswaMap.set(key, s);
+                });
+                cloudData.siswa.forEach(cs => {
+                    const key = window.normalizeTextCompact(cs.nama) || cs.nis;
+                    if (key) {
+                        const existing = localSiswaMap.get(key);
+                        if (existing) {
+                            localSiswaMap.set(key, {
+                                ...existing,
+                                ...cs,
+                                guru: (cs.guru && cs.guru !== '-') ? cs.guru : (existing.guru || '-'),
+                                industri: (cs.industri && cs.industri !== '-') ? cs.industri : (existing.industri || '-'),
+                                kelas: cs.kelas || existing.kelas || '',
+                                nis: cs.nis || existing.nis || '-'
+                            });
+                        } else {
+                            localSiswaMap.set(key, cs);
+                        }
+                    }
+                });
+                window.cloudState.siswa = Array.from(localSiswaMap.values());
+            }
+
+            // 2. SMART MERGE GURU (Anti-Hapus: Pertahankan seluruh guru terdaftar)
+            if (Array.isArray(cloudData.guru)) {
+                const localGuruMap = new Map();
+                (window.cloudState.guru || []).forEach(g => {
+                    const key = window.normalizeTextCompact(g.nama) || g.nip;
+                    if (key) localGuruMap.set(key, g);
+                });
+                cloudData.guru.forEach(cg => {
+                    const key = window.normalizeTextCompact(cg.nama) || cg.nip;
+                    if (key) {
+                        const existing = localGuruMap.get(key);
+                        if (existing) {
+                            localGuruMap.set(key, { ...existing, ...cg });
+                        } else {
+                            localGuruMap.set(key, cg);
+                        }
+                    }
+                });
+                window.cloudState.guru = Array.from(localGuruMap.values());
+            }
+
+            // 3. SMART MERGE INDUSTRI (Anti-Hapus: Pertahankan data mitra DUDI)
+            if (Array.isArray(cloudData.industri)) {
+                const localIndMap = new Map();
+                (window.cloudState.industri || []).forEach(i => {
+                    const key = window.normalizeTextCompact(i.nama);
+                    if (key) localIndMap.set(key, i);
+                });
+                cloudData.industri.forEach(ci => {
+                    const key = window.normalizeTextCompact(ci.nama);
+                    if (key) {
+                        const existing = localIndMap.get(key);
+                        if (existing) {
+                            localIndMap.set(key, { ...existing, ...ci });
+                        } else {
+                            localIndMap.set(key, ci);
+                        }
+                    }
+                });
+                window.cloudState.industri = Array.from(localIndMap.values());
+            }
+
+            // 4. SMART MERGE PENEMPATAN ALOKASI (Anti-Hapus: Jangan timpa data lokal jika lokal punya lebih banyak alokasi)
+            if (Array.isArray(cloudData.penempatan)) {
+                const localPenMap = new Map();
+                (window.cloudState.penempatan || []).forEach(p => {
+                    const key = (p.guru || '').trim().toLowerCase() + '___' + (Array.isArray(p.industri) ? p.industri.join(',') : (p.industri || '')).trim().toLowerCase();
+                    localPenMap.set(key, p);
+                });
+
+                // Periksa juga cadangan lokal di backup storage jika ada
+                try {
+                    const rawBackupPen = localStorage.getItem(STORAGE_KEY_BACKUP_PEN);
+                    if (rawBackupPen) {
+                        const parsedBackup = JSON.parse(rawBackupPen);
+                        if (Array.isArray(parsedBackup)) {
+                            parsedBackup.forEach(bp => {
+                                const key = (bp.guru || '').trim().toLowerCase() + '___' + (Array.isArray(bp.industri) ? bp.industri.join(',') : (bp.industri || '')).trim().toLowerCase();
+                                if (!localPenMap.has(key)) localPenMap.set(key, bp);
+                            });
+                        }
+                    }
+                } catch(e) {}
+
+                cloudData.penempatan.forEach(cp => {
+                    const key = (cp.guru || '').trim().toLowerCase() + '___' + (Array.isArray(cp.industri) ? cp.industri.join(',') : (cp.industri || '')).trim().toLowerCase();
+                    if (localPenMap.has(key)) {
+                        const existing = localPenMap.get(key);
+                        const combinedSiswa = Array.from(new Set([
+                            ...(Array.isArray(existing.siswa) ? existing.siswa : (existing.siswa ? [existing.siswa] : [])),
+                            ...(Array.isArray(cp.siswa) ? cp.siswa : (cp.siswa ? [cp.siswa] : []))
+                        ]));
+                        localPenMap.set(key, { ...existing, ...cp, siswa: combinedSiswa });
+                    } else {
+                        localPenMap.set(key, cp);
+                    }
+                });
+
+                window.cloudState.penempatan = Array.from(localPenMap.values());
+            }
+
+            // 5. SMART MERGE KREDENSIAL PENGGUNA
+            if (Array.isArray(cloudData.registeredUsers)) {
+                const userMap = new Map();
+                (window.cloudState.registeredUsers || []).forEach(u => {
+                    userMap.set((u.username || '').toLowerCase() + '_' + u.role, u);
+                });
+                cloudData.registeredUsers.forEach(cu => {
+                    userMap.set((cu.username || '').toLowerCase() + '_' + cu.role, cu);
+                });
+                window.cloudState.registeredUsers = Array.from(userMap.values());
+            }
+
+            // 6. Data lainnya
             if (Array.isArray(cloudData.penugasanMonitoring)) window.cloudState.penugasanMonitoring = cloudData.penugasanMonitoring;
             if (Array.isArray(cloudData.absensi)) window.cloudState.absensi = cloudData.absensi;
             if (Array.isArray(cloudData.jurnal)) window.cloudState.jurnal = cloudData.jurnal;
@@ -1359,9 +1576,10 @@
 
             try {
                 localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(window.getSanitizedCloudPayload()));
+                localStorage.setItem(STORAGE_KEY_VAULT, JSON.stringify(window.getSanitizedCloudPayload()));
             } catch(e) {}
 
-            // Otomatis refresh tampilan aktif (terutama dashboard) saat data cloud tiba agar penempatan langsung muncul
+            // Otomatis refresh tampilan aktif jika sedang tidak mengetik
             const activeEl = document.activeElement;
             const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
             const isModalOpen = (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex');
@@ -3866,21 +4084,100 @@
 
         window.renderDatabaseCloud = function() {
             const creds = window.getSupabaseCredentials();
+            const p = window.cloudState;
+            const totalSiswa = (p.siswa || []).length;
+            const totalGuru = (p.guru || []).length;
+            const totalInd = (p.industri || []).length;
+            const totalPen = (p.penempatan || []).length;
+            const totalMon = (p.penugasanMonitoring || []).length;
+            const totalAbsen = (p.absensi || []).length;
+            const totalJurnal = (p.jurnal || []).length;
 
             return `
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
-                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">SERVER CLOUD REALTIME</div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">SERVER CLOUD REALTIME &bull; DATABASE UTAMA</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">☁️ Database Cloud [Supabase]</h3>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Sinkronisasi otomatis dan manual untuk mengamankan data seluruh siswa, guru, industri, dan alokasi penempatan.</p>
                     </div>
-                    <div style="display:flex; gap:6px;">
-                        <button onclick="window.tarikDataDariCloud(false)" class="btn-action btn-blue">📥 Tarik Data Cloud</button>
-                        <button onclick="window.kirimSnapshotKeSupabase(window.cloudState)" class="btn-action btn-emerald">⚡ Unggah ke Cloud</button>
+                    <span class="badge-status ${window.isCloudConnected ? 'badge-green' : 'badge-amber'}" style="font-size:11px; font-weight:900;">
+                        ${window.isCloudConnected ? '🟢 Cloud Terhubung' : '🟡 Standby / Local Active'}
+                    </span>
+                </div>
+
+                <!-- 2 TOMBOL UTAMA: UNGGAH KE CLOUD & TARIK DATA CLOUD -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+                    <button type="button" onclick="window.handleManualUploadCloud()" class="btn-action btn-emerald" style="padding:14px 12px; font-size:13px; font-weight:900; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; border-radius:16px; box-shadow:0 4px 14px rgba(16,185,129,0.35);">
+                        <span style="font-size:22px;">⚡</span>
+                        <span>Unggah ke Cloud Sekarang</span>
+                        <span style="font-size:9.5px; opacity:0.9; font-weight:750;">(Simpan Seluruh Data ke Supabase)</span>
+                    </button>
+                    <button type="button" onclick="window.handleManualDownloadCloud()" class="btn-action btn-blue" style="padding:14px 12px; font-size:13px; font-weight:900; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; border-radius:16px; box-shadow:0 4px 14px rgba(2,132,199,0.35);">
+                        <span style="font-size:22px;">📥</span>
+                        <span>Tarik Data Cloud</span>
+                        <span style="font-size:9.5px; opacity:0.9; font-weight:750;">(Ambil & Sinkronkan Data Terbaru)</span>
+                    </button>
+                </div>
+
+                <!-- RINGKASAN DATA BASE SISTEM SAAT INI -->
+                <div style="background:#ffffff; border:1.5px solid #bfdbfe; border-radius:18px; padding:14px; margin-bottom:14px; box-shadow:0 2px 10px rgba(2,132,199,0.06);">
+                    <div style="font-size:12px; font-weight:900; color:#0f172a; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                        <span>📊 RINGKASAN DATABASE AKTIF</span>
+                        <span style="font-size:10px; color:#0284c7; font-weight:800;">Realtime Monitor</span>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:8px 10px;">
+                            <div style="font-size:10px; color:#64748b; font-weight:750;">👨‍🎓 Data Siswa Master</div>
+                            <div style="font-size:16px; font-weight:950; color:#0284c7; margin-top:2px;">${totalSiswa} Siswa</div>
+                        </div>
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:8px 10px;">
+                            <div style="font-size:10px; color:#64748b; font-weight:750;">👩‍🏫 Data Guru Master</div>
+                            <div style="font-size:16px; font-weight:950; color:#10b981; margin-top:2px;">${totalGuru} Guru</div>
+                        </div>
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:8px 10px;">
+                            <div style="font-size:10px; color:#64748b; font-weight:750;">🏭 Mitra Industri DUDI</div>
+                            <div style="font-size:16px; font-weight:950; color:#f59e0b; margin-top:2px;">${totalInd} Industri</div>
+                        </div>
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:8px 10px;">
+                            <div style="font-size:10px; color:#64748b; font-weight:750;">🔄 Alokasi Guru & Siswa</div>
+                            <div style="font-size:16px; font-weight:950; color:#8b5cf6; margin-top:2px;">${totalPen} Kelompok</div>
+                        </div>
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:8px 10px;">
+                            <div style="font-size:10px; color:#64748b; font-weight:750;">🚗 Alokasi Monitoring</div>
+                            <div style="font-size:16px; font-weight:950; color:#0369a1; margin-top:2px;">${totalMon} Tugas</div>
+                        </div>
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:8px 10px;">
+                            <div style="font-size:10px; color:#64748b; font-weight:750;">📍 Presensi & 📖 Jurnal</div>
+                            <div style="font-size:16px; font-weight:950; color:#0f172a; margin-top:2px;">${totalAbsen} / ${totalJurnal}</div>
+                        </div>
                     </div>
                 </div>
 
-                <div style="background:#f0f9ff; border:1.5px solid #7dd3fc; border-radius:16px; padding:16px;">
+                <!-- ALAT KEAMANAN: DIAGNOSTIK & PULIHKAN ALOKASI SERTA BACKUP PERMANEN -->
+                <div style="background:linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border:2px solid #fde68a; border-radius:18px; padding:16px; margin-bottom:14px;">
+                    <div style="font-size:10px; font-weight:900; color:#b45309; text-transform:uppercase; letter-spacing:0.5px;">🛠️ PUSAT PEMULIHAN & KEAMANAN DATA</div>
+                    <div style="font-size:14px; font-weight:950; color:#78350f; margin-top:2px;">Diagnostik & Pulihkan Alokasi Guru & Siswa</div>
+                    <p style="font-size:11px; color:#92400e; margin:4px 0 12px; line-height:1.4;">
+                        Jika data alokasi berkurang atau hilang akibat penimpaan cache atau deploy ulang, gunakan tombol di bawah untuk memulihkan seluruh data alokasi secara utuh dari Safety Vault dan pangkalan data siswa.
+                    </p>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button type="button" onclick="window.bukaModalDiagnostikDanPulihkanAlokasi()" class="btn-action btn-amber" style="padding:10px 18px; font-size:12px; font-weight:900; box-shadow:0 3px 10px rgba(245,158,11,0.35);">
+                            🛠️ Buka Diagnostik & Pulihkan Alokasi ➔
+                        </button>
+                        <button type="button" onclick="window.unduhCadanganJsonDatabase()" class="btn-action btn-emerald" style="padding:10px 14px; font-size:11.5px; font-weight:850;">
+                            💾 Unduh Backup JSON
+                        </button>
+                        <label class="btn-action btn-blue" style="padding:10px 14px; font-size:11.5px; font-weight:850; cursor:pointer;">
+                            📂 Restore dari File JSON
+                            <input type="file" id="inputRestoreJsonBackup" accept=".json" style="display:none;" onchange="window.handleRestoreJsonFile(this)">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- KONFIGURASI SUPABASE KREDENSIAL -->
+                <div style="background:#f0f9ff; border:1.5px solid #7dd3fc; border-radius:18px; padding:16px;">
+                    <div style="font-size:11.5px; font-weight:900; color:#0369a1; margin-bottom:10px;">⚙️ PENGATURAN KREDENSIAL SUPABASE</div>
                     <div class="form-group">
                         <label class="form-label">Project URL Supabase:</label>
                         <input type="text" id="sbConfigUrl" class="form-control" value="${creds.url}">
@@ -3889,9 +4186,262 @@
                         <label class="form-label">Anon / Public Key Supabase:</label>
                         <input type="text" id="sbConfigKey" class="form-control" value="${creds.key}">
                     </div>
-                    <button onclick="window.simpanKredensialCloudKustom()" class="btn-action btn-emerald" style="padding:8px 16px; font-size:11px;">💾 Simpan Kredensial</button>
+                    <div style="display:flex; justify-content:flex-end; gap:8px;">
+                        <button onclick="window.simpanKredensialCloudKustom()" class="btn-action btn-emerald" style="padding:9px 18px; font-size:11.5px; font-weight:900;">
+                            💾 Simpan & Uji Koneksi Kredensial
+                        </button>
+                    </div>
                 </div>
             </div>`;
+        };
+
+        // =========================================================================
+        // FITUR BARU: DIAGNOSTIK & PULIHKAN ALOKASI (ANTI-HILANG & AUTO-RECOVERY)
+        // =========================================================================
+        window.bukaModalDiagnostikDanPulihkanAlokasi = function() {
+            const p = window.cloudState;
+            const currentPen = p.penempatan || [];
+            
+            // Periksa cadangan di localStorage
+            let backupPen = [];
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_BACKUP_PEN);
+                if (raw) backupPen = JSON.parse(raw);
+            } catch(e) {}
+
+            let vaultData = null;
+            let vaultPen = [];
+            try {
+                const rawVault = localStorage.getItem(STORAGE_KEY_VAULT);
+                if (rawVault) {
+                    vaultData = JSON.parse(rawVault);
+                    if (vaultData && Array.isArray(vaultData.penempatan)) vaultPen = vaultData.penempatan;
+                }
+            } catch(e) {}
+
+            // Pindai data siswa yang sudah memiliki guru & industri
+            const siswaMapped = (p.siswa || []).filter(s => s.guru && s.guru !== '-' && s.industri && s.industri !== '-');
+
+            // Guru terdaftar
+            const totalGuru = (p.guru || []).length;
+            const totalSiswa = (p.siswa || []).length;
+
+            // Evaluasi kelompok alokasi unik yang bisa dipulihkan
+            const allCandidateKeys = new Set();
+            currentPen.forEach(item => {
+                const key = (item.guru || '').trim() + ' -> ' + (Array.isArray(item.industri) ? item.industri.join(', ') : item.industri);
+                allCandidateKeys.add(key);
+            });
+            backupPen.forEach(item => {
+                const key = (item.guru || '').trim() + ' -> ' + (Array.isArray(item.industri) ? item.industri.join(', ') : item.industri);
+                allCandidateKeys.add(key);
+            });
+            vaultPen.forEach(item => {
+                const key = (item.guru || '').trim() + ' -> ' + (Array.isArray(item.industri) ? item.industri.join(', ') : item.industri);
+                allCandidateKeys.add(key);
+            });
+            siswaMapped.forEach(s => {
+                const key = (s.guru || '').trim() + ' -> ' + s.industri;
+                allCandidateKeys.add(key);
+            });
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">🛠️ Diagnostik & Pulihkan Alokasi Guru & Siswa</h3>
+                <p style="font-size:11px; color:#475569; margin-bottom:14px; line-height:1.4;">
+                    Pemeriksaan menyeluruh terhadap integritas data Alokasi Guru & Siswa dari tabel aktif, Safety Vault, dan Data Master Siswa.
+                </p>
+
+                <!-- Status Kartu Diagnostik -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+                    <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:12px; padding:8px 10px;">
+                        <div style="font-size:9.5px; color:#0369a1; font-weight:750;">Alokasi Aktif Saat Ini:</div>
+                        <div style="font-size:15px; font-weight:950; color:#0284c7; margin-top:1px;">${currentPen.length} Kelompok</div>
+                    </div>
+                    <div style="background:#fef3c7; border:1px solid #fde68a; border-radius:12px; padding:8px 10px;">
+                        <div style="font-size:9.5px; color:#92400e; font-weight:750;">Total Alokasi Terdeteksi:</div>
+                        <div style="font-size:15px; font-weight:950; color:#b45309; margin-top:1px;">${allCandidateKeys.size} Kelompok</div>
+                    </div>
+                    <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:12px; padding:8px 10px;">
+                        <div style="font-size:9.5px; color:#475569; font-weight:750;">Siswa Master Terdaftar:</div>
+                        <div style="font-size:14px; font-weight:900; color:#0f172a; margin-top:1px;">${totalSiswa} Siswa (${siswaMapped.length} Berplot)</div>
+                    </div>
+                    <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:12px; padding:8px 10px;">
+                        <div style="font-size:9.5px; color:#475569; font-weight:750;">Guru Pembimbing Master:</div>
+                        <div style="font-size:14px; font-weight:900; color:#0f172a; margin-top:1px;">${totalGuru} Guru Terdaftar</div>
+                    </div>
+                </div>
+
+                <!-- Kotak Rekomendasi Tindakan -->
+                <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:14px; padding:12px; margin-bottom:14px;">
+                    <div style="font-size:11px; font-weight:900; color:#15803d; margin-bottom:4px;">💡 STATUS PEMULIHAN SISTEM:</div>
+                    <div style="font-size:11.5px; color:#166534; line-height:1.45;">
+                        ${allCandidateKeys.size > currentPen.length ? `
+                            <b>Ditemukan ${allCandidateKeys.size - currentPen.length} alokasi penempatan tambahan</b> yang tersimpan di cadangan vault atau master siswa (termasuk guru & tempat magang yang pernah Anda input). Klik tombol di bawah untuk merekonstruksi dan memulihkannya kembali secara otomatis.
+                        ` : `
+                            Seluruh data alokasi guru dan siswa saat ini dalam kondisi sinkron dan aman. Anda dapat menekan tombol pemulihan kapan saja jika ingin merekonstruksi ulang data alokasi.
+                        `}
+                    </div>
+                </div>
+
+                <!-- Tombol Aksi Pemulihan -->
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <button type="button" onclick="window.jalankanPemulihanAlokasiOtomatis()" class="btn-action btn-emerald" style="padding:12px; font-size:12.5px; font-weight:900; border-radius:12px; box-shadow:0 3px 12px rgba(16,185,129,0.35);">
+                        🚀 Pulihkan & Rekonstruksi Seluruh Alokasi Sekarang
+                    </button>
+                    <button type="button" onclick="window.unduhCadanganJsonDatabase()" class="btn-action btn-blue" style="padding:10px; font-size:11.5px; font-weight:800; border-radius:10px;">
+                        💾 Unduh Berkas Backup Lengkap (.json)
+                    </button>
+                    <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#e2e8f0; color:#475569; padding:8px; font-size:11px; border-radius:10px;">
+                        Tutup
+                    </button>
+                </div>
+            `);
+        };
+
+        window.jalankanPemulihanAlokasiOtomatis = async function() {
+            window.showModalInfo("Memulihkan Data...", "Sedang merekonstruksi seluruh alokasi guru dan siswa dari cadangan aman dan master data...");
+
+            const p = window.cloudState;
+            const mergedMap = new Map();
+
+            // 1. Ambil dari alokasi saat ini
+            (p.penempatan || []).forEach(item => {
+                const g = (item.guru || '').trim();
+                const i = (Array.isArray(item.industri) ? item.industri[0] : item.industri || '').trim();
+                if (g && i) {
+                    const key = g.toLowerCase() + '___' + i.toLowerCase();
+                    const sList = Array.isArray(item.siswa) ? item.siswa : (item.siswa ? [item.siswa] : []);
+                    mergedMap.set(key, { id: item.id || 'pen_' + Date.now(), guru: g, industri: i, siswa: sList });
+                }
+            });
+
+            // 2. Ambil dari cadangan lokal (STORAGE_KEY_BACKUP_PEN)
+            try {
+                const rawBack = localStorage.getItem(STORAGE_KEY_BACKUP_PEN);
+                if (rawBack) {
+                    const parsed = JSON.parse(rawBack);
+                    if (Array.isArray(parsed)) {
+                        parsed.forEach(item => {
+                            const g = (item.guru || '').trim();
+                            const i = (Array.isArray(item.industri) ? item.industri[0] : item.industri || '').trim();
+                            if (g && i) {
+                                const key = g.toLowerCase() + '___' + i.toLowerCase();
+                                const sList = Array.isArray(item.siswa) ? item.siswa : (item.siswa ? [item.siswa] : []);
+                                if (mergedMap.has(key)) {
+                                    const ex = mergedMap.get(key);
+                                    ex.siswa = Array.from(new Set([...ex.siswa, ...sList]));
+                                } else {
+                                    mergedMap.set(key, { id: item.id || 'pen_' + Date.now(), guru: g, industri: i, siswa: sList });
+                                }
+                            }
+                        });
+                    }
+                }
+            } catch(e) {}
+
+            // 3. Ambil dari Safety Vault (STORAGE_KEY_VAULT)
+            try {
+                const rawVault = localStorage.getItem(STORAGE_KEY_VAULT);
+                if (rawVault) {
+                    const parsedVault = JSON.parse(rawVault);
+                    if (parsedVault && Array.isArray(parsedVault.penempatan)) {
+                        parsedVault.penempatan.forEach(item => {
+                            const g = (item.guru || '').trim();
+                            const i = (Array.isArray(item.industri) ? item.industri[0] : item.industri || '').trim();
+                            if (g && i) {
+                                const key = g.toLowerCase() + '___' + i.toLowerCase();
+                                const sList = Array.isArray(item.siswa) ? item.siswa : (item.siswa ? [item.siswa] : []);
+                                if (mergedMap.has(key)) {
+                                    const ex = mergedMap.get(key);
+                                    ex.siswa = Array.from(new Set([...ex.siswa, ...sList]));
+                                } else {
+                                    mergedMap.set(key, { id: item.id || 'pen_' + Date.now(), guru: g, industri: i, siswa: sList });
+                                }
+                            }
+                        });
+                    }
+                }
+            } catch(e) {}
+
+            // 4. Rekonstruksi dari Data Master Siswa (Jika siswa memiliki guru dan industri)
+            (p.siswa || []).forEach(s => {
+                const g = (s.guru || '').trim();
+                const i = (s.industri || '').trim();
+                if (g && g !== '-' && i && i !== '-') {
+                    const key = g.toLowerCase() + '___' + i.toLowerCase();
+                    if (mergedMap.has(key)) {
+                        const ex = mergedMap.get(key);
+                        if (!ex.siswa.some(it => window.isNameMatch(it, s.nama))) {
+                            ex.siswa.push(s.nama);
+                        }
+                    } else {
+                        mergedMap.set(key, {
+                            id: 'pen_rec_' + Date.now() + Math.floor(Math.random() * 1000),
+                            guru: g,
+                            industri: i,
+                            siswa: [s.nama]
+                        });
+                    }
+                }
+            });
+
+            // Terapkan hasil pemulihan utuh
+            const finalPenempatan = Array.from(mergedMap.values());
+            window.cloudState.penempatan = finalPenempatan;
+
+            // Simpan ke storage lokal & cloud
+            window.simpanDatabasePersisten(true);
+
+            // Tampilkan laporan sukses
+            window.closeModalInfo();
+            window.showModalInfo("Pemulihan Berhasil! 🎉", `
+                Sistem berhasil memulihkan dan merekonstruksi <b>${finalPenempatan.length} kelompok alokasi penempatan</b>.<br><br>
+                Seluruh data alokasi telah diamankan ke <b>Safety Vault Lokal</b> dan disinkronkan langsung ke <b>Supabase Cloud</b> sehingga tidak akan hilang lagi.
+            `);
+
+            // Segarkan tampilan alokasi jika sedang membuka menu penempatan
+            if (window.cloudState.currentFeature === 'penempatan' || window.cloudState.currentFeature === 'database-cloud') {
+                window.openFeature(window.cloudState.currentFeature, undefined, true);
+            }
+        };
+
+        window.unduhCadanganJsonDatabase = function() {
+            const data = window.getSanitizedCloudPayload();
+            const jsonStr = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Backup_SIP_PKL_SMKN1_Marisa_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            window.showModalInfo("Cadangan Berhasil Diunduh 💾", "Berkas cadangan lengkap sistem telah diunduh ke perangkat Anda. Simpan berkas ini di komputer atau penyimpanan aman Anda.");
+        };
+
+        window.handleRestoreJsonFile = function(inputEl) {
+            if (!inputEl || !inputEl.files || !inputEl.files[0]) return;
+            const file = inputEl.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (parsed && typeof parsed === 'object') {
+                        window.terapkanDataRealtime(parsed);
+                        window.simpanDatabasePersisten(true);
+                        window.showModalInfo("Pemulihan File Berhasil ✅", `Seluruh database dari berkas <b>${file.name}</b> berhasil dipulihkan dan disinkronkan ke sistem.`);
+                        if (window.cloudState.currentFeature) {
+                            window.openFeature(window.cloudState.currentFeature, undefined, true);
+                        }
+                    } else {
+                        window.showModalInfo("Format Tidak Valid", "Berkas JSON tidak memiliki struktur database yang sesuai.");
+                    }
+                } catch(err) {
+                    window.showModalInfo("Gagal Membaca File", err.message);
+                }
+            };
+            reader.readAsText(file);
         };
 
         window.activeCredentialTab = "siswa";
@@ -4797,9 +5347,15 @@
                         Petakan guru pembimbing akademik untuk memvalidasi jurnal harian dan laporan siswa. Dilengkapi fitur pencarian Nama Guru & Industri.
                     </p>
                 </div>
-                <div style="margin-bottom:12px;">
-                    <button onclick="window.bukaModalAlokasiPenempatan()" class="btn-action btn-blue" style="padding:10px 18px; font-size:12px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(2,132,199,0.3);">
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+                    <button onclick="window.bukaModalAlokasiPenempatan()" class="btn-action btn-blue" style="padding:10px 16px; font-size:12px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(2,132,199,0.3);">
                         + Alokasi Pembimbing Baru
+                    </button>
+                    <button onclick="window.bukaModalDiagnostikDanPulihkanAlokasi()" class="btn-action btn-amber" style="padding:10px 16px; font-size:12px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(245,158,11,0.3); background:#f59e0b; color:#ffffff;">
+                        🛠️ Diagnostik & Pulihkan Alokasi
+                    </button>
+                    <button onclick="window.handleManualUploadCloud()" class="btn-action btn-emerald" style="padding:10px 14px; font-size:11.5px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(16,185,129,0.3);">
+                        ⚡ Simpan ke Cloud
                     </button>
                 </div>
 
