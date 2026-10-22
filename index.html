@@ -1264,11 +1264,11 @@
                 { id: "siswa-bimbingan", label: "Siswa Bimbingan", icon: "👥" },
                 { id: "validasi-jurnal", label: "Validasi Jurnal Siswa", icon: "📋" },
                 { id: "agenda-kunjungan", label: "Agenda Kunjungan DUDI", icon: "🚗" },
-                { id: "penilaian", label: "Penilaian Bimbingan", icon: "🏆" },
-                { id: "laporan", label: "Validasi Laporan Akhir", icon: "📄" },
-                { id: "dokumen", label: "Dokumen PKL", icon: "📁" },
+                { id: "penilaian", label: "Lembar Penilaian PKL", icon: "🏆" },
                 { id: "rekap-absensi", label: "Rekap Presensi Global", icon: "📈" },
-                { id: "rekap-jurnal", label: "Rekap Jurnal Siswa", icon: "📖" }
+                { id: "rekap-jurnal", label: "Rekap Jurnal Siswa", icon: "📖" },
+                { id: "laporan", label: "Validasi Laporan Akhir", icon: "📄" },
+                { id: "dokumen", label: "Dokumen PKL", icon: "📁" }
             ],
             admin: [
                 { id: "dashboard", label: "Beranda Panitia", icon: "📊" },
@@ -1825,71 +1825,90 @@
             const profile = window.cloudState.userProfile || { nama: "Guru Pembimbing" };
             const bannerHtml = window.renderBannerCarouselHtml("RUANG GURU PEMBIMBING LAPANGAN");
 
-            // 1. ISOLASI DATA KETAT: Ambil HANYA siswa bimbingan guru ini dari data penempatan resmi
-            const myPlacements = (window.cloudState.penempatan || []).filter(p => {
-                return p.guru && p.guru.toLowerCase().trim() === profile.nama.toLowerCase().trim();
-            });
+            // Fungsi pencocokan nama guru yang fleksibel dan aman dari gelar/spasi
+            const isMatchGuru = (guruName) => {
+                if (!guruName || !profile.nama) return false;
+                const a = guruName.toLowerCase().trim();
+                const b = profile.nama.toLowerCase().trim();
+                if (a === b) return true;
+                const cleanA = a.replace(/[,.]/g, ' ').replace(/\s+/g, ' ').trim();
+                const cleanB = b.replace(/[,.]/g, ' ').replace(/\s+/g, ' ').trim();
+                return cleanA.includes(cleanB) || cleanB.includes(cleanA);
+            };
 
-            // Pemetaan nama siswa -> nama industri magang
+            // 1. ISOLASI DATA KETAT: Ambil HANYA penempatan siswa resmi guru ini dari data Alokasi Guru & Siswa
+            const myPlacements = (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru));
+
+            // Pemetaan nama siswa bimbingan (case-insensitive) -> data industri & nama resmi
             const myStudentMap = new Map();
             myPlacements.forEach(p => {
                 const indName = Array.isArray(p.industri) ? p.industri.join(', ') : (p.industri || 'DUDI Mitra');
                 const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
                 sList.forEach(s => {
                     if (s && s.trim()) {
-                        myStudentMap.set(s.trim(), indName);
+                        const sClean = s.trim();
+                        myStudentMap.set(sClean.toLowerCase(), {
+                            nama: sClean,
+                            industri: indName
+                        });
                     }
                 });
             });
 
-            const myStudentNames = Array.from(myStudentMap.keys());
-            const totalSiswaBimbingan = myStudentNames.length;
+            const myStudentKeys = Array.from(myStudentMap.keys());
+            const totalSiswaBimbingan = myStudentKeys.length;
 
-            // 2. ISOLASI JURNAL: Hanya jurnal siswa bimbingan guru ini
+            // Hitung tanggal lokal hari ini (WITA / YYYY-MM-DD lokal Indonesia)
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const todayStr = `${year}-${month}-${day}`;
+
+            // 2. ISOLASI JURNAL: Hanya jurnal yang dibuat oleh siswa bimbingan guru ini
             const myStudentJournals = (window.cloudState.jurnal || []).filter(j => {
-                return j.siswa && myStudentMap.has(j.siswa.trim());
+                return j.siswa && myStudentMap.has(j.siswa.trim().toLowerCase());
             });
 
-            const todayStr = new Date().toISOString().split('T')[0];
-
-            // 3. HITUNG 4 METRIK KARTU MONITORING PKL (SESUAI GAMBAR 2)
+            // 3. HITUNG 4 METRIK KARTU MONITORING PKL (PERSIS SESUAI GAMBAR 2)
             const journalsToday = myStudentJournals.filter(j => j.tanggal === todayStr);
             const countJurnalHariIni = journalsToday.length;
             const countSudahDisetujui = myStudentJournals.filter(j => j.status === 'Disetujui').length;
             const countMenungguReview = myStudentJournals.filter(j => j.status !== 'Disetujui').length;
 
-            // 4. ISOLASI PRESENSI: Hanya presensi siswa bimbingan hari ini
+            // 4. ISOLASI PRESENSI: Hanya presensi milik siswa bimbingan guru ini hari ini
             const myStudentAbsensiToday = (window.cloudState.absensi || []).filter(a => {
-                return a.tanggal === todayStr && a.nama && myStudentMap.has(a.nama.trim());
+                return a.tanggal === todayStr && a.nama && myStudentMap.has(a.nama.trim().toLowerCase());
             });
 
-            // 5. PERINGATAN SISWA:
+            // 5. PERINGATAN SISWA HARI INI:
             // a. Siswa yang belum mengisi jurnal hari ini
-            const belumIsiJurnalList = myStudentNames.filter(sName => {
-                return !journalsToday.some(j => j.siswa.trim().toLowerCase() === sName.toLowerCase());
-            });
+            const belumIsiJurnalList = myStudentKeys.filter(sKey => {
+                return !journalsToday.some(j => (j.siswa || '').trim().toLowerCase() === sKey);
+            }).map(sKey => myStudentMap.get(sKey));
 
-            // b. Siswa yang belum melakukan presensi masuk hari ini
-            const belumPresensiMasukList = myStudentNames.filter(sName => {
-                return !myStudentAbsensiToday.some(a => a.nama.trim().toLowerCase() === sName.toLowerCase() && a.tipe_absen === 'Masuk');
-            });
+            // b. Siswa yang belum presensi datang (Masuk) hari ini
+            const belumPresensiMasukList = myStudentKeys.filter(sKey => {
+                return !myStudentAbsensiToday.some(a => (a.nama || '').trim().toLowerCase() === sKey && a.tipe_absen === 'Masuk');
+            }).map(sKey => myStudentMap.get(sKey));
 
-            // c. Siswa yang belum melakukan presensi pulang hari ini
-            const belumPresensiPulangList = myStudentNames.filter(sName => {
-                return !myStudentAbsensiToday.some(a => a.nama.trim().toLowerCase() === sName.toLowerCase() && a.tipe_absen === 'Pulang');
-            });
+            // c. Siswa yang belum presensi pulang hari ini
+            const belumPresensiPulangList = myStudentKeys.filter(sKey => {
+                return !myStudentAbsensiToday.some(a => (a.nama || '').trim().toLowerCase() === sKey && a.tipe_absen === 'Pulang');
+            }).map(sKey => myStudentMap.get(sKey));
 
-            // Jumlah masalah yang perlu tindakan
+            // Total masalah yang perlu tindakan
             const countPerluTindakan = countMenungguReview + belumIsiJurnalList.length + belumPresensiMasukList.length;
 
-            // 6. RENDER AKTIVITAS SISWA TERBARU (Top 5 Jurnal Terbaru)
+            // 6. RENDER AKTIVITAS SISWA TERBARU (Maksimal 5 Jurnal Terbaru)
             let aktivitasJurnalHtml = "";
             const recentJournals = myStudentJournals.slice(0, 5);
 
             if (recentJournals.length > 0) {
-                recentJournals.forEach((j) => {
+                recentJournals.forEach(j => {
                     const originalIdx = (window.cloudState.jurnal || []).indexOf(j);
-                    const indName = myStudentMap.get(j.siswa.trim()) || j.industri || 'DUDI Mitra';
+                    const sInfo = myStudentMap.get((j.siswa || '').trim().toLowerCase());
+                    const indName = sInfo ? sInfo.industri : (j.industri || 'DUDI Mitra');
                     const isApproved = (j.status === 'Disetujui');
 
                     aktivitasJurnalHtml += `
@@ -1908,11 +1927,11 @@
                         </div>
                         <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:8px;">
                             ${!isApproved ? `
-                                <button onclick="window.sahkanJurnalSiswa(${originalIdx})" class="btn-action btn-emerald" style="padding:5px 12px; font-size:11px;">
+                                <button onclick="window.sahkanJurnalSiswa(${originalIdx})" class="btn-action btn-emerald" style="padding:6px 12px; font-size:11px; font-weight:900;">
                                     ✓ Sahkan Jurnal
                                 </button>
                             ` : ''}
-                            <button onclick="window.openFeature('validasi-jurnal', 'Validasi Jurnal')" class="btn-action btn-blue" style="padding:5px 10px; font-size:11px;">
+                            <button onclick="window.openFeature('validasi-jurnal', 'Validasi Jurnal Siswa')" class="btn-action btn-blue" style="padding:6px 12px; font-size:11px; font-weight:800;">
                                 Periksa ➔
                             </button>
                         </div>
@@ -1925,16 +1944,15 @@
                 </div>`;
             }
 
-            // 7. RENDER DAFTAR PERINGATAN SISWA
+            // 7. RENDER PERINGATAN KEDISIPLINAN SISWA
             let warningJurnalHtml = "";
             if (belumIsiJurnalList.length > 0) {
-                belumIsiJurnalList.forEach(sName => {
-                    const ind = myStudentMap.get(sName) || 'DUDI Mitra';
+                belumIsiJurnalList.forEach(s => {
                     warningJurnalHtml += `
-                    <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#ffffff; border:1px solid #fecaca; border-radius:12px; margin-bottom:6px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 12px; background:#ffffff; border:1px solid #fecaca; border-radius:12px; margin-bottom:6px;">
                         <div>
-                            <div style="font-size:12px; font-weight:850; color:#0f172a;">👨‍🎓 ${sName}</div>
-                            <div style="font-size:10px; color:#64748b;">🏢 ${ind}</div>
+                            <div style="font-size:12px; font-weight:850; color:#0f172a;">👨‍🎓 ${s.nama}</div>
+                            <div style="font-size:10px; color:#64748b;">🏢 ${s.industri}</div>
                         </div>
                         <span class="badge-status badge-red" style="font-size:9.5px;">Belum Mengisi Jurnal</span>
                     </div>`;
@@ -1942,19 +1960,18 @@
             } else {
                 warningJurnalHtml = `
                 <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:12px; padding:10px; text-align:center; font-size:11.5px; font-weight:800; color:#15803d;">
-                    🎉 Luar biasa! Semua siswa bimbingan Anda telah mengisi jurnal hari ini.
+                    🎉 Luar biasa! Seluruh siswa bimbingan Anda telah mengisi jurnal hari ini.
                 </div>`;
             }
 
             let warningPresensiMasukHtml = "";
             if (belumPresensiMasukList.length > 0) {
-                belumPresensiMasukList.forEach(sName => {
-                    const ind = myStudentMap.get(sName) || 'DUDI Mitra';
+                belumPresensiMasukList.forEach(s => {
                     warningPresensiMasukHtml += `
-                    <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#ffffff; border:1px solid #fed7aa; border-radius:12px; margin-bottom:6px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 12px; background:#ffffff; border:1px solid #fed7aa; border-radius:12px; margin-bottom:6px;">
                         <div>
-                            <div style="font-size:12px; font-weight:850; color:#0f172a;">👨‍🎓 ${sName}</div>
-                            <div style="font-size:10px; color:#64748b;">🏢 ${ind}</div>
+                            <div style="font-size:12px; font-weight:850; color:#0f172a;">👨‍🎓 ${s.nama}</div>
+                            <div style="font-size:10px; color:#64748b;">🏢 ${s.industri}</div>
                         </div>
                         <span class="badge-status badge-amber" style="font-size:9.5px;">Belum Absen Masuk</span>
                     </div>`;
@@ -1962,19 +1979,18 @@
             } else {
                 warningPresensiMasukHtml = `
                 <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:12px; padding:10px; text-align:center; font-size:11.5px; font-weight:800; color:#15803d;">
-                    🟢 Semua siswa bimbingan Anda telah melakukan presensi masuk hari ini.
+                    🟢 Seluruh siswa bimbingan Anda telah melakukan presensi masuk hari ini.
                 </div>`;
             }
 
             let warningPresensiPulangHtml = "";
             if (belumPresensiPulangList.length > 0) {
-                belumPresensiPulangList.forEach(sName => {
-                    const ind = myStudentMap.get(sName) || 'DUDI Mitra';
+                belumPresensiPulangList.forEach(s => {
                     warningPresensiPulangHtml += `
-                    <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; margin-bottom:6px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 12px; background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; margin-bottom:6px;">
                         <div>
-                            <div style="font-size:12px; font-weight:850; color:#0f172a;">👨‍🎓 ${sName}</div>
-                            <div style="font-size:10px; color:#64748b;">🏢 ${ind}</div>
+                            <div style="font-size:12px; font-weight:850; color:#0f172a;">👨‍🎓 ${s.nama}</div>
+                            <div style="font-size:10px; color:#64748b;">🏢 ${s.industri}</div>
                         </div>
                         <span class="badge-status badge-blue" style="font-size:9.5px;">Belum Absen Pulang</span>
                     </div>`;
@@ -1982,7 +1998,7 @@
             } else {
                 warningPresensiPulangHtml = `
                 <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:12px; padding:10px; text-align:center; font-size:11.5px; font-weight:800; color:#15803d;">
-                    🏁 Semua siswa bimbingan Anda telah menyelesaikan presensi pulang hari ini.
+                    🏁 Seluruh siswa bimbingan Anda telah menyelesaikan presensi pulang hari ini.
                 </div>`;
             }
 
@@ -1996,7 +2012,7 @@
                     <span class="badge-status badge-green">${totalSiswaBimbingan} Siswa Dibimbing</span>
                 </div>
                 <h3 style="font-size:17px; font-weight:950; color:#0f172a; margin-top:2px;">Selamat Datang, ${profile.nama}</h3>
-                <p style="font-size:11.5px; color:#475569; margin-top:4px;">Monitoring khusus kedisiplinan dan validasi aktivitas siswa bimbingan resmi Anda.</p>
+                <p style="font-size:11.5px; color:#475569; margin-top:4px;">Monitoring kedisiplinan dan validasi aktivitas jurnal khusus siswa bimbingan resmi Anda.</p>
             </div>
 
             <!-- 4 KARTU MONITORING PKL (PERSIS SESUAI GAMBAR 2) -->
@@ -2008,13 +2024,13 @@
 
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                     <!-- Kartu 1: Jurnal Hari Ini -->
-                    <div onclick="window.openFeature('validasi-jurnal', 'Validasi Jurnal')" style="background:#ffffff; border:1.5px solid #bfdbfe; border-radius:18px; padding:16px 14px; cursor:pointer; transition:all 0.2s ease; box-shadow:0 3px 10px rgba(2,132,199,0.06);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                    <div onclick="window.openFeature('validasi-jurnal', 'Validasi Jurnal Siswa')" style="background:#ffffff; border:1.5px solid #bfdbfe; border-radius:18px; padding:16px 14px; cursor:pointer; transition:all 0.2s ease; box-shadow:0 3px 10px rgba(2,132,199,0.06);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <div style="font-size:22px; color:#0284c7;">📖</div>
                             <div style="font-size:16px; color:#94a3b8; font-weight:900;">›</div>
                         </div>
                         <div style="display:flex; align-items:baseline; gap:8px; margin:10px 0 2px;">
-                            <div style="font-size:22px; font-weight:950; color:#0284c7; line-height:1;">${countJurnalHariIni > 0 ? countJurnalHariIni : '-'}</div>
+                            <div style="font-size:24px; font-weight:950; color:#0284c7; line-height:1;">${countJurnalHariIni > 0 ? countJurnalHariIni : '-'}</div>
                             <div style="width:26px; height:4px; background:#0284c7; border-radius:3px;"></div>
                         </div>
                         <div style="font-size:13.5px; font-weight:900; color:#0f172a; margin-top:6px;">Jurnal Hari Ini</div>
@@ -2022,13 +2038,13 @@
                     </div>
 
                     <!-- Kartu 2: Sudah Disetujui -->
-                    <div onclick="window.openFeature('validasi-jurnal', 'Validasi Jurnal')" style="background:#ffffff; border:1.5px solid #bbf7d0; border-radius:18px; padding:16px 14px; cursor:pointer; transition:all 0.2s ease; box-shadow:0 3px 10px rgba(16,185,129,0.06);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                    <div onclick="window.openFeature('validasi-jurnal', 'Validasi Jurnal Siswa')" style="background:#ffffff; border:1.5px solid #bbf7d0; border-radius:18px; padding:16px 14px; cursor:pointer; transition:all 0.2s ease; box-shadow:0 3px 10px rgba(16,185,129,0.06);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <div style="font-size:22px; color:#10b981;">✅</div>
                             <div style="font-size:16px; color:#94a3b8; font-weight:900;">›</div>
                         </div>
                         <div style="display:flex; align-items:baseline; gap:8px; margin:10px 0 2px;">
-                            <div style="font-size:22px; font-weight:950; color:#10b981; line-height:1;">${countSudahDisetujui > 0 ? countSudahDisetujui : '-'}</div>
+                            <div style="font-size:24px; font-weight:950; color:#10b981; line-height:1;">${countSudahDisetujui > 0 ? countSudahDisetujui : '-'}</div>
                             <div style="width:26px; height:4px; background:#10b981; border-radius:3px;"></div>
                         </div>
                         <div style="font-size:13.5px; font-weight:900; color:#0f172a; margin-top:6px;">Sudah Disetujui</div>
@@ -2036,13 +2052,13 @@
                     </div>
 
                     <!-- Kartu 3: Menunggu Review -->
-                    <div onclick="window.openFeature('validasi-jurnal', 'Validasi Jurnal')" style="background:#ffffff; border:1.5px solid #fde68a; border-radius:18px; padding:16px 14px; cursor:pointer; transition:all 0.2s ease; box-shadow:0 3px 10px rgba(245,158,11,0.06);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                    <div onclick="window.openFeature('validasi-jurnal', 'Validasi Jurnal Siswa')" style="background:#ffffff; border:1.5px solid #fde68a; border-radius:18px; padding:16px 14px; cursor:pointer; transition:all 0.2s ease; box-shadow:0 3px 10px rgba(245,158,11,0.06);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <div style="font-size:22px; color:#f59e0b;">⏱️</div>
                             <div style="font-size:16px; color:#94a3b8; font-weight:900;">›</div>
                         </div>
                         <div style="display:flex; align-items:baseline; gap:8px; margin:10px 0 2px;">
-                            <div style="font-size:22px; font-weight:950; color:#f59e0b; line-height:1;">${countMenungguReview > 0 ? countMenungguReview : '-'}</div>
+                            <div style="font-size:24px; font-weight:950; color:#f59e0b; line-height:1;">${countMenungguReview > 0 ? countMenungguReview : '-'}</div>
                             <div style="width:26px; height:4px; background:#f59e0b; border-radius:3px;"></div>
                         </div>
                         <div style="font-size:13.5px; font-weight:900; color:#0f172a; margin-top:6px;">Menunggu Review</div>
@@ -2050,13 +2066,13 @@
                     </div>
 
                     <!-- Kartu 4: Perlu Tindakan -->
-                    <div onclick="const el = document.getElementById('sectionPeringatanGuru'); if(el) el.scrollIntoView({behavior:'smooth'});" style="background:#ffffff; border:1.5px solid #ddd6fe; border-radius:18px; padding:16px 14px; cursor:pointer; transition:all 0.2s ease; box-shadow:0 3px 10px rgba(139,92,246,0.06);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                    <div onclick="const el = document.getElementById('sectionPeringatanGuru'); if(el) el.scrollIntoView({behavior:'smooth'});" style="background:#ffffff; border:1.5px solid #ddd6fe; border-radius:18px; padding:16px 14px; cursor:pointer; transition:all 0.2s ease; box-shadow:0 3px 10px rgba(139,92,246,0.06);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <div style="font-size:22px; color:#8b5cf6;">🔔</div>
                             <div style="font-size:16px; color:#94a3b8; font-weight:900;">›</div>
                         </div>
                         <div style="display:flex; align-items:baseline; gap:8px; margin:10px 0 2px;">
-                            <div style="font-size:22px; font-weight:950; color:#8b5cf6; line-height:1;">${countPerluTindakan > 0 ? countPerluTindakan : '-'}</div>
+                            <div style="font-size:24px; font-weight:950; color:#8b5cf6; line-height:1;">${countPerluTindakan > 0 ? countPerluTindakan : '-'}</div>
                             <div style="width:26px; height:4px; background:#8b5cf6; border-radius:3px;"></div>
                         </div>
                         <div style="font-size:13.5px; font-weight:900; color:#0f172a; margin-top:6px;">Perlu Tindakan</div>
@@ -2072,21 +2088,21 @@
                         <div style="font-size:10.5px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">AKTIVITAS SISWA TERBARU</div>
                         <h3 style="font-size:15px; font-weight:950; color:#0f172a; margin-top:2px;">📋 Daftar Pengisian Jurnal Terbaru</h3>
                     </div>
-                    <button onclick="window.openFeature('validasi-jurnal', 'Validasi Jurnal')" class="btn-action btn-blue" style="font-size:10.5px; padding:6px 12px;">
+                    <button onclick="window.openFeature('validasi-jurnal', 'Validasi Jurnal Siswa')" class="btn-action btn-blue" style="font-size:10.5px; padding:6px 12px; font-weight:800;">
                         Semua Jurnal ➔
                     </button>
                 </div>
                 ${aktivitasJurnalHtml}
             </div>
 
-            <!-- PERINGATAN SISWA : MONITORING KEDISIPLINAN -->
+            <!-- PERINGATAN SISWA : MONITORING KEDISIPLINAN HARI INI -->
             <div class="card" id="sectionPeringatanGuru" style="border: 1.5px solid #fca5a5; background: linear-gradient(180deg, #fff5f5 0%, #ffffff 100%);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                     <div>
                         <div style="font-size:10.5px; font-weight:900; color:#dc2626; letter-spacing:0.5px;">PERINGATAN SISWA HARI INI</div>
                         <h3 style="font-size:15px; font-weight:950; color:#0f172a; margin-top:2px;">⚠️ Siswa Belum Disiplin (Hari Ini)</h3>
                     </div>
-                    <span class="badge-status badge-red">${belumIsiJurnalList.length + belumPresensiMasukList.length} Siswa Perlu Diingatkan</span>
+                    <span class="badge-status badge-red">${belumIsiJurnalList.length + belumPresensiMasukList.length + belumPresensiPulangList.length} Catatan</span>
                 </div>
 
                 <!-- Bagian 1: Siswa Belum Mengisi Jurnal Hari Ini -->
@@ -2114,17 +2130,6 @@
                         <span>Siswa Belum Presensi Pulang (${belumPresensiPulangList.length}):</span>
                     </div>
                     ${warningPresensiPulangHtml}
-                </div>
-            </div>
-
-            <!-- AKSES FITUR LAINNYA UNTUK GURU -->
-            <div class="card">
-                <div style="font-size:12.5px; font-weight:900; color:#0f172a; margin-bottom:10px;">AKSES MENU PEMBIMBING</div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                    <button onclick="window.openFeature('siswa-bimbingan', 'Siswa Bimbingan')" class="btn-action btn-blue" style="padding:12px; font-size:11.5px;">👥 Siswa Bimbingan</button>
-                    <button onclick="window.openFeature('agenda-kunjungan', 'Agenda Kunjungan')" class="btn-action btn-emerald" style="padding:12px; font-size:11.5px;">🚗 Agenda Kunjungan</button>
-                    <button onclick="window.openFeature('penilaian', 'Penilaian')" class="btn-action btn-amber" style="padding:12px; font-size:11.5px;">🏆 Lembar Penilaian</button>
-                    <button onclick="window.openFeature('rekap-absensi', 'Rekap Presensi')" class="btn-action" style="background:#6366f1; color:#fff; padding:12px; font-size:11.5px;">📈 Rekap Presensi</button>
                 </div>
             </div>`;
         };
@@ -4832,11 +4837,50 @@
         };
 
         window.renderAgendaKunjungan = function() {
+            const profile = window.cloudState.userProfile || { nama: "Guru" };
+            const myMonitoring = (window.cloudState.penugasanMonitoring || []).filter(m => {
+                if (!m.guru) return false;
+                return m.guru.toLowerCase().trim() === profile.nama.toLowerCase().trim();
+            });
+
+            let cards = "";
+            myMonitoring.forEach(m => {
+                const listDudi = Array.isArray(m.industriList) ? m.industriList : (m.industriList ? [m.industriList] : []);
+                const dudiBadges = listDudi.length > 0 
+                    ? listDudi.map(d => `<span style="background:#e0f2fe; border:1px solid #7dd3fc; color:#0369a1; padding:3px 7px; border-radius:6px; font-size:10.5px; font-weight:800; display:inline-block; margin:2px;">🏢 ${d}</span>`).join(' ')
+                    : '<span style="color:#94a3b8; font-size:11px;">-</span>';
+
+                const listSiswa = Array.isArray(m.siswaList) ? m.siswaList : (m.siswaList ? [m.siswaList] : []);
+                const siswaBadges = listSiswa.length > 0
+                    ? listSiswa.map(s => `<span style="background:#f0fdf4; border:1px solid #86efac; color:#15803d; padding:3px 7px; border-radius:6px; font-size:10.5px; font-weight:800; display:inline-block; margin:2px;">👨‍🎓 ${s}</span>`).join(' ')
+                    : '<span style="font-size:10.5px; color:#64748b;">Semua Siswa Terkait</span>';
+
+                cards += `
+                <div style="background:#ffffff; border:1.5px solid #bfdbfe; border-radius:16px; padding:14px; margin-bottom:12px; box-shadow:0 2px 8px rgba(2,132,199,0.06);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-size:13.5px; font-weight:900; color:#0f172a;">🚗 ${m.judulTugas || 'Monitoring DUDI'}</span>
+                        <span class="badge-status badge-blue" style="font-size:10px;">${m.tanggalMulai || '-'} s/d ${m.tanggalSelesai || '-'}</span>
+                    </div>
+                    <div style="font-size:11.5px; color:#475569; margin:4px 0 8px;"><b>Catatan Panitia:</b> ${m.catatan || '-'}</div>
+                    <div style="margin-bottom:8px;">
+                        <div style="font-size:10px; font-weight:850; color:#0284c7; margin-bottom:3px; text-transform:uppercase;">DUDI Target Kunjungan:</div>
+                        ${dudiBadges}
+                    </div>
+                    <div>
+                        <div style="font-size:10px; font-weight:850; color:#15803d; margin-bottom:3px; text-transform:uppercase;">Siswa yang Dimonitoring:</div>
+                        ${siswaBadges}
+                    </div>
+                </div>`;
+            });
+
             return `
             <div class="card">
-                <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:8px;">🚗 Agenda Kunjungan DUDI</h3>
-                <p style="font-size:12px; color:#64748b; line-height:1.5;">Gunakan agenda ini untuk memonitor perkembangan siswa di tempat magang.</p>
-                <div class="empty-placeholder" style="padding:30px 12px;">Belum ada penugasan kunjungan baru</div>
+                <div style="margin-bottom:12px;">
+                    <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">SURAT TUGAS & JADWAL MONITORING LAPANGAN</div>
+                    <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🚗 Agenda Kunjungan DUDI</h3>
+                    <p style="font-size:11px; color:#64748b; margin-top:2px;">Surat tugas dan daftar industri monitoring yang ditugaskan oleh Panitia PKL kepada Anda.</p>
+                </div>
+                ${cards || '<div class="empty-placeholder" style="padding:28px 12px;">Belum ada surat penugasan monitoring yang diterbitkan untuk Anda</div>'}
             </div>`;
         };
 
