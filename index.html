@@ -5673,6 +5673,19 @@
             const isOrangTua = (role === 'orangtua');
             const namaAnanda = isOrangTua ? (profile.namaAnanda || profile.nama.replace("Wali dari ", "").trim()) : "";
 
+            // Pencarian data penempatan ananda untuk Kontak Sekolah
+            const penempatanAnanda = (window.cloudState.penempatan || []).find(p => {
+                const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                return sList.some(s => s && s.toLowerCase().trim() === namaAnanda.toLowerCase().trim());
+            });
+            const guruAnandaNama = penempatanAnanda ? penempatanAnanda.guru : "Belum Ditentukan";
+            const indAnandaNama = penempatanAnanda ? (Array.isArray(penempatanAnanda.industri) ? penempatanAnanda.industri.join(', ') : penempatanAnanda.industri) : "Belum Ditentukan";
+
+            const dataGuru = (window.cloudState.guru || []).find(g => window.isGuruMatch ? window.isGuruMatch(g.nama, guruAnandaNama) : (g.nama === guruAnandaNama)) || {};
+            const dataInd = (window.cloudState.industri || []).find(i => window.isIndustriMatch ? window.isIndustriMatch(i.nama, indAnandaNama) : (i.nama === indAnandaNama)) || {};
+            const noWaGuru = dataGuru.noHp || "-";
+            const noWaInd = dataInd.noWa || "-";
+
             let filteredList = list;
             let subTitle = "PUSAT BANTUAN & PENGADUAN";
             let mainTitle = "⚠️ Laporan Pengaduan & Kendala";
@@ -5680,20 +5693,20 @@
             let btnLabel = "+ Kirim Laporan Kendala";
 
             if (isOrangTua) {
-                subTitle = "LAYANAN KONTAK SEKOLAH & KENDALA ANANDA";
-                mainTitle = "⚠️ Kontak Sekolah: Laporan Kendala Ananda";
-                descText = `Sampaikan pengaduan atau kendala yang dialami oleh ananda tercinta (<b>${namaAnanda}</b>) langsung kepada Guru Pembimbing, Pihak Industri DUDI, atau Panitia PKL.`;
-                btnLabel = "⚠️ + Kirim Laporan Kendala Ananda";
+                subTitle = "LAYANAN RESMI KONTAK SEKOLAH & WALI SISWA";
+                mainTitle = "⚠️ Kontak Sekolah: Pengaduan Kendala Ananda";
+                descText = `Sampaikan kendala yang dialami oleh ananda tercinta (<b>${namaAnanda}</b>) langsung kepada Guru Pembimbing, Industri DUDI, atau Panitia PKL.`;
+                btnLabel = "⚠️ + Kirim Laporan Kendala Ananda Baru";
                 filteredList = list.filter(ad => 
                     (ad.role === 'orangtua' && ad.pelapor && ad.pelapor.toLowerCase().includes(profile.nama.toLowerCase())) ||
                     (ad.ananda && ad.ananda.toLowerCase().trim() === namaAnanda.toLowerCase().trim())
                 );
             } else if (role === 'guru') {
                 subTitle = "KENDALA LAPANGAN & ADUAN WALI SISWA";
-                mainTitle = "⚠️ Laporan Pengaduan & Kendala Siswa Bimbingan";
+                mainTitle = "⚠️ Laporan Pengaduan Siswa Bimbingan";
                 descText = "Tinjau dan tanggapi pengaduan kendala yang dikirimkan oleh siswa bimbingan atau orang tua siswa.";
             } else if (role === 'industri') {
-                subTitle = "ADUAN & KOORDINASI MAGANG";
+                subTitle = "ADUAN & KOORDINASI MAGANG DUDI";
                 mainTitle = "⚠️ Laporan Pengaduan & Koordinasi DUDI";
                 descText = "Tinjau kendala atau pengaduan siswa magang dan orang tua yang ditujukan ke perusahaan/instansi Anda.";
             }
@@ -5711,22 +5724,34 @@
                     <td>
                         <b>${ad.pelapor}</b>
                         ${isFromParent ? `<div style="font-size:9.5px; color:#7e22ce; font-weight:800;">👨‍👩‍👧 Wali dari: ${ad.ananda || '-'}</div>` : `<div style="font-size:9.5px; color:#0284c7;">${ad.role || 'Siswa'}</div>`}
+                        ${ad.kontak_pelapor && ad.kontak_pelapor !== '-' ? `<div style="font-size:9.5px; color:#059669; font-weight:800;">📱 WA: ${ad.kontak_pelapor}</div>` : ''}
                     </td>
                     <td>
                         <span class="badge-status badge-blue" style="font-size:10px;">${ad.tujuan || 'Panitia PKL'}</span>
                     </td>
-                    <td>${ad.tanggal || '-'}</td>
+                    <td>
+                        <span style="font-size:11px; font-weight:800; color:#0f172a;">${ad.tanggal || '-'}</span>
+                        ${ad.waktu ? `<div style="font-size:9.5px; color:#64748b;">${ad.waktu}</div>` : ''}
+                    </td>
                     <td style="white-space:normal; min-width:180px;">
-                        <div style="font-weight:800; color:#0f172a;">${ad.kategori || 'Kendala'}:</div>
+                        <div style="font-weight:850; color:#0284c7; font-size:11px; text-transform:uppercase;">${ad.kategori || 'Kendala'}:</div>
                         <div style="font-size:11.5px; color:#334155; margin-top:2px; line-height:1.4;">${ad.isi || '-'}</div>
+                        ${ad.lampiran ? `
+                            <div style="margin-top:6px;">
+                                <button type="button" onclick="window.bukaPratinjauLampiranAduan('${ad.lampiran}', '${ad.kategori}')" class="btn-action btn-blue" style="font-size:10px; padding:3px 8px;">
+                                    📎 Lihat Foto / Lampiran
+                                </button>
+                            </div>
+                        ` : ''}
                         ${ad.tanggapan ? `
                             <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:6px 8px; margin-top:6px; font-size:10.5px; color:#15803d;">
-                                <b>💬 Tanggapan Sekolah/DUDI:</b><br>${ad.tanggapan}
+                                <b>💬 Tanggapan Resmi (${ad.penanggap || 'Pihak Sekolah'}):</b><br>${ad.tanggapan}
+                                ${ad.waktu_tanggapan ? `<div style="font-size:9px; color:#64748b; margin-top:2px;">Waktu: ${ad.waktu_tanggapan}</div>` : ''}
                             </div>
                         ` : ''}
                     </td>
                     <td>
-                        <span class="badge-status ${isSolved ? 'badge-green' : 'badge-amber'}">${ad.status || 'Diproses'}</span>
+                        <span class="badge-status ${isSolved ? 'badge-green' : 'badge-amber'}">${isSolved ? '✓ Selesai Ditangani' : '⏳ Sedang Diproses'}</span>
                     </td>
                     <td style="display:flex; gap:4px; flex-wrap:wrap;">
                         ${canRespond ? `
@@ -5743,7 +5768,69 @@
                 </tr>`;
             });
 
+            const cleanWa = (num) => {
+                if (!num || num === '-') return '';
+                let cleaned = num.replace(/\D/g, '');
+                if (cleaned.startsWith('0')) cleaned = '62' + cleaned.substring(1);
+                return cleaned;
+            };
+
+            const linkWaGuru = cleanWa(noWaGuru) ? `https://wa.me/${cleanWa(noWaGuru)}?text=${encodeURIComponent(`Halo Bapak/Ibu Guru Pembimbing (${guruAnandaNama}), saya orang tua/wali dari ${namaAnanda} peserta PKL SMKN 1 Marisa...`)}` : '';
+            const linkWaInd = cleanWa(noWaInd) ? `https://wa.me/${cleanWa(noWaInd)}?text=${encodeURIComponent(`Halo Bapak/Ibu Pimpinan/Instruktur DUDI (${indAnandaNama}), saya orang tua/wali dari ${namaAnanda} peserta magang...`)}` : '';
+            const linkWaPanitia = `https://wa.me/6281234567890?text=${encodeURIComponent(`Halo Panitia PKL SMKN 1 Marisa, saya orang tua/wali dari ${namaAnanda}...`)}`;
+
             return `
+            ${isOrangTua ? `
+                <!-- KARTU KONTAK LANGSUNG WHATSAPP PIHAK TERKAIT -->
+                <div class="card" style="background:linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%); border:2px solid #7dd3fc; margin-bottom:14px;">
+                    <div style="font-size:11px; font-weight:900; color:#0369a1; letter-spacing:0.5px;">HUBUNGI LANGSUNG VIA WHATSAPP RESMI</div>
+                    <h3 style="font-size:15px; font-weight:950; color:#0f172a; margin-top:2px;">📞 Kontak Cepat Pembimbing & Panitia PKL</h3>
+                    <p style="font-size:11px; color:#475569; margin-top:2px;">Bapak/Ibu dapat menghubungi pihak terkait secara langsung melalui WhatsApp atau mengirimkan laporan kendala resmi di bawah.</p>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
+                        <div style="background:#ffffff; border:1px solid #bfdbfe; border-radius:12px; padding:10px; display:flex; flex-direction:column; justify-content:space-between;">
+                            <div>
+                                <div style="font-size:10px; font-weight:850; color:#0284c7;">👩‍🏫 GURU PEMBIMBING</div>
+                                <div style="font-size:12px; font-weight:900; color:#0f172a; margin-top:2px;">${guruAnandaNama}</div>
+                                <div style="font-size:10px; color:#64748b;">No. WA: ${noWaGuru}</div>
+                            </div>
+                            <div style="margin-top:8px;">
+                                ${linkWaGuru ? `
+                                    <a href="${linkWaGuru}" target="_blank" class="btn-action btn-emerald" style="display:block; text-align:center; text-decoration:none; font-size:11px; font-weight:850; padding:6px;">
+                                        💬 Chat WA Guru
+                                    </a>
+                                ` : `<span style="font-size:10px; color:#94a3b8;">Nomor belum diatur</span>`}
+                            </div>
+                        </div>
+
+                        <div style="background:#ffffff; border:1px solid #bfdbfe; border-radius:12px; padding:10px; display:flex; flex-direction:column; justify-content:space-between;">
+                            <div>
+                                <div style="font-size:10px; font-weight:850; color:#0284c7;">🏢 MITRA INDUSTRI DUDI</div>
+                                <div style="font-size:12px; font-weight:900; color:#0f172a; margin-top:2px;">${indAnandaNama}</div>
+                                <div style="font-size:10px; color:#64748b;">No. WA: ${noWaInd}</div>
+                            </div>
+                            <div style="margin-top:8px;">
+                                ${linkWaInd ? `
+                                    <a href="${linkWaInd}" target="_blank" class="btn-action btn-blue" style="display:block; text-align:center; text-decoration:none; font-size:11px; font-weight:850; padding:6px;">
+                                        💬 Chat WA Industri
+                                    </a>
+                                ` : `<span style="font-size:10px; color:#94a3b8;">Nomor belum diatur</span>`}
+                            </div>
+                        </div>
+
+                        <div style="grid-column:span 2; background:#ffffff; border:1px solid #86efac; border-radius:12px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <div style="font-size:10px; font-weight:850; color:#15803d;">👨‍💼 SEKRETARIAT PANITIA PKL SMKN 1 MARISA</div>
+                                <div style="font-size:11px; font-weight:900; color:#0f172a;">Layanan Hotline & Bantuan Sekolah</div>
+                            </div>
+                            <a href="${linkWaPanitia}" target="_blank" class="btn-action btn-emerald" style="text-decoration:none; font-size:11px; font-weight:900; padding:6px 12px;">
+                                💬 Chat Panitia WA
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            ` : ''}
+
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
@@ -5769,7 +5856,7 @@
                             <tr>
                                 ${role === 'admin' ? `<th style="width:36px;"><input type="checkbox" onchange="window.toggleAllCheckboxes('aduan-admin', this.checked)"></th>` : ''}
                                 <th style="width:36px;">No</th>
-                                <th>Pelapor</th>
+                                <th>Pelapor & Identitas</th>
                                 <th>Tujuan Laporan</th>
                                 <th>Tanggal</th>
                                 <th>Uraian Kendala / Masalah</th>
@@ -5778,11 +5865,265 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || `<tr><td colspan="${role === 'admin' ? '8' : '7'}" class="empty-placeholder">Belum ada laporan pengaduan kendala yang diajukan</td></tr>`}
+                            ${rows || `<tr><td colspan="${role === 'admin' ? '8' : '7'}" class="empty-placeholder">${isOrangTua ? 'Belum ada laporan pengaduan kendala ananda yang diajukan. Klik tombol "+ Kirim Laporan Kendala Ananda Baru" di atas untuk mengirimkan kendala.' : 'Belum ada laporan pengaduan kendala yang diajukan.'}</td></tr>`}
                         </tbody>
                     </table>
                 </div>
             </div>`;
+        };
+
+        window.tempLampiranAduanBase64 = null;
+        window.tempLampiranAduanName = null;
+
+        window.bukaModalKirimAduanMasalah = function() {
+            const role = window.cloudState.activeRole || "siswa";
+            const profile = window.cloudState.userProfile || { nama: "Pengguna" };
+            const isOrangTua = (role === 'orangtua');
+            const namaAnanda = isOrangTua ? (profile.namaAnanda || profile.nama.replace("Wali dari ", "").trim()) : "";
+
+            window.tempLampiranAduanBase64 = null;
+            window.tempLampiranAduanName = null;
+
+            // Dapatkan guru & industri ananda
+            const penempatanAnanda = (window.cloudState.penempatan || []).find(p => {
+                const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                return sList.some(s => s && s.toLowerCase().trim() === (namaAnanda || profile.nama).toLowerCase().trim());
+            });
+            const guruNama = penempatanAnanda ? penempatanAnanda.guru : "Guru Pembimbing";
+            const indNama = penempatanAnanda ? (Array.isArray(penempatanAnanda.industri) ? penempatanAnanda.industri.join(', ') : penempatanAnanda.industri) : "Mitra Industri DUDI";
+
+            let tujuanOptions = "";
+            if (isOrangTua) {
+                tujuanOptions = `
+                    <option value="Guru Pembimbing (${guruNama})">👩‍🏫 Guru Pembimbing (${guruNama})</option>
+                    <option value="Pihak Industri DUDI (${indNama})">🏢 Pihak Industri DUDI (${indNama})</option>
+                    <option value="Panitia PKL / Admin Sekolah">👨‍💼 Panitia PKL / Admin Sekolah</option>
+                    <option value="Semua Pihak Terkait (Guru, Industri, Panitia)">📢 Semua Pihak Terkait (Guru, Industri & Panitia)</option>
+                `;
+            } else if (role === 'siswa') {
+                tujuanOptions = `
+                    <option value="Guru Pembimbing (${guruNama})">👩‍🏫 Guru Pembimbing (${guruNama})</option>
+                    <option value="Panitia PKL / Admin Sekolah">👨‍💼 Panitia PKL / Admin Sekolah</option>
+                    <option value="Pihak Industri DUDI (${indNama})">🏢 Pihak Industri DUDI (${indNama})</option>
+                `;
+            } else {
+                tujuanOptions = `
+                    <option value="Panitia PKL / Admin Sekolah">👨‍💼 Panitia PKL / Admin Sekolah</option>
+                    <option value="Guru Pembimbing Lapangan">👩‍🏫 Guru Pembimbing Lapangan</option>
+                `;
+            }
+
+            let kategoriOptions = `
+                <option value="Kesehatan / Izin Sakit">🤒 Kesehatan / Izin Sakit Ananda</option>
+                <option value="Presensi / Kehadiran GPS">📍 Kendala Presensi Masuk / Pulang (GPS & Selfie)</option>
+                <option value="Pekerjaan / Tugas di Industri">🛠️ Pekerjaan / Tugas Praktik di Industri</option>
+                <option value="Kondisi Lingkungan Kerja">🏢 Kondisi Lingkungan Kerja / Hubungan di DUDI</option>
+                <option value="Transportasi / Fasilitas Magang">🚗 Transportasi / Fasilitas Magang</option>
+                <option value="Keadaan Mendesak / Darurat">⚠️ Keadaan Mendesak / Masalah Darurat</option>
+                <option value="Konsultasi & Pengaduan Lain">❓ Konsultasi & Pengaduan Lainnya</option>
+            `;
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">
+                    ${isOrangTua ? '⚠️ Kirim Laporan Kendala Ananda ke Sekolah' : '⚠️ Kirim Laporan Pengaduan & Kendala'}
+                </h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:14px;">
+                    ${isOrangTua ? `Pengaduan atas nama Ananda: <b>${namaAnanda}</b> (Tempat PKL: ${indNama})` : 'Sampaikan kendala Anda untuk mendapatkan tanggapan resmi dari sekolah/DUDI.'}
+                </p>
+
+                <div class="form-group">
+                    <label class="form-label">Tujuan Laporan Pengaduan:</label>
+                    <select id="inputAduanTujuan" class="form-control" style="font-weight:800; color:#0284c7;">
+                        ${tujuanOptions}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Kategori Kendala / Masalah:</label>
+                    <select id="inputAduanKategori" class="form-control" style="font-weight:750; color:#0f172a;">
+                        ${kategoriOptions}
+                    </select>
+                </div>
+
+                ${isOrangTua ? `
+                    <div class="form-group">
+                        <label class="form-label">No. WhatsApp Orang Tua / Wali (Untuk Dihubungi Balik):</label>
+                        <input type="tel" id="inputAduanKontak" class="form-control" placeholder="Contoh: 081234567890" value="${profile.noHp || ''}">
+                    </div>
+                ` : ''}
+
+                <div class="form-group">
+                    <label class="form-label">Uraian Lengkap Kendala / Laporan:</label>
+                    <textarea id="inputAduanIsi" class="form-control" style="height:90px;" placeholder="Tuliskan kendala atau masalah yang dihadapi secara jelas..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Lampiran Foto Bukti / Dokumen (Opsional):</label>
+                    <input type="file" id="inputAduanFile" class="form-control" accept="image/*,.pdf" onchange="window.handleUploadLampiranAduan(this)">
+                    <div id="textPreviewLampiranAduan" style="font-size:10.5px; color:#059669; font-weight:750; margin-top:3px;"></div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.prosesSimpanAduanMasalah()" class="btn-action btn-amber" style="font-weight:900; padding:10px 18px; box-shadow:0 3px 10px rgba(245,158,11,0.35);">
+                        ⚡ Kirim Laporan Sekarang
+                    </button>
+                </div>
+            `);
+        };
+
+        window.handleUploadLampiranAduan = function(inputEl) {
+            if (inputEl.files && inputEl.files[0]) {
+                const file = inputEl.files[0];
+                window.tempLampiranAduanName = file.name;
+                const txt = document.getElementById("textPreviewLampiranAduan");
+                if (txt) txt.innerText = `✓ Berkas siap: ${file.name} (${Math.round(file.size / 1024)} KB)`;
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    window.tempLampiranAduanBase64 = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+
+        window.prosesSimpanAduanMasalah = function() {
+            const role = window.cloudState.activeRole || "siswa";
+            const profile = window.cloudState.userProfile || { nama: "Pengguna" };
+            const isOrangTua = (role === 'orangtua');
+            const namaAnanda = isOrangTua ? (profile.namaAnanda || profile.nama.replace("Wali dari ", "").trim()) : "";
+
+            const tujuan = document.getElementById("inputAduanTujuan")?.value;
+            const kategori = document.getElementById("inputAduanKategori")?.value;
+            const kontak = document.getElementById("inputAduanKontak")?.value.trim() || "-";
+            const isi = document.getElementById("inputAduanIsi")?.value.trim();
+
+            if (!isi) {
+                return window.showModalInfo("Lengkapi Uraian Laporan", "Silakan ketik uraian kendala atau pengaduan Anda sebelum mengirim!");
+            }
+
+            if (!Array.isArray(window.cloudState.pengaduan)) window.cloudState.pengaduan = [];
+
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
+            const jamStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) + " WITA";
+
+            const newAduan = {
+                id: "adu_" + Date.now(),
+                pelapor: profile.nama,
+                role: role,
+                ananda: namaAnanda,
+                kontak_pelapor: kontak,
+                tujuan: tujuan,
+                kategori: kategori,
+                isi: isi,
+                lampiran: window.tempLampiranAduanBase64 || null,
+                nama_lampiran: window.tempLampiranAduanName || null,
+                tanggal: todayStr,
+                waktu: jamStr,
+                status: "Diproses",
+                tanggapan: "",
+                penanggap: "",
+                waktu_tanggapan: ""
+            };
+
+            window.cloudState.pengaduan.unshift(newAduan);
+            window.simpanDatabasePersisten(true);
+
+            window.closeDynamicModal();
+            window.showModalInfo(
+                "Laporan Terkirim 📬",
+                `Laporan kendala berhasil disampaikan kepada <b>${tujuan}</b>.<br><br>` +
+                `Pihak terkait akan segera meninjau dan memberikan tanggapan resmi di halaman Kontak Sekolah ini.`
+            );
+
+            window.openFeature("aduan", isOrangTua ? "Kontak Sekolah" : "Laporan Pengaduan & Kendala");
+        };
+
+        window.bukaModalTanggapiAduan = function(originalIdx) {
+            const ad = (window.cloudState.pengaduan || [])[originalIdx];
+            if (!ad) return;
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">💬 Tanggapi Laporan Pengaduan</h3>
+                <div style="font-size:11px; color:#64748b; margin-bottom:12px;">Pelapor: <b>${ad.pelapor}</b> ${ad.ananda ? `(Ananda: ${ad.ananda})` : ''}</div>
+
+                <div style="background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:14px; padding:12px; margin-bottom:12px; font-size:11.5px;">
+                    <div><b>📌 Kategori:</b> <span style="color:#0284c7; font-weight:800;">${ad.kategori}</span></div>
+                    <div><b>🎯 Tujuan:</b> <span>${ad.tujuan}</span></div>
+                    <div><b>📅 Waktu:</b> <span>${ad.tanggal} ${ad.waktu || ''}</span></div>
+                    ${ad.kontak_pelapor && ad.kontak_pelapor !== '-' ? `<div><b>📱 No. Kontak:</b> <span style="color:#059669; font-weight:800;">${ad.kontak_pelapor}</span></div>` : ''}
+                    <div style="margin-top:6px; padding-top:6px; border-top:1px dashed #cbd5e1;">
+                        <b>📝 Uraian Kendala:</b>
+                        <div style="color:#1e293b; line-height:1.4; margin-top:2px;">${ad.isi}</div>
+                    </div>
+                    ${ad.lampiran ? `
+                        <div style="margin-top:8px;">
+                            <button type="button" onclick="window.bukaPratinjauLampiranAduan('${ad.lampiran}', '${ad.kategori}')" class="btn-action btn-blue" style="font-size:10.5px; padding:4px 8px;">
+                                📎 Buka Foto Lampiran
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Status Penanganan:</label>
+                    <select id="modalTanggapiStatus" class="form-control" style="font-weight:800; color:#0284c7;">
+                        <option value="Selesai" ${ad.status === 'Selesai' ? 'selected' : ''}>✅ Selesai (Kendala Telah Ditangani & Solusi Diberikan)</option>
+                        <option value="Diproses" ${ad.status === 'Diproses' ? 'selected' : ''}>⏳ Diproses (Sedang Dalam Koordinasi / Penanganan)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Tanggapan / Solusi Resmi Sekolah atau DUDI:</label>
+                    <textarea id="modalTanggapiTeks" class="form-control" style="height:85px;" placeholder="Tuliskan penjelasan, solusi, atau instruksi tindak lanjut untuk pelapor...">${ad.tanggapan || ''}</textarea>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanTanggapanAduan(${originalIdx})" class="btn-action btn-emerald" style="font-weight:900;">💾 Kirim Tanggapan</button>
+                </div>
+            `);
+        };
+
+        window.simpanTanggapanAduan = function(originalIdx) {
+            const ad = (window.cloudState.pengaduan || [])[originalIdx];
+            if (!ad) return;
+
+            const status = document.getElementById("modalTanggapiStatus")?.value || "Selesai";
+            const teks = document.getElementById("modalTanggapiTeks")?.value.trim();
+
+            if (!teks) {
+                return window.showModalInfo("Tanggapan Kosong", "Silakan masukkan teks tanggapan atau solusi untuk pelapor!");
+            }
+
+            const profile = window.cloudState.userProfile || { nama: "Sekolah" };
+            const now = new Date();
+            const nowStr = now.toLocaleDateString('id-ID') + " " + now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) + " WITA";
+
+            ad.status = status;
+            ad.tanggapan = teks;
+            ad.penanggap = `${profile.nama}`;
+            ad.waktu_tanggapan = nowStr;
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Tanggapan Tersimpan ✅", "Tanggapan resmi berhasil disimpan dan langsung diteruskan ke pelapor.");
+
+            window.openFeature("aduan", window.cloudState.activeRole === 'orangtua' ? "Kontak Sekolah" : "Laporan Pengaduan & Kendala");
+        };
+
+        window.bukaPratinjauLampiranAduan = function(imgSrc, kategori) {
+            window.openDynamicModal(`
+                <div style="text-align:center;">
+                    <h3 style="font-size:15px; font-weight:900; color:#0284c7; margin-bottom:4px;">📎 Lampiran Kendala</h3>
+                    <div style="font-size:11px; color:#64748b; margin-bottom:12px;">Kategori: ${kategori || 'Pengaduan'}</div>
+                    <img src="${imgSrc}" alt="Lampiran Pengaduan" style="width:100%; max-height:360px; object-fit:contain; border-radius:14px; border:2px solid #38bdf8;">
+                    <div style="margin-top:14px;">
+                        <button onclick="window.closeDynamicModal()" class="btn-action btn-blue" style="padding:8px 24px;">Tutup</button>
+                    </div>
+                </div>
+            `);
         };
 
         window.konfirmasiHapusAduanMasalah = function(originalIdx) {
