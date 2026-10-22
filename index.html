@@ -1365,6 +1365,15 @@
             const activeEl = document.activeElement;
             const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
             const isModalOpen = (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex');
+
+            if (!isTyping && !isModalOpen && window.cloudState.userProfile && window.cloudState.currentFeature) {
+                const scrollX = window.scrollX || window.pageXOffset || 0;
+                const scrollY = window.scrollY || window.pageYOffset || 0;
+                window.openFeature(window.cloudState.currentFeature, undefined, true);
+                window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
+            }
+        };
+
         window.formatNoWaLink = function(num, pesan = "") {
             if (!num || num === '-') return '';
             let cleaned = String(num).replace(/\D/g, '');
@@ -1380,6 +1389,7 @@
             admin: { label: "ROOM PANITIA / ADMIN PKL", icon: "👨‍💼", usernameLabel: "Username Panitia / Admin:", placeholder: "Masukkan Username Panitia PKL", needPass: true },
             industri: { label: "ROOM INDUSTRI MITRA DUDI", icon: "🏭", usernameLabel: "Username Mitra DUDI:", placeholder: "Masukkan ID Mitra Terdaftar", needPass: true }
         };
+        window.roleDefaults = roleDefaults;
 
         const roleMenus = {
             siswa: [
@@ -1436,6 +1446,7 @@
                 { id: "aduan", label: "Kontak Sekolah", icon: "⚠️" }
             ]
         };
+        window.roleMenus = roleMenus;
 
         window.toggleDrawerSidebar = function() {
             const sidebar = document.getElementById("appSidebar");
@@ -3172,9 +3183,13 @@
             const jc = window.cloudState.jamConfig || { masukMulai: "06:30", masukBatasAkhir: "15:00", pulangMulai: "16:00", pulangBatasAkhir: "23:00" };
             const bannerHtml = window.renderBannerCarouselHtml();
 
-            const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
-            const guruName = penempatan ? penempatan.guru : "Wilasia S. Talaa, S.ST";
-            const industriName = penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "PT. Telkom Marisa";
+            const sData = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, profile.nama)) || {};
+            const penempatan = (window.cloudState.penempatan || []).find(p => {
+                const sList = window.extractStudentList(p.siswa);
+                return sList.some(s => window.isNameMatch(s, profile.nama));
+            });
+            const guruName = (sData.guru && sData.guru !== '-') ? sData.guru : (penempatan ? penempatan.guru : "Wilasia S. Talaa, S.ST");
+            const industriName = (sData.industri && sData.industri !== '-') ? sData.industri : (penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "PT. Telkom Marisa");
 
             const todayStr = new Date().toISOString().split('T')[0];
             const absenMasuk = (window.cloudState.absensi || []).find(a => a.nama === profile.nama && a.tipe_absen === 'Masuk' && a.tanggal === todayStr);
