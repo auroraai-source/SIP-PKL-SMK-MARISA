@@ -2160,57 +2160,69 @@
 
         window.renderOrangTuaDashboard = function() {
             const profile = window.cloudState.userProfile || { nama: "Orang Tua / Wali", namaAnanda: "" };
-            const namaAnanda = profile.namaAnanda || profile.nama.replace("Wali dari ", "");
+            const namaAnanda = profile.namaAnanda || profile.nama.replace("Wali dari ", "").trim();
             const bannerHtml = window.renderBannerCarouselHtml("PORTAL MONITORING WALI MURID");
-            const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(namaAnanda));
-            const industriName = penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "Mitra Industri";
-            const guruName = penempatan ? penempatan.guru : "Guru Pembimbing";
-            const absenCount = (window.cloudState.absensi || []).filter(a => a.nama === namaAnanda).length;
-            const jurnalCount = (window.cloudState.jurnal || []).filter(j => j.siswa === namaAnanda).length;
+
+            // Pencocokan fleksibel data penempatan resmi ananda
+            const penempatan = (window.cloudState.penempatan || []).find(p => {
+                const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                return sList.some(s => s && s.toLowerCase().trim() === namaAnanda.toLowerCase().trim());
+            });
+
+            const industriName = penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "Belum Ditentukan";
+            const guruName = penempatan ? penempatan.guru : "Belum Ditentukan";
+
+            // Hitung statistik presensi dan jurnal ananda
+            const absenCount = (window.cloudState.absensi || []).filter(a => (a.nama || '').toLowerCase().trim() === namaAnanda.toLowerCase().trim()).length;
+            const jurnalCount = (window.cloudState.jurnal || []).filter(j => (j.siswa || '').toLowerCase().trim() === namaAnanda.toLowerCase().trim()).length;
 
             return `
             ${bannerHtml}
 
+            <!-- Sambutan Portal Orang Tua -->
             <div class="card" style="background: linear-gradient(135deg, #faf5ff 0%, #ffffff 100%); border: 2px solid #d8b4fe;">
                 <div style="font-size:11px; font-weight:900; color:#7e22ce; letter-spacing:0.5px;">PORTAL ORANG TUA / WALI SISWA</div>
-                <h3 style="font-size:17px; font-weight:950; color:#0f172a; margin-top:2px;">Ananda: ${namaAnanda}</h3>
-                <p style="font-size:11.5px; color:#475569; margin-top:4px;">Pantau kedisiplinan kehadiran, jurnal kerja, dan perkembangan magang ananda tercinta.</p>
+                <h3 style="font-size:17px; font-weight:950; color:#0f172a; margin-top:2px;">Ananda: 👨‍🎓 ${namaAnanda}</h3>
+                <p style="font-size:11.5px; color:#475569; margin-top:4px;">Pantau kehadiran, catatan kegiatan harian, serta sampaikan kendala ananda langsung ke sekolah melalui menu Kontak Sekolah.</p>
             </div>
 
+            <!-- Bagian 1: STATISTIK KEGIATAN ANANDA (Presensi Ananda & Jurnal Ananda) -->
             <div class="absensi-digital-card">
                 <div class="absensi-header-wrap">
                     <div class="absensi-title-main">STATISTIK KEGIATAN ANANDA</div>
                     <div class="absensi-status-badge">UPDATE REALTIME</div>
                 </div>
                 <div class="absensi-btn-grid">
-                    <div class="btn-absensi-box" onclick="window.openFeature('presensi-ananda', 'Presensi Ananda')">
+                    <div class="btn-absensi-box" onclick="window.openFeature('presensi-ananda', 'Presensi Ananda')" style="cursor:pointer;">
                         <div class="btn-absensi-icon-wrap">📍</div>
                         <div>
                             <div class="btn-absensi-text">PRESENSI ANANDA</div>
-                            <div style="font-size: 10px; color: #0284c7; font-weight: 800;">${absenCount} Riwayat Presensi</div>
+                            <div style="font-size: 10px; color: #0284c7; font-weight: 800; margin-top:2px;">${absenCount} Riwayat Presensi ➔</div>
                         </div>
                     </div>
-                    <div class="btn-absensi-box" onclick="window.openFeature('jurnal-ananda', 'Jurnal Ananda')">
+                    <div class="btn-absensi-box" onclick="window.openFeature('jurnal-ananda', 'Jurnal Ananda')" style="cursor:pointer;">
                         <div class="btn-absensi-icon-wrap">📖</div>
                         <div>
                             <div class="btn-absensi-text">JURNAL ANANDA</div>
-                            <div style="font-size: 10px; color: #0284c7; font-weight: 800;">${jurnalCount} Catatan Jurnal</div>
+                            <div style="font-size: 10px; color: #0284c7; font-weight: 800; margin-top:2px;">${jurnalCount} Catatan Jurnal ➔</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="mentor-info-card">
-                <div class="mentor-label">INFORMASI PENEMPATAN ANANDA:</div>
-                <div class="mentor-name">${namaAnanda}</div>
+            <!-- Bagian 2: PENEMPATAN PKL ANANDA (Tempat PKL & Guru Pembimbing) -->
+            <div class="mentor-info-card" style="background: linear-gradient(180deg, #f0f9ff 0%, #e0f2fe 40%, #0284c7 100%);">
+                <div class="mentor-label" style="color:#0369a1;">PENEMPATAN PKL ANANDA:</div>
+                <div class="mentor-name" style="color:#0f172a;">👨‍🎓 ${namaAnanda}</div>
+
                 <div class="details-white-sheet">
                     <div class="detail-row-item">
                         <div class="detail-left"><div class="detail-icon-round">🏢</div> TEMPAT PKL</div>
-                        <div class="detail-right">${industriName}</div>
+                        <div class="detail-right" style="font-weight:950; color:#0369a1;">${industriName}</div>
                     </div>
                     <div class="detail-row-item">
                         <div class="detail-left"><div class="detail-icon-round">👩‍🏫</div> GURU PEMBIMBING</div>
-                        <div class="detail-right">${guruName}</div>
+                        <div class="detail-right" style="font-weight:950; color:#0f172a;">${guruName}</div>
                     </div>
                 </div>
             </div>`;
@@ -2434,19 +2446,25 @@
                 <p style="font-size:11.5px; color:#475569; margin-top:4px;">Monitoring kedisiplinan praktik kerja, pengesahan jurnal harian, dan evaluasi siswa magang.</p>
             </div>
 
-            <!-- Kartu Khusus Lembar Observasi PKL Terkoneksi -->
-            <div class="card" style="border: 2px solid #0284c7; background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%); box-shadow: 0 8px 24px rgba(2,132,199,0.18);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">FITUR INTEGRASI RESMI PANITIA</div>
-                    <span class="badge-status badge-green">Aktif & Siap Digunakan</span>
+            <!-- Kartu Info Perusahaan / Mitra DUDI (Dipindahkan ke Atas) -->
+            <div class="mentor-info-card">
+                <div class="mentor-label">PROFIL MITRA INDUSTRI DUDI:</div>
+                <div class="mentor-name">${profile.nama}</div>
+
+                <div class="details-white-sheet">
+                    <div class="detail-row-item">
+                        <div class="detail-left"><div class="detail-icon-round">⏱️</div> JAM KERJA RESMI</div>
+                        <div class="detail-right">${dataInd.masuk || '08:00'} - ${dataInd.pulang || '16:00'} WITA</div>
+                    </div>
+                    <div class="detail-row-item">
+                        <div class="detail-left"><div class="detail-icon-round">📍</div> RADIUS PRESENSI</div>
+                        <div class="detail-right">${dataInd.radius || 100} Meter</div>
+                    </div>
+                    <div class="detail-row-item">
+                        <div class="detail-left"><div class="detail-icon-round">🏆</div> LEMBAR PENILAIAN</div>
+                        <div class="detail-right"><button onclick="window.openFeature('penilaian-industri', 'Penilaian')" class="btn-action btn-blue">Input Nilai Magang</button></div>
+                    </div>
                 </div>
-                <h3 style="font-size:17px; font-weight:950; color:#0f172a;">📋 ${obs.judul || 'Lembar Observasi PKL'}</h3>
-                <p style="font-size:11.5px; color:#475569; margin:4px 0 14px; line-height:1.4;">
-                    ${obs.deskripsi || 'Aplikasi lembar observasi dan evaluasi siswa magang telah disiapkan oleh Panitia PKL. Tekan tombol di bawah untuk membukanya langsung.'}
-                </p>
-                <button type="button" onclick="window.bukaTautanObservasiIndustri()" class="btn-action-primary" style="padding:12px; font-size:13px; font-weight:900; display:flex; align-items:center; justify-content:center; gap:8px;">
-                    🚀 Buka ${obs.judul || 'Lembar Observasi PKL'} di Browser ↗
-                </button>
             </div>
 
             <!-- Ringkasan Magang DUDI -->
@@ -2588,27 +2606,6 @@
                         <span>Siswa Belum Presensi Pulang (${belumPresensiPulangList.length}):</span>
                     </div>
                     ${warningPresensiPulangHtml}
-                </div>
-            </div>
-
-            <!-- Kartu Info Perusahaan / Mitra DUDI -->
-            <div class="mentor-info-card">
-                <div class="mentor-label">PROFIL MITRA INDUSTRI DUDI:</div>
-                <div class="mentor-name">${profile.nama}</div>
-
-                <div class="details-white-sheet">
-                    <div class="detail-row-item">
-                        <div class="detail-left"><div class="detail-icon-round">⏱️</div> JAM KERJA RESMI</div>
-                        <div class="detail-right">${dataInd.masuk || '08:00'} - ${dataInd.pulang || '16:00'} WITA</div>
-                    </div>
-                    <div class="detail-row-item">
-                        <div class="detail-left"><div class="detail-icon-round">📍</div> RADIUS PRESENSI</div>
-                        <div class="detail-right">${dataInd.radius || 50} Meter</div>
-                    </div>
-                    <div class="detail-row-item">
-                        <div class="detail-left"><div class="detail-icon-round">🏆</div> LEMBAR PENILAIAN</div>
-                        <div class="detail-right"><button onclick="window.openFeature('penilaian-industri', 'Penilaian')" class="btn-action btn-blue">Input Nilai Magang</button></div>
-                    </div>
                 </div>
             </div>`;
         };
@@ -5582,14 +5579,23 @@
 
         window.renderLaporanAkhir = function() {
             const list = window.cloudState.laporanAkhir || [];
+            const role = window.cloudState.activeRole || "siswa";
             let rows = "";
             list.forEach((l, idx) => {
                 rows += `<tr>
+                    ${role === 'admin' ? `<td><input type="checkbox" class="cb-laporan-admin" value="${idx}"></td>` : ''}
                     <td>${idx + 1}</td>
                     <td><b>${l.siswa}</b></td>
                     <td>${l.judul}</td>
                     <td><span class="badge-status ${l.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${l.status || 'Menunggu'}</span></td>
                     <td><a href="${l.link_gdrive || '#'}" target="_blank" class="btn-action btn-blue" style="text-decoration:none;">Buka ↗</a></td>
+                    ${(role === 'admin' || role === 'guru') ? `
+                        <td>
+                            <button onclick="window.konfirmasiHapusLaporanAkhir(${idx})" class="btn-action btn-red" style="padding:4px 8px; font-size:10.5px;">
+                                🗑️ Hapus
+                            </button>
+                        </td>
+                    ` : ''}
                 </tr>`;
             });
 
@@ -5599,82 +5605,141 @@
                     <div>
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">KARYA TULIS AKHIR</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📄 Pantau Laporan Akhir PKL</h3>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Admin dan guru dapat memeriksa serta menghapus naskah laporan yang tidak valid agar dashboard siswa kembali bersih seperti semula.</p>
                     </div>
-                    <button onclick="window.bukaModalKirimLaporanAkhir()" class="btn-action btn-blue">+ Kirim Laporan</button>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        ${role === 'admin' ? `
+                            <button onclick="window.hapusMasalLaporanAkhirAdmin()" class="btn-action btn-red" style="padding:8px 14px; font-size:11.5px; font-weight:900; box-shadow:0 3px 10px rgba(239,68,68,0.3);">
+                                🗑️ Hapus Terpilih
+                            </button>
+                        ` : ''}
+                        <button onclick="window.bukaModalKirimLaporanAkhir()" class="btn-action btn-blue">+ Kirim Laporan</button>
+                    </div>
                 </div>
 
                 <div class="table-wrap">
                     <table>
                         <thead>
                             <tr>
+                                ${role === 'admin' ? `<th style="width:36px;"><input type="checkbox" onchange="window.toggleAllCheckboxes('laporan-admin', this.checked)"></th>` : ''}
                                 <th>No</th>
                                 <th>Nama Siswa</th>
                                 <th>Judul Laporan</th>
                                 <th>Status</th>
                                 <th>Tautan</th>
+                                ${(role === 'admin' || role === 'guru') ? `<th style="width:90px;">Aksi</th>` : ''}
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada laporan akhir yang diserahkan</td></tr>'}
+                            ${rows || `<tr><td colspan="${role === 'admin' ? '7' : '6'}" class="empty-placeholder">Belum ada laporan akhir yang diserahkan</td></tr>`}
                         </tbody>
                     </table>
                 </div>
             </div>`;
         };
 
-        window.bukaModalKirimLaporanAkhir = function() {
-            const profile = window.cloudState.userProfile || { nama: "Siswa" };
-            window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">📄 Kirim Laporan Akhir PKL</h3>
-                <div class="form-group">
-                    <label class="form-label">Nama Siswa:</label>
-                    <input type="text" class="form-control" value="${profile.nama}" readonly>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Judul Laporan:</label>
-                    <input type="text" id="lapJudulInput" class="form-control" placeholder="Judul laporan lengkap">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Tautan Google Drive (PDF / Dokumen):</label>
-                    <input type="url" id="lapLinkGdriveInput" class="form-control" placeholder="https://drive.google.com/...">
-                </div>
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanKirimLaporanAkhirSiswa()" class="btn-action btn-blue">🚀 Kirim</button>
-                </div>
-            `);
+        window.konfirmasiHapusLaporanAkhir = function(idx) {
+            const item = (window.cloudState.laporanAkhir || [])[idx];
+            if (!item) return;
+            window.showConfirmDialog("Hapus Laporan Akhir", `Hapus laporan karya tulis siswa <b>${item.siswa}</b>?<br><br><i>Setelah dihapus, dashboard siswa akan kembali bersih seperti semula sebelum melakukan penyerahan laporan.</i>`, () => {
+                window.cloudState.laporanAkhir.splice(idx, 1);
+                window.simpanDatabasePersisten(true);
+                window.showModalInfo("Laporan Dihapus 🗑️", `Laporan siswa <b>${item.siswa}</b> berhasil dihapus dari sistem.`);
+                window.openFeature("laporan", "Pantau Laporan Akhir");
+            });
         };
 
-        window.simpanKirimLaporanAkhirSiswa = function() {
-            const profile = window.cloudState.userProfile || { nama: "Siswa" };
-            const judul = document.getElementById("lapJudulInput")?.value.trim();
-            const link = document.getElementById("lapLinkGdriveInput")?.value.trim();
+        window.hapusMasalLaporanAkhirAdmin = function() {
+            const cbs = document.querySelectorAll('.cb-laporan-admin:checked');
+            if (cbs.length === 0) return window.showModalInfo("Pilih Data", "Centang minimal 1 laporan yang ingin dihapus!");
 
-            if (!judul || !link) return window.showModalInfo("Lengkapi Data", "Judul dan Tautan wajib diisi!");
-
-            window.cloudState.laporanAkhir.unshift({
-                id: "lap_" + Date.now(),
-                siswa: profile.nama,
-                judul,
-                link_gdrive: link,
-                status: "Menunggu Verifikasi"
+            window.showConfirmDialog("Hapus Masal Laporan", `Yakin ingin menghapus <b>${cbs.length} laporan akhir</b> terpilih?<br><br><i>Seluruh laporan terpilih akan dibersihkan dari dashboard siswa terkait.</i>`, () => {
+                const indices = Array.from(cbs).map(c => parseInt(c.value)).sort((a,b) => b - a);
+                indices.forEach(idx => {
+                    if (window.cloudState.laporanAkhir && window.cloudState.laporanAkhir[idx]) {
+                        window.cloudState.laporanAkhir.splice(idx, 1);
+                    }
+                });
+                window.simpanDatabasePersisten(true);
+                window.showModalInfo("Pembersihan Berhasil 🗑️", `Sebanyak <b>${cbs.length} berkas laporan akhir</b> berhasil dihapus.`);
+                window.openFeature("laporan", "Pantau Laporan Akhir");
             });
-
-            window.simpanDatabasePersisten(true);
-            window.closeDynamicModal();
-            window.openFeature("laporan", "Pantau Laporan Akhir");
         };
 
         window.renderPengaduanMasalah = function() {
             const list = window.cloudState.pengaduan || [];
+            const role = window.cloudState.activeRole || "siswa";
+            const profile = window.cloudState.userProfile || { nama: "Pengguna" };
+            const isOrangTua = (role === 'orangtua');
+            const namaAnanda = isOrangTua ? (profile.namaAnanda || profile.nama.replace("Wali dari ", "").trim()) : "";
+
+            let filteredList = list;
+            let subTitle = "PUSAT BANTUAN & PENGADUAN";
+            let mainTitle = "⚠️ Laporan Pengaduan & Kendala";
+            let descText = "Sampaikan laporan kendala atau masalah selama masa PKL langsung kepada pihak terkait.";
+            let btnLabel = "+ Kirim Laporan Kendala";
+
+            if (isOrangTua) {
+                subTitle = "LAYANAN KONTAK SEKOLAH & KENDALA ANANDA";
+                mainTitle = "⚠️ Kontak Sekolah: Laporan Kendala Ananda";
+                descText = `Sampaikan pengaduan atau kendala yang dialami oleh ananda tercinta (<b>${namaAnanda}</b>) langsung kepada Guru Pembimbing, Pihak Industri DUDI, atau Panitia PKL.`;
+                btnLabel = "⚠️ + Kirim Laporan Kendala Ananda";
+                filteredList = list.filter(ad => 
+                    (ad.role === 'orangtua' && ad.pelapor && ad.pelapor.toLowerCase().includes(profile.nama.toLowerCase())) ||
+                    (ad.ananda && ad.ananda.toLowerCase().trim() === namaAnanda.toLowerCase().trim())
+                );
+            } else if (role === 'guru') {
+                subTitle = "KENDALA LAPANGAN & ADUAN WALI SISWA";
+                mainTitle = "⚠️ Laporan Pengaduan & Kendala Siswa Bimbingan";
+                descText = "Tinjau dan tanggapi pengaduan kendala yang dikirimkan oleh siswa bimbingan atau orang tua siswa.";
+            } else if (role === 'industri') {
+                subTitle = "ADUAN & KOORDINASI MAGANG";
+                mainTitle = "⚠️ Laporan Pengaduan & Koordinasi DUDI";
+                descText = "Tinjau kendala atau pengaduan siswa magang dan orang tua yang ditujukan ke perusahaan/instansi Anda.";
+            }
+
             let rows = "";
-            list.forEach((ad, idx) => {
+            filteredList.forEach((ad) => {
+                const originalIdx = (window.cloudState.pengaduan || []).indexOf(ad);
+                const isFromParent = (ad.role === 'orangtua');
+                const isSolved = (ad.status === 'Selesai');
+                const canRespond = (role === 'admin' || role === 'guru' || role === 'industri');
+
                 rows += `<tr>
-                    <td>${idx + 1}</td>
-                    <td><b>${ad.pelapor}</b></td>
-                    <td>${ad.tanggal}</td>
-                    <td style="white-space:normal;">${ad.isi}</td>
-                    <td><span class="badge-status badge-amber">${ad.status || 'Diproses'}</span></td>
+                    ${role === 'admin' ? `<td><input type="checkbox" class="cb-aduan-admin" value="${originalIdx}"></td>` : ''}
+                    <td>${originalIdx + 1}</td>
+                    <td>
+                        <b>${ad.pelapor}</b>
+                        ${isFromParent ? `<div style="font-size:9.5px; color:#7e22ce; font-weight:800;">👨‍👩‍👧 Wali dari: ${ad.ananda || '-'}</div>` : `<div style="font-size:9.5px; color:#0284c7;">${ad.role || 'Siswa'}</div>`}
+                    </td>
+                    <td>
+                        <span class="badge-status badge-blue" style="font-size:10px;">${ad.tujuan || 'Panitia PKL'}</span>
+                    </td>
+                    <td>${ad.tanggal || '-'}</td>
+                    <td style="white-space:normal; min-width:180px;">
+                        <div style="font-weight:800; color:#0f172a;">${ad.kategori || 'Kendala'}:</div>
+                        <div style="font-size:11.5px; color:#334155; margin-top:2px; line-height:1.4;">${ad.isi || '-'}</div>
+                        ${ad.tanggapan ? `
+                            <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:6px 8px; margin-top:6px; font-size:10.5px; color:#15803d;">
+                                <b>💬 Tanggapan Sekolah/DUDI:</b><br>${ad.tanggapan}
+                            </div>
+                        ` : ''}
+                    </td>
+                    <td>
+                        <span class="badge-status ${isSolved ? 'badge-green' : 'badge-amber'}">${ad.status || 'Diproses'}</span>
+                    </td>
+                    <td style="display:flex; gap:4px; flex-wrap:wrap;">
+                        ${canRespond ? `
+                            <button onclick="window.bukaModalTanggapiAduan(${originalIdx})" class="btn-action btn-emerald" style="padding:4px 8px; font-size:10.5px;">
+                                💬 Tanggapi
+                            </button>
+                        ` : ''}
+                        ${role === 'admin' ? `
+                            <button onclick="window.konfirmasiHapusAduanMasalah(${originalIdx})" class="btn-action btn-red" style="padding:4px 8px; font-size:10.5px;">
+                                🗑️ Hapus
+                            </button>
+                        ` : ''}
+                    </td>
                 </tr>`;
             });
 
@@ -5682,188 +5747,69 @@
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
-                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">PUSAT BANTUAN</div>
-                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">⚠️ Laporan Pengaduan & Kendala</h3>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">${subTitle}</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">${mainTitle}</h3>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">${descText}</p>
                     </div>
-                    <button onclick="window.bukaModalKirimAduanMasalah()" class="btn-action btn-amber">+ Kirim Laporan Kendala</button>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        ${role === 'admin' ? `
+                            <button onclick="window.hapusMasalAduanAdmin()" class="btn-action btn-red" style="padding:8px 14px; font-size:11.5px; font-weight:900; box-shadow:0 3px 10px rgba(239,68,68,0.3);">
+                                🗑️ Hapus Terpilih
+                            </button>
+                        ` : ''}
+                        <button onclick="window.bukaModalKirimAduanMasalah()" class="btn-action btn-amber" style="padding:9px 16px; font-size:11.5px; font-weight:900; box-shadow:0 3px 10px rgba(245,158,11,0.3);">
+                            ${btnLabel}
+                        </button>
+                    </div>
                 </div>
 
                 <div class="table-wrap">
                     <table>
                         <thead>
                             <tr>
-                                <th>No</th>
+                                ${role === 'admin' ? `<th style="width:36px;"><input type="checkbox" onchange="window.toggleAllCheckboxes('aduan-admin', this.checked)"></th>` : ''}
+                                <th style="width:36px;">No</th>
                                 <th>Pelapor</th>
+                                <th>Tujuan Laporan</th>
                                 <th>Tanggal</th>
-                                <th>Kendala</th>
+                                <th>Uraian Kendala / Masalah</th>
                                 <th>Status</th>
+                                <th style="width:130px;">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada pengaduan yang diajukan</td></tr>'}
+                            ${rows || `<tr><td colspan="${role === 'admin' ? '8' : '7'}" class="empty-placeholder">Belum ada laporan pengaduan kendala yang diajukan</td></tr>`}
                         </tbody>
                     </table>
                 </div>
             </div>`;
         };
 
-        window.bukaModalKirimAduanMasalah = function() {
-            window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#ef4444; margin-bottom:12px;">⚠️ Laporkan Kendala / Masalah</h3>
-                <div class="form-group">
-                    <label class="form-label">Uraian Masalah:</label>
-                    <textarea id="aduanIsiText" class="form-control" style="height:90px;" placeholder="Jelaskan kendala yang dialami..."></textarea>
-                </div>
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.prosesSimpanAduanMasalah()" class="btn-action btn-red">⚡ Kirim Laporan</button>
-                </div>
-            `);
-        };
-
-        window.prosesSimpanAduanMasalah = function() {
-            const profile = window.cloudState.userProfile || { nama: "Siswa" };
-            const isi = document.getElementById("aduanIsiText")?.value.trim();
-            if (!isi) return window.showModalInfo("Lengkapi Data", "Uraian masalah tidak boleh kosong!");
-
-            window.cloudState.pengaduan.unshift({
-                id: "adu_" + Date.now(),
-                pelapor: profile.nama,
-                tanggal: new Date().toISOString().split('T')[0],
-                isi,
-                status: "Diproses"
+        window.konfirmasiHapusAduanMasalah = function(originalIdx) {
+            const ad = (window.cloudState.pengaduan || [])[originalIdx];
+            if (!ad) return;
+            window.showConfirmDialog("Hapus Laporan Pengaduan", `Hapus aduan dari <b>${ad.pelapor}</b>?<br><br><i>Setelah dihapus, laporan kendala ini akan bersih dari dashboard pengguna pelapor.</i>`, () => {
+                window.cloudState.pengaduan.splice(originalIdx, 1);
+                window.simpanDatabasePersisten(true);
+                window.showModalInfo("Aduan Dihapus 🗑️", `Laporan kendala berhasil dihapus dari sistem.`);
+                window.openFeature("aduan", window.cloudState.activeRole === 'orangtua' ? "Kontak Sekolah" : "Laporan Pengaduan & Kendala");
             });
-
-            window.simpanDatabasePersisten(true);
-            window.closeDynamicModal();
-            window.openFeature("aduan", "Laporan Pengaduan");
         };
 
-        window.unduhTemplateExcelSiswa = function() {
-            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "SheetJS belum aktif");
-            const data = [
-                ["Nama Siswa", "NIS", "JK", "Kelas", "No HP"],
-                ["Ahmad Dani", "1001", "L", "Teknik Jaringan Komputer & Telekomunikasi (TJKT)", "081234567890"]
-            ];
-            const ws = XLSX.utils.aoa_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Siswa");
-            XLSX.writeFile(wb, "Template_Siswa.xlsx");
-        };
+        window.hapusMasalAduanAdmin = function() {
+            const cbs = document.querySelectorAll('.cb-aduan-admin:checked');
+            if (cbs.length === 0) return window.showModalInfo("Pilih Data", "Centang minimal 1 laporan pengaduan yang ingin dihapus!");
 
-        window.unduhTemplateExcelGuru = function() {
-            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "SheetJS belum aktif");
-            const data = [
-                ["Nama Guru", "NIP", "Bidang / Mapel", "No HP"],
-                ["Wilasia S. Talaa, S.ST", "198501012010012001", "TJKT", "08111222333"]
-            ];
-            const ws = XLSX.utils.aoa_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Guru");
-            XLSX.writeFile(wb, "Template_Guru.xlsx");
-        };
-
-        window.unduhTemplateExcelIndustri = function() {
-            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "SheetJS belum aktif");
-            const data = [
-                ["Nama Industri", "Alamat", "Pimpinan", "No WA", "Radius"],
-                ["PT. Telkom Marisa", "Jl. Trans Sulawesi", "Bapak Anton", "081234567890", "50"]
-            ];
-            const ws = XLSX.utils.aoa_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Industri");
-            XLSX.writeFile(wb, "Template_Industri.xlsx");
-        };
-
-        window.bukaModalUploadExcel = function(type) {
-            window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">📥 Impor Data ${type}</h3>
-                <div class="form-group">
-                    <input type="file" id="fileExcelGenericInput" class="form-control" accept=".xlsx, .xls">
-                </div>
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.prosesFileExcelUpload('${type}')" class="btn-action btn-blue">Unggah & Simpan</button>
-                </div>
-            `);
-        };
-
-        window.prosesFileExcelUpload = function(type) {
-            const fileInput = document.getElementById("fileExcelGenericInput");
-            if (!fileInput || !fileInput.files[0]) return window.showModalInfo("Pilih Berkas", "Silakan pilih berkas Excel terlebih dahulu!");
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const json = XLSX.utils.sheet_to_json(sheet);
-
-                    let count = 0;
-                    if (type === 'Siswa') {
-                        json.forEach(row => {
-                            const nama = (row['Nama Siswa'] || row['Nama'] || row['nama'] || '').toString().trim();
-                            const nis = (row['NIS'] || row['nis'] || '-').toString().trim();
-                            const jk = (row['JK'] || row['jk'] || 'L').toString().trim().toUpperCase();
-                            const kelas = (row['Kelas'] || row['kelas'] || 'TJKT').toString().trim();
-                            const noHp = (row['No HP'] || row['no_hp'] || '-').toString().trim();
-                            if (nama) {
-                                window.cloudState.siswa.push({ nama, nis, jk, kelas, noHp });
-                                count++;
-                            }
-                        });
-                        window.openFeature("master-siswa", "Data Master Siswa");
-                    } else if (type === 'Guru') {
-                        json.forEach(row => {
-                            const nama = (row['Nama Guru'] || row['Nama'] || row['nama'] || '').toString().trim();
-                            const nip = (row['NIP'] || row['nip'] || '-').toString().trim();
-                            const mapel = (row['Bidang / Mapel'] || row['mapel'] || 'Guru Pembimbing').toString().trim();
-                            const noHp = (row['No HP'] || row['no_hp'] || '-').toString().trim();
-                            if (nama) {
-                                window.cloudState.guru.push({ nama, nip, mapel, noHp });
-                                count++;
-                            }
-                        });
-                        window.openFeature("master-guru", "Data Master Guru");
-                    } else if (type === 'Industri') {
-                        json.forEach(row => {
-                            const nama = (row['Nama Industri'] || row['Nama'] || row['nama'] || '').toString().trim();
-                            const alamat = (row['Alamat'] || '-').toString().trim();
-                            const pimpinan = (row['Pimpinan'] || 'HRD').toString().trim();
-                            const noWa = (row['No WA'] || '-').toString().trim();
-                            if (nama) {
-                                window.cloudState.industri.push({
-                                    id: "ind_" + Date.now() + Math.random(),
-                                    nama, alamat, pimpinan, noWa, radius: 50, masuk: "08:00", pulang: "16:00", lat: "0.45612", lng: "121.94210"
-                                });
-                                count++;
-                            }
-                        });
-                        window.openFeature("master-industri", "Mitra Industri DUDI");
-                    }
-
-                    window.simpanDatabasePersisten(true);
-                    window.closeDynamicModal();
-                    window.showModalInfo("Impor Berhasil", `Berhasil mengimpor ${count} data ${type}.`);
-                } catch(err) {
-                    window.showModalInfo("Gagal", err.message);
-                }
-            };
-            reader.readAsArrayBuffer(fileInput.files[0]);
-        };
-
-        window.hapusMasal = function(type) {
-            const cbs = document.querySelectorAll('.cb-' + type + ':checked');
-            if (cbs.length === 0) return window.showModalInfo("Pilih Data", "Centang minimal 1 data yang ingin dihapus!");
-
-            window.showConfirmDialog("Hapus Masal", `Yakin ingin menghapus ${cbs.length} data terpilih?`, () => {
+            window.showConfirmDialog("Hapus Masal Aduan", `Yakin ingin menghapus <b>${cbs.length} laporan pengaduan</b> terpilih?`, () => {
                 const indices = Array.from(cbs).map(c => parseInt(c.value)).sort((a,b) => b - a);
                 indices.forEach(idx => {
-                    if (window.cloudState[type]) window.cloudState[type].splice(idx, 1);
+                    if (window.cloudState.pengaduan && window.cloudState.pengaduan[idx]) {
+                        window.cloudState.pengaduan.splice(idx, 1);
+                    }
                 });
                 window.simpanDatabasePersisten(true);
-                window.openFeature('master-' + type, 'Data ' + type);
+                window.showModalInfo("Pembersihan Berhasil 🗑️", `Sebanyak <b>${cbs.length} laporan aduan</b> berhasil dibersihkan dari database.`);
+                window.openFeature("aduan", window.cloudState.activeRole === 'orangtua' ? "Kontak Sekolah" : "Laporan Pengaduan & Kendala");
             });
         };
 
