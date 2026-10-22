@@ -3543,6 +3543,7 @@
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button onclick="window.unduhTemplateExcelAkunPeran('${tab}')" class="btn-action btn-emerald">📄 Template</button>
                         <button onclick="window.bukaModalUploadExcelAkunPeran('${tab}')" class="btn-action btn-blue">📥 Impor Excel</button>
+                        <button onclick="window.exportExcelAkunPeran('${tab}')" class="btn-action btn-emerald">📊 Export Excel</button>
                         <button onclick="window.bukaModalTambahKredensial('${tab}')" class="btn-action btn-blue">+ Tambah Akun</button>
                         <button onclick="window.hapusMasalAkun()" class="btn-action btn-red">🗑️ Hapus</button>
                     </div>
@@ -3782,6 +3783,7 @@
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button onclick="window.unduhTemplateExcelSiswa()" class="btn-action btn-emerald">📄 Template</button>
                         <button onclick="window.bukaModalUploadExcel('Siswa')" class="btn-action btn-blue">📥 Impor Excel</button>
+                        <button onclick="window.exportExcelSiswa()" class="btn-action btn-emerald">📊 Export Excel</button>
                         <button onclick="window.bukaModalInputSiswa()" class="btn-action btn-blue">+ Tambah</button>
                         <button onclick="window.hapusMasal('siswa')" class="btn-action btn-red">🗑️ Hapus</button>
                     </div>
@@ -4014,6 +4016,7 @@
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
                         <button onclick="window.unduhTemplateExcelGuru()" class="btn-action btn-emerald">📄 Template</button>
                         <button onclick="window.bukaModalUploadExcel('Guru')" class="btn-action btn-blue">📥 Impor Excel</button>
+                        <button onclick="window.exportExcelGuru()" class="btn-action btn-emerald">📊 Export Excel</button>
                         <button onclick="window.bukaModalInputGuru()" class="btn-action btn-blue">+ Tambah</button>
                         <button onclick="window.hapusMasal('guru')" class="btn-action btn-red">🗑️ Hapus</button>
                     </div>
@@ -4159,6 +4162,7 @@
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button onclick="window.unduhTemplateExcelIndustri()" class="btn-action btn-emerald">📄 Template</button>
                         <button onclick="window.bukaModalUploadExcel('Industri')" class="btn-action btn-blue">📥 Impor Excel</button>
+                        <button onclick="window.exportExcelIndustri()" class="btn-action btn-emerald">📊 Export Excel</button>
                         <button onclick="window.bukaModalInputIndustri()" class="btn-action btn-blue">+ Tambah</button>
                         <button onclick="window.hapusMasal('industri')" class="btn-action btn-red">🗑️ Hapus</button>
                     </div>
@@ -4531,6 +4535,43 @@
             `);
         };
 
+        window.simpanAlokasiMonitoringBaru = function() {
+            const guru = document.getElementById("monGuru")?.value;
+            const judul = document.getElementById("monJudul")?.value.trim() || "Monitoring DUDI";
+            const tglMulai = document.getElementById("monTglMulai")?.value;
+            const tglSelesai = document.getElementById("monTglSelesai")?.value;
+            const catatan = document.getElementById("monCatatan")?.value.trim() || "-";
+
+            const cbs = document.querySelectorAll('input[name="selIndMonitoring"]:checked');
+            const selectedInd = [];
+            cbs.forEach(c => selectedInd.push(c.value));
+
+            const cbsSiswa = document.querySelectorAll('input[name="selSiswaMonitoring"]:checked');
+            const selectedSiswa = [];
+            cbsSiswa.forEach(c => selectedSiswa.push(c.value));
+
+            if (!guru) return window.showModalInfo("Pilih Guru", "Nama guru monitoring wajib dipilih!");
+            if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Pilih minimal 1 mitra industri yang akan dikunjungi!");
+
+            if (!Array.isArray(window.cloudState.penugasanMonitoring)) window.cloudState.penugasanMonitoring = [];
+
+            window.cloudState.penugasanMonitoring.unshift({
+                id: "mon_" + Date.now(),
+                guru,
+                judulTugas: judul,
+                tanggalMulai: tglMulai,
+                tanggalSelesai: tglSelesai,
+                industriList: selectedInd,
+                siswaList: selectedSiswa,
+                catatan
+            });
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Surat Tugas Diterbitkan 🚗", `Surat tugas monitoring untuk guru <b>${guru}</b> berhasil diterbitkan.`);
+            window.openFeature("penempatan", "Alokasi Guru & Siswa");
+        };
+
         window.bukaModalEditTugasMonitoring = function(idx) {
             const item = window.cloudState.penugasanMonitoring[idx];
             if (!item) return;
@@ -4640,7 +4681,49 @@
             `);
         };
 
-        // --- MODAL ALOKASI GURU PEMBIMBING & SISWA MAGANG (DENGAN PENCARIAN GURU & INDUSTRI) ---
+        window.simpanEditTugasMonitoring = function(idx) {
+            const guru = document.getElementById("editMonGuru")?.value;
+            const judul = document.getElementById("editMonJudul")?.value.trim() || "Monitoring DUDI";
+            const tglMulai = document.getElementById("editMonTglMulai")?.value;
+            const tglSelesai = document.getElementById("editMonTglSelesai")?.value;
+            const catatan = document.getElementById("editMonCatatan")?.value.trim() || "-";
+
+            const cbs = document.querySelectorAll('input[name="editIndMonitoring"]:checked');
+            const selectedInd = [];
+            cbs.forEach(c => selectedInd.push(c.value));
+
+            const cbsSiswa = document.querySelectorAll('input[name="editSiswaMonitoring"]:checked');
+            const selectedSiswa = [];
+            cbsSiswa.forEach(c => selectedSiswa.push(c.value));
+
+            if (!guru) return window.showModalInfo("Pilih Guru", "Nama guru monitoring wajib dipilih!");
+            if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Pilih minimal 1 mitra industri yang akan dikunjungi!");
+
+            window.cloudState.penugasanMonitoring[idx] = {
+                ...window.cloudState.penugasanMonitoring[idx],
+                guru,
+                judulTugas: judul,
+                tanggalMulai: tglMulai,
+                tanggalSelesai: tglSelesai,
+                industriList: selectedInd,
+                siswaList: selectedSiswa,
+                catatan
+            };
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Surat Tugas Diperbarui 🚗", `Penugasan monitoring untuk guru <b>${guru}</b> berhasil diupdate.`);
+            window.openFeature("penempatan", "Alokasi Guru & Siswa");
+        };
+
+        window.konfirmasiHapusTugasMonitoring = function(idx) {
+            window.showConfirmDialog("Hapus Tugas Monitoring", "Hapus surat penugasan monitoring ini?", () => {
+                window.cloudState.penugasanMonitoring.splice(idx, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("penempatan", "Alokasi Guru & Siswa");
+            });
+        };
+
         window.bukaModalAlokasiPenempatan = function() {
             let gOpts = "";
             (window.cloudState.guru || []).forEach(g => {
@@ -4676,7 +4759,6 @@
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">🔄 Alokasi Guru Pembimbing & Siswa Magang</h3>
                 <p style="font-size:11px; color:#64748b; margin-bottom:14px;">Gunakan kotak pencarian untuk mencari nama guru pembimbing, industri magang, dan siswa.</p>
 
-                <!-- PENCARIAN GURU PEMBIMBING -->
                 <div class="form-group">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                         <label class="form-label" style="margin-bottom:0;">Pilih Guru Pembimbing:</label>
@@ -4688,7 +4770,6 @@
                     <select id="penGuru" class="form-control" style="font-weight:800; color:#0369a1;">${gOpts || '<option>Belum ada data guru</option>'}</select>
                 </div>
                 
-                <!-- PENCARIAN INDUSTRI MAGANG -->
                 <div class="form-group">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                         <label class="form-label" style="margin-bottom:0;">Pilih Mitra Industri Magang (Centang):</label>
@@ -4702,7 +4783,6 @@
                     </div>
                 </div>
 
-                <!-- PENCARIAN SISWA MAGANG -->
                 <div class="form-group">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                         <label class="form-label" style="margin-bottom:0;">Pilih Siswa yang Ditempatkan (Centang):</label>
@@ -4749,7 +4829,6 @@
                     siswa: selectedS
                 });
 
-                // Sinkronkan langsung ke data Master Siswa untuk mencegah kebocoran data di Dashboard Wali Murid
                 selectedS.forEach(sNama => {
                     const foundS = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, sNama));
                     if (foundS) {
@@ -4813,7 +4892,6 @@
             window.openDynamicModal(`
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">✏️ Edit Alokasi Guru Pembimbing Siswa</h3>
                 
-                <!-- PENCARIAN GURU PEMBIMBING EDIT -->
                 <div class="form-group">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                         <label class="form-label" style="margin-bottom:0;">Pilih Guru Pembimbing:</label>
@@ -4825,7 +4903,6 @@
                     <select id="editPenGuru" class="form-control" style="font-weight:800; color:#0369a1;">${gOpts}</select>
                 </div>
                 
-                <!-- PENCARIAN INDUSTRI MAGANG EDIT -->
                 <div class="form-group">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                         <label class="form-label" style="margin-bottom:0;">Pilih Mitra Industri Magang (Centang):</label>
@@ -4839,7 +4916,6 @@
                     </div>
                 </div>
 
-                <!-- PENCARIAN SISWA MAGANG EDIT -->
                 <div class="form-group">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                         <label class="form-label" style="margin-bottom:0;">Pilih Siswa yang Ditempatkan (Centang):</label>
@@ -4883,7 +4959,6 @@
                 siswa: selectedS
             };
 
-            // Sinkronkan langsung ke data Master Siswa
             selectedS.forEach(sNama => {
                 const foundS = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, sNama));
                 if (foundS) {
@@ -4895,370 +4970,6 @@
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
             window.showModalInfo("Alokasi Diperbarui 🔄", `Data alokasi bimbingan untuk <b>${guru}</b> berhasil diupdate dan disinkronkan ke database siswa.`);
-            window.openFeature("penempatan", "Alokasi Guru & Siswa");
-        };
-
-        window.bukaModalEditTugasMonitoring = function(idx) {
-            const item = window.cloudState.penugasanMonitoring[idx];
-            if (!item) return;
-
-            let gOpts = "";
-            (window.cloudState.guru || []).forEach(g => {
-                gOpts += `<option value="${g.nama}" ${g.nama === item.guru ? 'selected' : ''}>${g.nama} (${g.mapel || 'Guru'})</option>`;
-            });
-
-            const currentIndList = Array.isArray(item.industriList) ? item.industriList : [item.industriList || ''];
-
-            let indCheckboxes = "";
-            (window.cloudState.industri || []).forEach((ind) => {
-                const isChecked = currentIndList.includes(ind.nama);
-                indCheckboxes += `
-                <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; cursor:pointer; font-size:12px;">
-                    <input type="checkbox" name="editIndMonitoring" value="${ind.nama}" ${isChecked ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
-                    <div>
-                        <b>🏢 ${ind.nama}</b>
-                        <div style="font-size:10px; color:#64748b;">${ind.alamat || '-'} &bull; Radius: ${ind.radius || 50}m</div>
-                    </div>
-                </label>`;
-            });
-
-            const currentSiswaList = Array.isArray(item.siswaList) ? item.siswaList : (item.siswaList ? [item.siswaList] : []);
-
-            let sCheckboxes = "";
-            (window.cloudState.siswa || []).forEach((s) => {
-                const isChecked = currentSiswaList.includes(s.nama);
-                sCheckboxes += `
-                <label class="item-siswa-mon" data-nama="${(s.nama || '').toLowerCase()}" data-kelas="${(s.kelas || '').toLowerCase()}" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; cursor:pointer; font-size:12px;">
-                    <input type="checkbox" name="editSiswaMonitoring" value="${s.nama}" ${isChecked ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
-                    <div>
-                        <b>👨‍🎓 ${s.nama}</b>
-                        <div style="font-size:10px; color:#64748b;">${s.kelas || '-'}</div>
-                    </div>
-                </label>`;
-            });
-
-            window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">✏️ Edit Surat Tugas Monitoring DUDI</h3>
-                <p style="font-size:11px; color:#64748b; margin-bottom:14px;">Ubah jadwal, industri yang dikunjungi, atau siswa yang dimonitoring.</p>
-
-                <div class="form-group">
-                    <label class="form-label">Pilih Guru Monitoring:</label>
-                    <select id="editMonGuru" class="form-control" style="font-weight:800; color:#0369a1;">${gOpts}</select>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Nama Agenda / Surat Tugas:</label>
-                    <input type="text" id="editMonJudul" class="form-control" value="${item.judulTugas || 'Monitoring & Evaluasi PKL DUDI'}">
-                </div>
-
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
-                    <div class="form-group" style="margin-bottom:0;">
-                        <label class="form-label">Tanggal Mulai:</label>
-                        <input type="date" id="editMonTglMulai" class="form-control" value="${item.tanggalMulai || ''}">
-                    </div>
-                    <div class="form-group" style="margin-bottom:0;">
-                        <label class="form-label">Tanggal Selesai:</label>
-                        <input type="date" id="editMonTglSelesai" class="form-control" value="${item.tanggalSelesai || ''}">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <label class="form-label" style="margin-bottom:0;">Centang Mitra Industri yang Dikunjungi:</label>
-                        <span style="font-size:10px; color:#0284c7; font-weight:800;">Pilih &gt; 1 Industri</span>
-                    </div>
-                    <div style="max-height:130px; overflow-y:auto; background:#f8fafc; padding:8px; border-radius:10px; border:1.5px solid #bfdbfe;">
-                        ${indCheckboxes}
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <label class="form-label" style="margin-bottom:0;">Centang Nama Siswa yang Dimonitoring:</label>
-                        <span style="font-size:10px; color:#15803d; font-weight:800;">Pilih Siswa Terkait</span>
-                    </div>
-                    <div style="margin-bottom:6px;">
-                        <input type="text" class="form-control" style="font-size:11px; padding:7px 10px;" placeholder="🔍 Ketik nama siswa untuk mencari..." oninput="window.filterSiswaMonitoring(this.value)">
-                    </div>
-                    <div style="max-height:130px; overflow-y:auto; background:#f8fafc; padding:8px; border-radius:10px; border:1.5px solid #bfdbfe;">
-                        ${sCheckboxes}
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Catatan / Arahan Panitia:</label>
-                    <input type="text" id="editMonCatatan" class="form-control" value="${item.catatan || ''}">
-                </div>
-
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanEditTugasMonitoring(${idx})" class="btn-action btn-emerald" style="font-weight:900;">💾 Update Surat Tugas</button>
-                </div>
-            `);
-        };
-
-        window.simpanEditTugasMonitoring = function(idx) {
-            const guru = document.getElementById("editMonGuru")?.value;
-            const judul = document.getElementById("editMonJudul")?.value.trim() || "Monitoring DUDI";
-            const tglMulai = document.getElementById("editMonTglMulai")?.value;
-            const tglSelesai = document.getElementById("editMonTglSelesai")?.value;
-            const catatan = document.getElementById("editMonCatatan")?.value.trim() || "-";
-
-            const cbs = document.querySelectorAll('input[name="editIndMonitoring"]:checked');
-            const selectedInd = [];
-            cbs.forEach(c => selectedInd.push(c.value));
-
-            const cbsSiswa = document.querySelectorAll('input[name="editSiswaMonitoring"]:checked');
-            const selectedSiswa = [];
-            cbsSiswa.forEach(c => selectedSiswa.push(c.value));
-
-            if (!guru) return window.showModalInfo("Pilih Guru", "Nama guru monitoring wajib dipilih!");
-            if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Pilih minimal 1 mitra industri yang akan dikunjungi!");
-
-            window.cloudState.penugasanMonitoring[idx] = {
-                ...window.cloudState.penugasanMonitoring[idx],
-                guru,
-                judulTugas: judul,
-                tanggalMulai: tglMulai,
-                tanggalSelesai: tglSelesai,
-                industriList: selectedInd,
-                siswaList: selectedSiswa,
-                catatan
-            };
-
-            window.simpanDatabasePersisten(true);
-            window.closeDynamicModal();
-            window.showModalInfo("Surat Tugas Diperbarui 🚗", `Penugasan monitoring untuk guru <b>${guru}</b> berhasil diupdate.`);
-            window.openFeature("penempatan", "Alokasi Guru & Siswa");
-        };
-
-        window.konfirmasiHapusTugasMonitoring = function(idx) {
-            window.showConfirmDialog("Hapus Tugas Monitoring", "Hapus surat penugasan monitoring ini?", () => {
-                window.cloudState.penugasanMonitoring.splice(idx, 1);
-                window.simpanDatabasePersisten(true);
-                window.openFeature("penempatan", "Alokasi Guru & Siswa");
-            });
-        };
-
-        // --- LOGIKA MODAL FORMULIR ALOKASI GURU PEMBIMBING & SISWA MAGANG ---
-        window.bukaModalAlokasiPenempatan = function() {
-            let gOpts = "";
-            (window.cloudState.guru || []).forEach(g => {
-                gOpts += `<option value="${g.nama}">${g.nama} (${g.mapel || 'Guru'})</option>`;
-            });
-
-            let indCheckboxes = "";
-            (window.cloudState.industri || []).forEach((ind) => {
-                indCheckboxes += `
-                <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; cursor:pointer; font-size:12px;">
-                    <input type="checkbox" name="selIndPenempatan" value="${ind.nama}" style="width:16px; height:16px; accent-color:#0284c7;">
-                    <div>
-                        <b>🏢 ${ind.nama}</b>
-                        <div style="font-size:10px; color:#64748b;">${ind.alamat || '-'} &bull; Radius: ${ind.radius || 50}m</div>
-                    </div>
-                </label>`;
-            });
-
-            let sCheckboxes = "";
-            (window.cloudState.siswa || []).forEach((s) => {
-                const searchKey = `${s.nama || ''} ${s.kelas || ''}`.toLowerCase();
-                sCheckboxes += `<label class="item-siswa-penempatan" data-search="${searchKey}" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; font-size:12px; cursor:pointer;">
-                    <input type="checkbox" name="selSiswaPenempatan" value="${s.nama}" style="width:16px; height:16px; accent-color:#0284c7;">
-                    <div>
-                        <b>👨‍🎓 ${s.nama}</b>
-                        <div style="font-size:10px; color:#64748b;">${s.kelas || '-'}</div>
-                    </div>
-                </label>`;
-            });
-
-            window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">🔄 Alokasi Guru Pembimbing & Siswa Magang</h3>
-                <p style="font-size:11px; color:#64748b; margin-bottom:14px;">Petakan guru pembimbing akademik untuk memvalidasi jurnal harian dan laporan siswa.</p>
-
-                <div class="form-group">
-                    <label class="form-label">Pilih Guru Pembimbing:</label>
-                    <select id="penGuru" class="form-control" style="font-weight:800; color:#0369a1;">${gOpts || '<option>Belum ada data guru</option>'}</select>
-                </div>
-                
-                <div class="form-group">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <label class="form-label" style="margin-bottom:0;">Pilih Mitra Industri Magang (Centang):</label>
-                        <span style="font-size:10px; color:#0284c7; font-weight:800;">Bisa &gt; 1 Industri</span>
-                    </div>
-                    <div style="max-height:140px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
-                        ${indCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada industri terdaftar</span>'}
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <label class="form-label" style="margin-bottom:0;">Pilih Siswa yang Ditempatkan (Centang):</label>
-                        <span style="font-size:10px; color:#0284c7; font-weight:800;">Centang Siswa</span>
-                    </div>
-                    <div style="margin-bottom:6px;">
-                        <input type="text" id="cariInputSiswaPenempatan" class="form-control" placeholder="🔍 Ketik nama siswa untuk mencari..." oninput="window.filterSiswaPenempatan(this.value)" style="padding:8px 12px; font-size:12px; border-radius:10px; background:#ffffff; border:1.5px solid #93c5fd;">
-                    </div>
-                    <div id="boxListSiswaPenempatan" style="max-height:140px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
-                        ${sCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada siswa terdaftar</span>'}
-                    </div>
-                </div>
-
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanAlokasiPenempatanBaru()" class="btn-action btn-blue" style="font-weight:900;">💾 Simpan Alokasi</button>
-                </div>
-            `);
-        };
-
-        window.filterSiswaPenempatan = function(query) {
-            const q = (query || "").toLowerCase().trim();
-            const items = document.querySelectorAll(".item-siswa-penempatan");
-            items.forEach(it => {
-                const search = it.getAttribute("data-search") || "";
-                if (!q || search.includes(q)) {
-                    it.style.display = "flex";
-                } else {
-                    it.style.display = "none";
-                }
-            });
-        };
-
-        window.simpanAlokasiPenempatanBaru = function() {
-            try {
-                const guru = document.getElementById("penGuru")?.value;
-                const cbsInd = document.querySelectorAll('input[name="selIndPenempatan"]:checked');
-                const selectedInd = [];
-                cbsInd.forEach(c => selectedInd.push(c.value));
-
-                const cbsSiswa = document.querySelectorAll('input[name="selSiswaPenempatan"]:checked');
-                const selectedS = [];
-                cbsSiswa.forEach(c => selectedS.push(c.value));
-
-                if (!guru) return window.showModalInfo("Lengkapi Data", "Guru pembimbing wajib dipilih!");
-                if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Centang minimal 1 mitra industri magang!");
-                if (selectedS.length === 0) return window.showModalInfo("Pilih Siswa", "Centang minimal 1 siswa bimbingan!");
-
-                if (!Array.isArray(window.cloudState.penempatan)) window.cloudState.penempatan = [];
-
-                window.cloudState.penempatan.unshift({
-                    id: "pen_" + Date.now(),
-                    guru,
-                    industri: selectedInd.length === 1 ? selectedInd[0] : selectedInd,
-                    siswa: selectedS
-                });
-
-                window.simpanDatabasePersisten(true);
-                window.closeDynamicModal();
-                window.showModalInfo("Alokasi Tersimpan 🔄", `Data alokasi bimbingan untuk <b>${guru}</b> berhasil disimpan.`);
-                window.openFeature("penempatan", "Alokasi Guru & Siswa");
-            } catch (err) {
-                console.error("Gagal simpan alokasi:", err);
-                window.showModalInfo("Gagal Menyimpan", "Terjadi kendala: " + err.message);
-            }
-        };
-
-        window.bukaModalEditPenempatan = function(idx) {
-            const item = window.cloudState.penempatan[idx];
-            if (!item) return;
-
-            let gOpts = "";
-            (window.cloudState.guru || []).forEach(g => {
-                gOpts += `<option value="${g.nama}" ${g.nama === item.guru ? 'selected' : ''}>${g.nama}</option>`;
-            });
-
-            const currentIndList = Array.isArray(item.industri)
-                ? item.industri
-                : (typeof item.industri === 'string' && item.industri.includes(',') ? item.industri.split(',').map(x => x.trim()) : [item.industri || '']);
-
-            let indCheckboxes = "";
-            (window.cloudState.industri || []).forEach((ind) => {
-                const isChecked = currentIndList.includes(ind.nama);
-                indCheckboxes += `
-                <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; cursor:pointer; font-size:12px;">
-                    <input type="checkbox" name="editIndPenempatan" value="${ind.nama}" ${isChecked ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
-                    <div>
-                        <b>🏢 ${ind.nama}</b>
-                        <div style="font-size:10px; color:#64748b;">${ind.alamat || '-'} &bull; Radius: ${ind.radius || 50}m</div>
-                    </div>
-                </label>`;
-            });
-
-            const currentSiswaList = Array.isArray(item.siswa) ? item.siswa : (item.siswa ? [item.siswa] : []);
-
-            let sCheckboxes = "";
-            (window.cloudState.siswa || []).forEach((s) => {
-                const searchKey = `${s.nama || ''} ${s.kelas || ''}`.toLowerCase();
-                const isChecked = currentSiswaList.includes(s.nama);
-                sCheckboxes += `<label class="item-siswa-penempatan" data-search="${searchKey}" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; font-size:12px; cursor:pointer;">
-                    <input type="checkbox" name="editSiswaPenempatan" value="${s.nama}" ${isChecked ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
-                    <div>
-                        <b>👨‍🎓 ${s.nama}</b>
-                        <div style="font-size:10px; color:#64748b;">${s.kelas || '-'}</div>
-                    </div>
-                </label>`;
-            });
-
-            window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">✏️ Edit Alokasi Guru Pembimbing Siswa</h3>
-                <div class="form-group">
-                    <label class="form-label">Pilih Guru Pembimbing:</label>
-                    <select id="editPenGuru" class="form-control" style="font-weight:800; color:#0369a1;">${gOpts}</select>
-                </div>
-                
-                <div class="form-group">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <label class="form-label" style="margin-bottom:0;">Pilih Mitra Industri Magang (Centang):</label>
-                        <span style="font-size:10px; color:#0284c7; font-weight:800;">Bisa &gt; 1 Industri</span>
-                    </div>
-                    <div style="max-height:140px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
-                        ${indCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada industri terdaftar</span>'}
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <label class="form-label" style="margin-bottom:0;">Pilih Siswa yang Ditempatkan (Centang):</label>
-                        <span style="font-size:10px; color:#0284c7; font-weight:800;">Centang Siswa</span>
-                    </div>
-                    <div style="margin-bottom:6px;">
-                        <input type="text" class="form-control" placeholder="🔍 Ketik nama siswa untuk mencari..." oninput="window.filterSiswaPenempatan(this.value)" style="padding:8px 12px; font-size:12px; border-radius:10px; background:#ffffff; border:1.5px solid #93c5fd;">
-                    </div>
-                    <div style="max-height:140px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
-                        ${sCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada siswa terdaftar</span>'}
-                    </div>
-                </div>
-
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanEditPenempatan(${idx})" class="btn-action btn-blue" style="font-weight:900;">💾 Update Alokasi</button>
-                </div>
-            `);
-        };
-
-        window.simpanEditPenempatan = function(idx) {
-            const guru = document.getElementById("editPenGuru")?.value;
-            const cbsInd = document.querySelectorAll('input[name="editIndPenempatan"]:checked');
-            const selectedInd = [];
-            cbsInd.forEach(c => selectedInd.push(c.value));
-
-            const cbsSiswa = document.querySelectorAll('input[name="editSiswaPenempatan"]:checked');
-            const selectedS = [];
-            cbsSiswa.forEach(c => selectedS.push(c.value));
-
-            if (!guru) return window.showModalInfo("Lengkapi Data", "Guru pembimbing wajib dipilih!");
-            if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Centang minimal 1 mitra industri magang!");
-            if (selectedS.length === 0) return window.showModalInfo("Pilih Siswa", "Centang minimal 1 siswa bimbingan!");
-
-            window.cloudState.penempatan[idx] = {
-                ...window.cloudState.penempatan[idx],
-                guru,
-                industri: selectedInd.length === 1 ? selectedInd[0] : selectedInd,
-                siswa: selectedS
-            };
-
-            window.simpanDatabasePersisten(true);
-            window.closeDynamicModal();
-            window.showModalInfo("Alokasi Diperbarui 🔄", `Data alokasi bimbingan untuk <b>${guru}</b> berhasil diupdate.`);
             window.openFeature("penempatan", "Alokasi Guru & Siswa");
         };
 
@@ -5277,6 +4988,9 @@
                 rows += `<tr>
                     <td><input type="checkbox" class="cb-absensi" value="${idx}"></td>
                     <td>${idx + 1}</td>
+                    <td>
+                        ${ab.foto_selfie ? `<img src="${ab.foto_selfie}" alt="Foto" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid #7dd3fc; cursor:pointer;" onclick="window.bukaPratinjauFotoSelfie('${ab.foto_selfie}', '${ab.nama}', '${ab.tanggal} ${ab.jam}')">` : '<span style="color:#94a3b8;">-</span>'}
+                    </td>
                     <td><b>${ab.nama}</b></td>
                     <td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td>
                     <td>${ab.tanggal}</td>
@@ -5293,12 +5007,13 @@
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
-                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MONITORING PRESENSI</div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MONITORING PRESENSI SELURUH SISWA</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📈 Rekap Presensi Global</h3>
+                        <p style="font-size:11px; color:#64748b;">Pantau kehadiran real-time seluruh siswa PKL dari berbagai industri DUDI.</p>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                        <button onclick="window.hapusMasalAbsensi()" class="btn-action btn-red">🗑️ Hapus Masal</button>
-                        <button onclick="window.unduhExcelRekapMasukPulang()" class="btn-action btn-emerald">📊 Unduh Excel</button>
+                        <button onclick="window.hapusMasalAbsensi()" class="btn-action btn-red" style="padding:8px 14px; font-size:11.5px; font-weight:900; box-shadow:0 3px 10px rgba(239,68,68,0.3);">🗑️ Hapus Masal</button>
+                        <button onclick="window.unduhExcelRekapMasukPulang()" class="btn-action btn-emerald" style="padding:8px 14px; font-size:11.5px; font-weight:900;">📊 Unduh Excel</button>
                     </div>
                 </div>
 
@@ -5308,6 +5023,7 @@
                             <tr>
                                 <th style="width:36px;"><input type="checkbox" onchange="window.toggleAllCheckboxes('absensi', this.checked)"></th>
                                 <th>No</th>
+                                <th>Foto</th>
                                 <th>Nama Siswa</th>
                                 <th>Tipe</th>
                                 <th>Tanggal</th>
@@ -5318,7 +5034,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="9" class="empty-placeholder">Belum ada riwayat absensi</td></tr>'}
+                            ${rows || '<tr><td colspan="10" class="empty-placeholder">Belum ada riwayat absensi masuk/pulang hari ini</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -5343,6 +5059,357 @@
                 window.simpanDatabasePersisten(true);
                 window.openFeature("rekap-absensi", "Rekap Presensi Global");
             });
+        };
+
+        window.bukaPratinjauFotoSelfie = function(imgSrc, nama, waktu) {
+            window.openDynamicModal(`
+                <div style="text-align:center;">
+                    <h3 style="font-size:15px; font-weight:900; color:#0284c7; margin-bottom:4px;">Foto Presensi: ${nama}</h3>
+                    <div style="font-size:11px; color:#64748b; margin-bottom:12px;">Waktu: ${waktu}</div>
+                    <img src="${imgSrc}" alt="Selfie Presensi" style="width:100%; max-height:360px; object-fit:contain; border-radius:14px; border:2px solid #38bdf8;">
+                    <div style="margin-top:14px;">
+                        <button onclick="window.closeDynamicModal()" class="btn-action btn-blue" style="padding:8px 24px;">Tutup</button>
+                    </div>
+                </div>
+            `);
+        };
+
+        window.exportExcelAkunPeran = function(role) {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+            const meta = roleConfigMeta[role] || roleConfigMeta.siswa;
+            const users = (window.cloudState.registeredUsers || []).filter(u => u.role === role);
+            const data = [
+                ["No", "Nama Lengkap", "Username / " + meta.namaKolomId, "Kata Sandi", "Peran Akun"]
+            ];
+            users.forEach((u, idx) => {
+                data.push([idx + 1, u.nama, u.username, u.pass, meta.label]);
+            });
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Akun " + meta.label);
+            XLSX.writeFile(wb, `Data_Akun_${meta.fileSuffix}_SMKN1_Marisa.xlsx`);
+        };
+
+        window.unduhTemplateExcelSiswa = function() {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+            const data = [
+                ["Nama Siswa", "Kelas / Jurusan", "NIS", "JK", "Tempat PKL (Industri)", "Guru Pembimbing", "No HP"],
+                ["Ahmad Dani", "Teknik Jaringan Komputer & Telekomunikasi (TJKT)", "1001", "L", "PT. Telkom Marisa", "Wilasia S. Talaa, S.ST", "081234567890"],
+                ["Nurul Hidayah", "Akuntansi (AK)", "1002", "P", "Toko Zainab", "Ulco Masrun Arbie, S.Pd.", "081234567891"]
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Template Siswa");
+            XLSX.writeFile(wb, "Template_Master_Siswa_SMKN1_Marisa.xlsx");
+        };
+
+        window.exportExcelSiswa = function() {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+            const list = window.cloudState.siswa || [];
+            const data = [
+                ["No", "Nama Siswa", "Kelas / Jurusan", "NIS", "JK", "Tempat PKL (Industri)", "Guru Pembimbing", "No HP"]
+            ];
+            list.forEach((s, idx) => {
+                data.push([
+                    idx + 1,
+                    s.nama || '-',
+                    s.kelas || '-',
+                    s.nis || '-',
+                    s.jk || '-',
+                    s.industri || '-',
+                    s.guru || '-',
+                    s.noHp || '-'
+                ]);
+            });
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Master Siswa");
+            XLSX.writeFile(wb, `Data_Master_Siswa_SMKN1_Marisa_${new Date().toISOString().split('T')[0]}.xlsx`);
+        };
+
+        window.unduhTemplateExcelGuru = function() {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+            const data = [
+                ["Nama Guru", "NIP", "Bidang / Mapel", "No HP"],
+                ["Wilasia S. Talaa, S.ST", "198501012010012001", "Teknik Jaringan Komputer & Telekomunikasi (TJKT)", "08111222333"]
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Template Guru");
+            XLSX.writeFile(wb, "Template_Master_Guru_SMKN1_Marisa.xlsx");
+        };
+
+        window.exportExcelGuru = function() {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+            const list = window.cloudState.guru || [];
+            const data = [
+                ["No", "Nama Guru", "NIP", "Bidang / Mapel", "No HP"]
+            ];
+            list.forEach((g, idx) => {
+                data.push([
+                    idx + 1,
+                    g.nama || '-',
+                    g.nip || '-',
+                    g.mapel || '-',
+                    g.noHp || '-'
+                ]);
+            });
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Master Guru");
+            XLSX.writeFile(wb, `Data_Master_Guru_SMKN1_Marisa_${new Date().toISOString().split('T')[0]}.xlsx`);
+        };
+
+        window.unduhTemplateExcelIndustri = function() {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+            const data = [
+                ["Nama Industri", "Alamat", "Pimpinan / HRD", "No WA", "Radius (m)", "Jam Masuk", "Jam Pulang"],
+                ["PT. Telkom Marisa", "Jl. Trans Sulawesi No. 12", "Bapak Anton", "081234567890", 50, "08:00", "16:00"]
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Template Industri");
+            XLSX.writeFile(wb, "Template_Master_Industri_SMKN1_Marisa.xlsx");
+        };
+
+        window.exportExcelIndustri = function() {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+            const list = window.cloudState.industri || [];
+            const data = [
+                ["No", "Nama Industri / Perusahaan", "Alamat", "Pimpinan / HRD", "No WA", "Radius (m)", "Jam Kerja", "Koordinat GPS"]
+            ];
+            list.forEach((i, idx) => {
+                const jam = `${i.masuk || '08:00'} - ${i.pulang || '16:00'}`;
+                const gps = (i.lat && i.lng) ? `${i.lat}, ${i.lng}` : '-';
+                data.push([
+                    idx + 1,
+                    i.nama || '-',
+                    i.alamat || '-',
+                    i.pimpinan || '-',
+                    i.noWa || '-',
+                    i.radius || 50,
+                    jam,
+                    gps
+                ]);
+            });
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Master Industri");
+            XLSX.writeFile(wb, `Data_Master_Industri_SMKN1_Marisa_${new Date().toISOString().split('T')[0]}.xlsx`);
+        };
+
+        window.bukaModalUploadExcel = function(type) {
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:8px;">📥 Impor Excel Master ${type}</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Gunakan berkas Excel (.xlsx atau .xls) sesuai dengan format kolom template.</p>
+                <div class="form-group">
+                    <input type="file" id="fileExcelMasterInput" class="form-control" accept=".xlsx, .xls">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.prosesFileExcelUpload('${type}')" class="btn-action btn-blue">Unggah & Simpan Data ${type}</button>
+                </div>
+            `);
+        };
+
+        window.prosesFileExcelUpload = function(type) {
+            const fileInput = document.getElementById("fileExcelMasterInput");
+            if (!fileInput || !fileInput.files[0]) return window.showModalInfo("Pilih Berkas", "Silakan pilih berkas Excel terlebih dahulu!");
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(sheet);
+
+                    if (json.length === 0) return window.showModalInfo("Berkas Kosong", "Data pada lembar Excel tidak ditemukan!");
+
+                    let count = 0;
+                    if (type === 'Siswa') {
+                        json.forEach(row => {
+                            const nama = (row['Nama Siswa'] || row['Nama Lengkap'] || row['Nama'] || row['nama'] || '').toString().trim();
+                            const kelas = (row['Kelas / Jurusan'] || row['Kelas'] || row['Jurusan'] || row['kelas'] || 'Teknik Jaringan Komputer & Telekomunikasi (TJKT)').toString().trim();
+                            const nis = (row['NIS'] || row['nis'] || '-').toString().trim();
+                            const jk = (row['JK'] || row['Jenis Kelamin'] || 'L').toString().trim().toUpperCase();
+                            const industri = (row['Tempat PKL (Industri)'] || row['Tempat PKL'] || row['Industri'] || '-').toString().trim();
+                            const guru = (row['Guru Pembimbing'] || row['Guru'] || '-').toString().trim();
+                            const noHp = (row['No HP'] || row['no_hp'] || row['No WhatsApp'] || '-').toString().trim();
+
+                            if (nama) {
+                                const existingIdx = (window.cloudState.siswa || []).findIndex(s => window.isNameMatch(s.nama, nama));
+                                if (existingIdx !== -1) {
+                                    window.cloudState.siswa[existingIdx] = { ...window.cloudState.siswa[existingIdx], nama, kelas, nis, jk, industri, guru, noHp };
+                                } else {
+                                    window.cloudState.siswa.push({ nama, kelas, nis, jk, industri, guru, noHp });
+                                }
+                                count++;
+                            }
+                        });
+                        window.simpanDatabasePersisten(true);
+                        window.closeDynamicModal();
+                        window.showModalInfo("Impor Berhasil 👨‍🎓", `Berhasil memproses ${count} data Siswa.`);
+                        window.openFeature("master-siswa", "Data Master Siswa");
+                    } else if (type === 'Guru') {
+                        json.forEach(row => {
+                            const nama = (row['Nama Guru'] || row['Nama Lengkap'] || row['Nama'] || row['nama'] || '').toString().trim();
+                            const nip = (row['NIP'] || row['nip'] || '-').toString().trim();
+                            const mapel = (row['Bidang / Mapel'] || row['Mapel'] || row['Bidang'] || '-').toString().trim();
+                            const noHp = (row['No HP'] || row['no_hp'] || '-').toString().trim();
+
+                            if (nama) {
+                                const existingIdx = (window.cloudState.guru || []).findIndex(g => g.nama.toLowerCase().trim() === nama.toLowerCase().trim());
+                                if (existingIdx !== -1) {
+                                    window.cloudState.guru[existingIdx] = { ...window.cloudState.guru[existingIdx], nama, nip, mapel, noHp };
+                                } else {
+                                    window.cloudState.guru.push({ nama, nip, mapel, noHp });
+                                }
+                                count++;
+                            }
+                        });
+                        window.simpanDatabasePersisten(true);
+                        window.closeDynamicModal();
+                        window.showModalInfo("Impor Berhasil 👩‍🏫", `Berhasil memproses ${count} data Guru Pembimbing.`);
+                        window.openFeature("master-guru", "Data Master Guru");
+                    } else if (type === 'Industri') {
+                        json.forEach(row => {
+                            const nama = (row['Nama Industri'] || row['Nama Perusahaan'] || row['Nama'] || row['Perusahaan'] || '').toString().trim();
+                            const alamat = (row['Alamat'] || row['alamat'] || '-').toString().trim();
+                            const pimpinan = (row['Pimpinan / HRD'] || row['Pimpinan'] || row['HRD'] || '-').toString().trim();
+                            const noWa = (row['No WA'] || row['no_wa'] || row['No. WA'] || '-').toString().trim();
+                            const radius = parseInt(row['Radius (m)'] || row['Radius'] || 50) || 50;
+                            const masuk = (row['Jam Masuk'] || '08:00').toString().trim();
+                            const pulang = (row['Jam Pulang'] || '16:00').toString().trim();
+
+                            if (nama) {
+                                const existingIdx = (window.cloudState.industri || []).findIndex(i => window.isIndustriMatch(i.nama, nama));
+                                if (existingIdx !== -1) {
+                                    window.cloudState.industri[existingIdx] = { ...window.cloudState.industri[existingIdx], nama, alamat, pimpinan, noWa, radius, masuk, pulang };
+                                } else {
+                                    window.cloudState.industri.push({
+                                        id: "ind_" + Date.now() + Math.floor(Math.random() * 1000),
+                                        nama, alamat, pimpinan, noWa, radius, masuk, pulang,
+                                        lat: "0.45612", lng: "121.94210"
+                                    });
+                                }
+                                count++;
+                            }
+                        });
+                        window.simpanDatabasePersisten(true);
+                        window.closeDynamicModal();
+                        window.showModalInfo("Impor Berhasil 🏭", `Berhasil memproses ${count} data Mitra Industri DUDI.`);
+                        window.openFeature("master-industri", "Mitra Industri DUDI");
+                    }
+                } catch(err) {
+                    window.showModalInfo("Gagal Membaca Berkas", err.message);
+                }
+            };
+            reader.readAsArrayBuffer(fileInput.files[0]);
+        };
+
+        window.hapusMasal = function(type) {
+            const cbs = document.querySelectorAll('.cb-' + type + ':checked');
+            if (cbs.length === 0) return window.showModalInfo("Pilih Data", "Centang minimal 1 data yang ingin dihapus!");
+
+            window.showConfirmDialog("Hapus Masal", `Yakin ingin menghapus <b>${cbs.length} data ${type}</b> terpilih?`, () => {
+                const indices = Array.from(cbs).map(c => parseInt(c.value)).sort((a, b) => b - a);
+                indices.forEach(idx => {
+                    if (window.cloudState[type] && window.cloudState[type][idx]) {
+                        window.cloudState[type].splice(idx, 1);
+                    }
+                });
+                window.simpanDatabasePersisten(true);
+                window.openFeature('master-' + type, 'Data Master ' + type.charAt(0).toUpperCase() + type.slice(1));
+            });
+        };
+
+        window.unduhExcelRekapJurnal = function() {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+            const allJurnal = window.cloudState.jurnal || [];
+            const data = [
+                ["No", "Nama Siswa", "Mitra Industri", "Tanggal Kegiatan", "Uraian Pekerjaan", "Kendala & Solusi", "Status Verifikasi"]
+            ];
+            allJurnal.forEach((j, idx) => {
+                data.push([
+                    idx + 1,
+                    j.siswa || '-',
+                    j.industri || '-',
+                    j.tanggal || '-',
+                    j.kegiatan || '-',
+                    j.kendala || '-',
+                    j.status || 'Menunggu Verifikasi'
+                ]);
+            });
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Rekap Jurnal Siswa");
+            XLSX.writeFile(wb, `Rekap_Jurnal_PKL_SMKN1_Marisa_${new Date().toISOString().split('T')[0]}.xlsx`);
+        };
+
+        window.bukaModalKirimLaporanAkhir = function() {
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            let siswaOpts = "";
+            if (profile.role === 'admin') {
+                (window.cloudState.siswa || []).forEach(s => {
+                    siswaOpts += `<option value="${s.nama}">${s.nama} (${s.kelas || 'Siswa'})</option>`;
+                });
+            }
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">📄 Kirim Laporan Akhir PKL</h3>
+                <div class="form-group">
+                    <label class="form-label">Nama Siswa:</label>
+                    ${profile.role === 'admin' ? `
+                        <select id="lapInputSiswa" class="form-control" style="font-weight:750;">${siswaOpts || '<option>Belum ada siswa</option>'}</select>
+                    ` : `
+                        <input type="text" id="lapInputSiswa" class="form-control" value="${profile.nama}" readonly style="background:#f1f5f9; font-weight:800;">
+                    `}
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Judul Laporan Akhir:</label>
+                    <input type="text" id="lapInputJudul" class="form-control" placeholder="Contoh: Laporan Pelaksanaan PKL di PT. Telkom Marisa">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tautan / Link Google Drive Berkas PDF:</label>
+                    <input type="url" id="lapInputLink" class="form-control" placeholder="https://drive.google.com/file/d/...">
+                    <div style="font-size:10px; color:#64748b; margin-top:4px;">Pastikan link Google Drive disetel ke <b>Siapa saja yang memiliki link dapat melihat</b>.</div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.simpanLaporanAkhirBaru()" class="btn-action btn-blue">💾 Kirim Laporan</button>
+                </div>
+            `);
+        };
+
+        window.simpanLaporanAkhirBaru = function() {
+            const siswa = document.getElementById("lapInputSiswa")?.value.trim();
+            const judul = document.getElementById("lapInputJudul")?.value.trim();
+            const link = document.getElementById("lapInputLink")?.value.trim();
+
+            if (!siswa || !judul || !link) return window.showModalInfo("Lengkapi Data", "Semua kolom wajib diisi!");
+
+            if (!Array.isArray(window.cloudState.laporanAkhir)) window.cloudState.laporanAkhir = [];
+            window.cloudState.laporanAkhir.unshift({
+                id: "lap_" + Date.now(),
+                siswa: siswa,
+                judul: judul,
+                link_gdrive: link,
+                tanggal: new Date().toISOString().split('T')[0],
+                status: "Menunggu Verifikasi"
+            });
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Laporan Terkirim 📄", `Laporan akhir PKL atas nama <b>${siswa}</b> berhasil dikirimkan.`);
+            window.openFeature("laporan", "Pantau Laporan Akhir");
+        };
+
+        window.bukaModalLupaPassword = function() {
+            window.showModalInfo(
+                "Bantuan Lupa Kata Sandi 🔑",
+                "Untuk keamanan akun resmi Anda, silakan hubungi <b>Panitia PKL SMK Negeri 1 Marisa</b> di ruang sekretariat panitia atau hubungi Admin sistem untuk melakukan reset kata sandi akun Anda."
+            );
         };
 
         window.renderRekapPresensiMasukPulang = function() {
