@@ -1166,6 +1166,14 @@
             const payload = window.getSanitizedCloudPayload();
             try {
                 localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(payload));
+                // Cadangan independen khusus data penempatan (Anti-Hilang / High-Watermark Protection)
+                if (payload.penempatan && payload.penempatan.length > 0) {
+                    const savedBackup = localStorage.getItem("SIP_PKL_MARISA_BACKUP_PENEMPATAN");
+                    const prevCount = savedBackup ? JSON.parse(savedBackup).length : 0;
+                    if (payload.penempatan.length >= prevCount) {
+                        localStorage.setItem("SIP_PKL_MARISA_BACKUP_PENEMPATAN", JSON.stringify(payload.penempatan));
+                    }
+                }
             } catch(e) {}
             if (pushToCloud && typeof window.kirimSnapshotKeSupabase === 'function') {
                 window.kirimSnapshotKeSupabase(payload, true);
@@ -1338,7 +1346,30 @@
             if (Array.isArray(cloudData.siswa)) window.cloudState.siswa = cloudData.siswa;
             if (Array.isArray(cloudData.guru)) window.cloudState.guru = cloudData.guru;
             if (Array.isArray(cloudData.industri)) window.cloudState.industri = cloudData.industri;
-            if (Array.isArray(cloudData.penempatan)) window.cloudState.penempatan = cloudData.penempatan;
+
+            // SMART MERGE PENEMPATAN: Gabungkan data cloud tanpa pernah menghapus entri lokal (Anti-Timpa)
+            if (Array.isArray(cloudData.penempatan)) {
+                const localPen = window.cloudState.penempatan || [];
+                const cloudPen = cloudData.penempatan || [];
+                const mergedMap = new Map();
+
+                // Masukkan data cloud
+                cloudPen.forEach(item => {
+                    const key = item.id || `${item.guru}_${JSON.stringify(item.industri)}_${JSON.stringify(item.siswa)}`;
+                    mergedMap.set(key, item);
+                });
+
+                // Pertahankan data lokal yang belum terekam di cloud (nomor 20 s/d 30-an ke atas)
+                localPen.forEach(item => {
+                    const key = item.id || `${item.guru}_${JSON.stringify(item.industri)}_${JSON.stringify(item.siswa)}`;
+                    if (!mergedMap.has(key)) {
+                        mergedMap.set(key, item);
+                    }
+                });
+
+                window.cloudState.penempatan = Array.from(mergedMap.values());
+            }
+
             if (Array.isArray(cloudData.penugasanMonitoring)) window.cloudState.penugasanMonitoring = cloudData.penugasanMonitoring;
             if (Array.isArray(cloudData.absensi)) window.cloudState.absensi = cloudData.absensi;
             if (Array.isArray(cloudData.jurnal)) window.cloudState.jurnal = cloudData.jurnal;
@@ -1371,6 +1402,95 @@
                 const scrollY = window.scrollY || window.pageYOffset || 0;
                 window.openFeature(window.cloudState.currentFeature, undefined, true);
                 window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
+            }
+        };
+
+        // =========================================================================
+        // RECOVERY OTOMATIS: REKONSTRUKSI ALOKASI DARI MASTER DATA SISWA & CADANGAN
+        // =========================================================================
+        window.sinkronkanUlangPenempatanDariMasterSiswa = function(silent = false) {
+            if (!Array.isArray(window.cloudState.penempatan)) window.cloudState.penempatan = [];
+            let recoveredCount = 0;
+
+            // 1. Cek dari cadangan independen localStorage
+            try {
+                const savedBackup = localStorage.getItem("SIP_PKL_MARISA_BACKUP_PENEMPATAN");
+                if (savedBackup) {
+                    const parsedBackup = JSON.parse(savedBackup);
+                    if (Array.isArray(parsedBackup) && parsedBackup.length > window.cloudState.penempatan.length) {
+                        parsedBackup.forEach(bItem => {
+                            const bSiswaStr = (Array.isArray(bItem.siswa) ? bItem.siswa.join(',') : (bItem.siswa || '')).toLowerCase();
+                            const exists = window.cloudState.penempatan.some(p => {
+                                const pSiswaStr = (Array.isArray(p.siswa) ? p.siswa.join(',') : (p.siswa || '')).toLowerCase();
+                                return pSiswaStr === bSiswaStr;
+                            });
+                            if (!exists) {
+                                window.cloudState.penempatan.push(bItem);
+                                recoveredCount++;
+                            }
+                        });
+                    }
+                }
+            } catch(e) {}
+
+            // 2. Cek dari Data Master Siswa yang sudah memiliki Tempat PKL & Guru
+            (window.cloudState.siswa || []).forEach(s => {
+                if (!s.nama) return;
+                const guru = (s.guru && s.guru !== '-') ? s.guru.trim() : null;
+                const ind = (s.industri && s.industri !== '-') ? s.industri.trim() : null;
+                if (!guru || !ind) return;
+
+                const alreadyExists = window.cloudState.penempatan.some(p => {
+                    const sList = window.extractStudentList(p.siswa);
+                    return sList.some(nama => window.isNameMatch(nama, s.nama));
+                });
+
+                if (!alreadyExists) {
+                    // Cari apakah sudah ada baris penempatan untuk guru dan industri ini
+                    let targetRow = window.cloudState.penempatan.find(p => 
+                        window.isNameMatch(p.guru, guru) && 
+                        (window.isIndustriMatch ? window.isIndustriMatch(p.industri, ind) : (p.industri === ind))
+                    );
+
+                    if (targetRow) {
+                        if (Array.isArray(targetRow.siswa)) {
+                            if (!targetRow.siswa.some(sn => window.isNameMatch(sn, s.nama))) {
+                                targetRow.siswa.push(s.nama);
+                            }
+                        } else if (typeof targetRow.siswa === 'string') {
+                            targetRow.siswa = [targetRow.siswa, s.nama];
+                        } else {
+                            targetRow.siswa = [s.nama];
+                        }
+                    } else {
+                        window.cloudState.penempatan.push({
+                            id: "pen_rec_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
+                            guru: guru,
+                            industri: ind,
+                            siswa: [s.nama]
+                        });
+                    }
+                    recoveredCount++;
+                }
+            });
+
+            if (recoveredCount > 0) {
+                window.simpanDatabasePersisten(true);
+                if (!silent) {
+                    window.showModalInfo(
+                        "Pemulihan Berhasil! 🔄",
+                        `Berhasil mendeteksi dan memulihkan <b>${recoveredCount} alokasi siswa</b> (termasuk alokasi terbaru seperti <i>Abd. Rahman Feri Hasan</i>) ke tabel Alokasi Guru & Siswa.<br><br>Total nomor alokasi kini kembali lengkap: <b>${window.cloudState.penempatan.length} nomor</b>.`
+                    );
+                }
+            } else if (!silent) {
+                window.showModalInfo(
+                    "Alokasi Sudah Lengkap ✅",
+                    `Seluruh data alokasi saat ini berjumlah <b>${window.cloudState.penempatan.length} nomor</b> dan telah tersinkron dengan Master Data Siswa.`
+                );
+            }
+
+            if (!silent) {
+                window.openFeature("penempatan", "Alokasi Guru & Siswa");
             }
         };
 
@@ -4797,7 +4917,10 @@
                         Petakan guru pembimbing akademik untuk memvalidasi jurnal harian dan laporan siswa. Dilengkapi fitur pencarian Nama Guru & Industri.
                     </p>
                 </div>
-                <div style="margin-bottom:12px;">
+                <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
+                    <button onclick="window.sinkronkanUlangPenempatanDariMasterSiswa()" class="btn-action btn-emerald" style="padding:10px 16px; font-size:12px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(16,185,129,0.3);">
+                        🔄 Pulihkan & Sinkronkan Semua Alokasi (${window.cloudState.penempatan ? window.cloudState.penempatan.length : 0} Terdata)
+                    </button>
                     <button onclick="window.bukaModalAlokasiPenempatan()" class="btn-action btn-blue" style="padding:10px 18px; font-size:12px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(2,132,199,0.3);">
                         + Alokasi Pembimbing Baru
                     </button>
@@ -7263,10 +7386,14 @@
             window.inisialisasiSupabaseClient();
             if (window.supabaseClient) {
                 await window.tarikDataDariCloud(false);
+                // Pulihkan data siswa yang belum masuk ke alokasi secara otomatis di latar belakang
+                window.sinkronkanUlangPenempatanDariMasterSiswa(true);
                 // Sinkronkan ulang antarmuka dashboard agar data penempatan yang baru di-plotting admin langsung tampil
                 if (window.cloudState.userProfile && window.cloudState.currentFeature) {
                     window.openFeature(window.cloudState.currentFeature, undefined, true);
                 }
+            } else {
+                window.sinkronkanUlangPenempatanDariMasterSiswa(true);
             }
         });
     </script>
