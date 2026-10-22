@@ -1031,41 +1031,6 @@
             aktif: true
         };
 
-        const DEFAULT_HOTLINE_CONFIG = {
-            kepsek: {
-                jabatan: "Kepala Sekolah",
-                nama: "Drs. H. Saiful Hinta, M.Pd",
-                nip: "196805121994121001",
-                noHp: "081234567890",
-                tampilOrtu: true,
-                tampilIndustri: true
-            },
-            bendahara: {
-                jabatan: "Bendahara Sekolah",
-                nama: "Hj. Ratna Dewi, S.E",
-                nip: "197508242002122003",
-                noHp: "081234567891",
-                tampilOrtu: false,
-                tampilIndustri: false
-            },
-            ketuaPanitia: {
-                jabatan: "Ketua Panitia PKL",
-                nama: "Wilasia S. Talaa, S.ST",
-                nip: "198501012010012001",
-                noHp: "08111222333",
-                tampilOrtu: true,
-                tampilIndustri: true
-            },
-            sekretarisPanitia: {
-                jabatan: "Sekretaris Panitia PKL",
-                nama: "Ulco Masrun Arbie, S.Pd",
-                nip: "198803152015031002",
-                noHp: "081234567892",
-                tampilOrtu: true,
-                tampilIndustri: true
-            }
-        };
-
         window.cloudState = {
             userProfile: null,
             activeRole: "siswa",
@@ -1073,7 +1038,6 @@
             bannerSliderImages: DEFAULT_BANNER_IMAGES,
             pklConfig: DEFAULT_PKL_CONFIG,
             observasiConfig: DEFAULT_OBSERVASI_CONFIG,
-            hotlineConfig: DEFAULT_HOTLINE_CONFIG,
             jamConfig: {
                 masukMulai: "06:30",
                 masukTepatWaktu: "08:15",
@@ -1127,8 +1091,16 @@
                 if (!window.cloudState.observasiConfig) {
                     window.cloudState.observasiConfig = DEFAULT_OBSERVASI_CONFIG;
                 }
-                if (!window.cloudState.hotlineConfig) {
-                    window.cloudState.hotlineConfig = DEFAULT_HOTLINE_CONFIG;
+            }
+        } catch(e) {}
+
+        try {
+            const rawSession = localStorage.getItem(STORAGE_KEY_SESSION);
+            if (rawSession) {
+                const parsedSession = JSON.parse(rawSession);
+                if (parsedSession && parsedSession.role) {
+                    window.cloudState.userProfile = parsedSession;
+                    window.cloudState.activeRole = parsedSession.role;
                 }
             }
         } catch(e) {}
@@ -1151,7 +1123,6 @@
                 bannerSliderImages: window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES,
                 pklConfig: window.cloudState.pklConfig || DEFAULT_PKL_CONFIG,
                 observasiConfig: window.cloudState.observasiConfig || DEFAULT_OBSERVASI_CONFIG,
-                hotlineConfig: window.cloudState.hotlineConfig || DEFAULT_HOTLINE_CONFIG,
                 jamConfig: window.cloudState.jamConfig || {
                     masukMulai: "06:30",
                     masukTepatWaktu: "08:15",
@@ -1166,14 +1137,6 @@
             const payload = window.getSanitizedCloudPayload();
             try {
                 localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(payload));
-                // Cadangan independen khusus data penempatan (Anti-Hilang / High-Watermark Protection)
-                if (payload.penempatan && payload.penempatan.length > 0) {
-                    const savedBackup = localStorage.getItem("SIP_PKL_MARISA_BACKUP_PENEMPATAN");
-                    const prevCount = savedBackup ? JSON.parse(savedBackup).length : 0;
-                    if (payload.penempatan.length >= prevCount) {
-                        localStorage.setItem("SIP_PKL_MARISA_BACKUP_PENEMPATAN", JSON.stringify(payload.penempatan));
-                    }
-                }
             } catch(e) {}
             if (pushToCloud && typeof window.kirimSnapshotKeSupabase === 'function') {
                 window.kirimSnapshotKeSupabase(payload, true);
@@ -1346,30 +1309,7 @@
             if (Array.isArray(cloudData.siswa)) window.cloudState.siswa = cloudData.siswa;
             if (Array.isArray(cloudData.guru)) window.cloudState.guru = cloudData.guru;
             if (Array.isArray(cloudData.industri)) window.cloudState.industri = cloudData.industri;
-
-            // SMART MERGE PENEMPATAN: Gabungkan data cloud tanpa pernah menghapus entri lokal (Anti-Timpa)
-            if (Array.isArray(cloudData.penempatan)) {
-                const localPen = window.cloudState.penempatan || [];
-                const cloudPen = cloudData.penempatan || [];
-                const mergedMap = new Map();
-
-                // Masukkan data cloud
-                cloudPen.forEach(item => {
-                    const key = item.id || `${item.guru}_${JSON.stringify(item.industri)}_${JSON.stringify(item.siswa)}`;
-                    mergedMap.set(key, item);
-                });
-
-                // Pertahankan data lokal yang belum terekam di cloud (nomor 20 s/d 30-an ke atas)
-                localPen.forEach(item => {
-                    const key = item.id || `${item.guru}_${JSON.stringify(item.industri)}_${JSON.stringify(item.siswa)}`;
-                    if (!mergedMap.has(key)) {
-                        mergedMap.set(key, item);
-                    }
-                });
-
-                window.cloudState.penempatan = Array.from(mergedMap.values());
-            }
-
+            if (Array.isArray(cloudData.penempatan)) window.cloudState.penempatan = cloudData.penempatan;
             if (Array.isArray(cloudData.penugasanMonitoring)) window.cloudState.penugasanMonitoring = cloudData.penugasanMonitoring;
             if (Array.isArray(cloudData.absensi)) window.cloudState.absensi = cloudData.absensi;
             if (Array.isArray(cloudData.jurnal)) window.cloudState.jurnal = cloudData.jurnal;
@@ -1382,7 +1322,6 @@
             if (cloudData.pklConfig) window.cloudState.pklConfig = cloudData.pklConfig;
             if (cloudData.jamConfig) window.cloudState.jamConfig = cloudData.jamConfig;
             if (cloudData.observasiConfig) window.cloudState.observasiConfig = cloudData.observasiConfig;
-            if (cloudData.hotlineConfig) window.cloudState.hotlineConfig = cloudData.hotlineConfig;
 
             window.cloudState.userProfile = myUser;
             window.cloudState.activeRole = myRole;
@@ -1397,109 +1336,11 @@
             const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
             const isModalOpen = (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex');
 
-            if (!isTyping && !isModalOpen && window.cloudState.userProfile && window.cloudState.currentFeature) {
-                const scrollX = window.scrollX || window.pageXOffset || 0;
+            if (!isTyping && !isModalOpen && myUser && myFeature) {
                 const scrollY = window.scrollY || window.pageYOffset || 0;
-                window.openFeature(window.cloudState.currentFeature, undefined, true);
-                window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
+                window.openFeature(myFeature, undefined, true);
+                window.scrollTo({ top: scrollY, behavior: 'instant' });
             }
-        };
-
-        // =========================================================================
-        // RECOVERY OTOMATIS: REKONSTRUKSI ALOKASI DARI MASTER DATA SISWA & CADANGAN
-        // =========================================================================
-        window.sinkronkanUlangPenempatanDariMasterSiswa = function(silent = false) {
-            if (!Array.isArray(window.cloudState.penempatan)) window.cloudState.penempatan = [];
-            let recoveredCount = 0;
-
-            // 1. Cek dari cadangan independen localStorage
-            try {
-                const savedBackup = localStorage.getItem("SIP_PKL_MARISA_BACKUP_PENEMPATAN");
-                if (savedBackup) {
-                    const parsedBackup = JSON.parse(savedBackup);
-                    if (Array.isArray(parsedBackup) && parsedBackup.length > window.cloudState.penempatan.length) {
-                        parsedBackup.forEach(bItem => {
-                            const bSiswaStr = (Array.isArray(bItem.siswa) ? bItem.siswa.join(',') : (bItem.siswa || '')).toLowerCase();
-                            const exists = window.cloudState.penempatan.some(p => {
-                                const pSiswaStr = (Array.isArray(p.siswa) ? p.siswa.join(',') : (p.siswa || '')).toLowerCase();
-                                return pSiswaStr === bSiswaStr;
-                            });
-                            if (!exists) {
-                                window.cloudState.penempatan.push(bItem);
-                                recoveredCount++;
-                            }
-                        });
-                    }
-                }
-            } catch(e) {}
-
-            // 2. Cek dari Data Master Siswa yang sudah memiliki Tempat PKL & Guru
-            (window.cloudState.siswa || []).forEach(s => {
-                if (!s.nama) return;
-                const guru = (s.guru && s.guru !== '-') ? s.guru.trim() : null;
-                const ind = (s.industri && s.industri !== '-') ? s.industri.trim() : null;
-                if (!guru || !ind) return;
-
-                const alreadyExists = window.cloudState.penempatan.some(p => {
-                    const sList = window.extractStudentList(p.siswa);
-                    return sList.some(nama => window.isNameMatch(nama, s.nama));
-                });
-
-                if (!alreadyExists) {
-                    // Cari apakah sudah ada baris penempatan untuk guru dan industri ini
-                    let targetRow = window.cloudState.penempatan.find(p => 
-                        window.isNameMatch(p.guru, guru) && 
-                        (window.isIndustriMatch ? window.isIndustriMatch(p.industri, ind) : (p.industri === ind))
-                    );
-
-                    if (targetRow) {
-                        if (Array.isArray(targetRow.siswa)) {
-                            if (!targetRow.siswa.some(sn => window.isNameMatch(sn, s.nama))) {
-                                targetRow.siswa.push(s.nama);
-                            }
-                        } else if (typeof targetRow.siswa === 'string') {
-                            targetRow.siswa = [targetRow.siswa, s.nama];
-                        } else {
-                            targetRow.siswa = [s.nama];
-                        }
-                    } else {
-                        window.cloudState.penempatan.push({
-                            id: "pen_rec_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
-                            guru: guru,
-                            industri: ind,
-                            siswa: [s.nama]
-                        });
-                    }
-                    recoveredCount++;
-                }
-            });
-
-            if (recoveredCount > 0) {
-                window.simpanDatabasePersisten(true);
-                if (!silent) {
-                    window.showModalInfo(
-                        "Pemulihan Berhasil! 🔄",
-                        `Berhasil mendeteksi dan memulihkan <b>${recoveredCount} alokasi siswa</b> (termasuk alokasi terbaru seperti <i>Abd. Rahman Feri Hasan</i>) ke tabel Alokasi Guru & Siswa.<br><br>Total nomor alokasi kini kembali lengkap: <b>${window.cloudState.penempatan.length} nomor</b>.`
-                    );
-                }
-            } else if (!silent) {
-                window.showModalInfo(
-                    "Alokasi Sudah Lengkap ✅",
-                    `Seluruh data alokasi saat ini berjumlah <b>${window.cloudState.penempatan.length} nomor</b> dan telah tersinkron dengan Master Data Siswa.`
-                );
-            }
-
-            if (!silent) {
-                window.openFeature("penempatan", "Alokasi Guru & Siswa");
-            }
-        };
-
-        window.formatNoWaLink = function(num, pesan = "") {
-            if (!num || num === '-') return '';
-            let cleaned = String(num).replace(/\D/g, '');
-            if (cleaned.startsWith('0')) cleaned = '62' + cleaned.substring(1);
-            if (!cleaned) return '';
-            return `https://wa.me/${cleaned}${pesan ? '?text=' + encodeURIComponent(pesan) : ''}`;
         };
 
         const roleDefaults = {
@@ -1509,7 +1350,6 @@
             admin: { label: "ROOM PANITIA / ADMIN PKL", icon: "👨‍💼", usernameLabel: "Username Panitia / Admin:", placeholder: "Masukkan Username Panitia PKL", needPass: true },
             industri: { label: "ROOM INDUSTRI MITRA DUDI", icon: "🏭", usernameLabel: "Username Mitra DUDI:", placeholder: "Masukkan ID Mitra Terdaftar", needPass: true }
         };
-        window.roleDefaults = roleDefaults;
 
         const roleMenus = {
             siswa: [
@@ -1553,7 +1393,6 @@
             industri: [
                 { id: "dashboard", label: "Beranda Industri", icon: "📊" },
                 { id: "lembar-observasi-dudi", label: "Lembar Observasi PKL", icon: "📋" },
-                { id: "hotline-smk", label: "Hotline SMK", icon: "📞" },
                 { id: "siswa-magang", label: "Daftar Siswa Magang", icon: "👥" },
                 { id: "validasi-jurnal", label: "Pengesahan Jurnal", icon: "📋" },
                 { id: "penilaian-industri", label: "Lembar Nilai Berstempel", icon: "🏆" }
@@ -1566,7 +1405,6 @@
                 { id: "aduan", label: "Kontak Sekolah", icon: "⚠️" }
             ]
         };
-        window.roleMenus = roleMenus;
 
         window.toggleDrawerSidebar = function() {
             const sidebar = document.getElementById("appSidebar");
@@ -1678,9 +1516,6 @@
                         break;
                     case "banner-jadwal":
                         contentHtml = window.renderBannerJadwalPKL();
-                        break;
-                    case "hotline-smk":
-                        contentHtml = window.renderHotlineSMK();
                         break;
                     case "presensi":
                         contentHtml = window.renderPresensiGPS();
@@ -1986,6 +1821,8 @@
                 </div>`;
             });
 
+            const currentCfg = Object.assign({}, DEFAULT_PKL_CONFIG, window.cloudState.pklConfig || {});
+
             return `
             ${bannerHtml}
 
@@ -1994,21 +1831,17 @@
                 <h3 style="font-size: 18px; font-weight: 950; color: #0f172a; margin-top: 2px;">Selamat Bertugas, Tim Panitia PKL</h3>
                 <p style="font-size: 11px; color: #64748b; margin-top: 4px;">Kelola akun, alokasi pembimbing, rekap jurnal, observasi industri, dan sinkronisasi cloud.</p>
 
-                <!-- FITUR PINTASAN INPUT & PENANDAAN KONTAK HOTLINE RESMI SEKOLAH -->
-                <div style="margin-top:14px; padding-top:12px; border-top:1.5px dashed #bfdbfe;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
-                        <div>
-                            <div style="font-size:10px; font-weight:900; color:#0284c7; text-transform:uppercase; letter-spacing:0.5px;">📞 PINTASAN KONTAK HOTLINE SEKOLAH</div>
-                            <div style="font-size:13px; font-weight:950; color:#0f172a; margin-top:2px;">Kepala Sekolah, Bendahara & 2 Panitia PKL</div>
-                            <div style="font-size:10.5px; color:#64748b; margin-top:1px;">Tandai kontak yang tercantum di Kontak Sekolah (Wali) & Hotline SMK (Industri)</div>
+                <div style="margin-top:12px; padding-top:10px; border-top:1.5px dashed #bfdbfe; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <div>
+                        <div style="font-size:10px; font-weight:800; color:#64748b; text-transform:uppercase;">PERIODE RESMI PKL AKTIF:</div>
+                        <div style="font-size:12.5px; font-weight:950; color:#0284c7;">
+                            📅 ${currentCfg.durasi}
+                            <span style="font-size:11px; font-weight:700; color:#475569;">(${currentCfg.tglAwal} s/d ${currentCfg.tglPenarikan})</span>
                         </div>
-                        <button type="button" onclick="window.bukaModalKelolaHotlineSekolah()" class="btn-action btn-emerald" style="padding:8px 14px; font-size:11.5px; font-weight:900; box-shadow:0 3px 10px rgba(16,185,129,0.3);">
-                            ✏️ Atur & Tandai Kontak ➔
-                        </button>
                     </div>
-
-                    <!-- Ringkasan Pejabat & Panitia yang Ditandai -->
-                    ${window.renderHotlineSummaryAdmin()}
+                    <button onclick="window.openFeature('periode-pkl', 'Periode Pelaksanaan PKL')" class="btn-action btn-emerald" style="padding:8px 14px; font-size:11.5px; font-weight:900;">
+                        📅 Atur Periode PKL
+                    </button>
                 </div>
             </div>
 
@@ -2019,334 +1852,6 @@
                 </div>
                 <div class="admin-grid-12">
                     ${gridCardsHtml}
-                </div>
-            </div>`;
-        };
-
-        window.renderHotlineSummaryAdmin = function() {
-            const cfg = window.cloudState.hotlineConfig || DEFAULT_HOTLINE_CONFIG;
-            const items = [
-                { key: 'kepsek', title: '🎓 Kepala Sekolah', data: cfg.kepsek },
-                { key: 'bendahara', title: '💰 Bendahara Sekolah', data: cfg.bendahara },
-                { key: 'ketuaPanitia', title: '👨‍💼 Ketua Panitia PKL', data: cfg.ketuaPanitia },
-                { key: 'sekretarisPanitia', title: '📝 Sekretaris Panitia', data: cfg.sekretarisPanitia }
-            ];
-
-            let html = `<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">`;
-            items.forEach(it => {
-                const d = it.data || {};
-                const isOrtu = !!d.tampilOrtu;
-                const isInd = !!d.tampilIndustri;
-                html += `
-                <div style="background:#f8fafc; border:1px solid #bfdbfe; border-radius:12px; padding:8px 10px; display:flex; flex-direction:column; justify-content:space-between;">
-                    <div>
-                        <div style="font-size:9.5px; font-weight:850; color:#0369a1;">${it.title}</div>
-                        <div style="font-size:11.5px; font-weight:900; color:#0f172a; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${d.nama || '-'}</div>
-                        <div style="font-size:9.5px; color:#64748b; margin-top:1px;">NIP: ${d.nip || '-'}</div>
-                        <div style="font-size:9.5px; color:#059669; font-weight:800;">📱 ${d.noHp || '-'}</div>
-                    </div>
-                    <div style="display:flex; gap:4px; margin-top:6px; flex-wrap:wrap;">
-                        <span style="font-size:8.5px; font-weight:850; padding:1.5px 5px; border-radius:4px; background:${isOrtu ? '#dcfce7' : '#f1f5f9'}; color:${isOrtu ? '#15803d' : '#94a3b8'}; border:1px solid ${isOrtu ? '#bbf7d0' : '#e2e8f0'};">
-                            ${isOrtu ? '✓ Tampil di Ortu' : '✕ Ortu (Off)'}
-                        </span>
-                        <span style="font-size:8.5px; font-weight:850; padding:1.5px 5px; border-radius:4px; background:${isInd ? '#e0f2fe' : '#f1f5f9'}; color:${isInd ? '#0369a1' : '#94a3b8'}; border:1px solid ${isInd ? '#bae6fd' : '#e2e8f0'};">
-                            ${isInd ? '✓ Tampil di DUDI' : '✕ DUDI (Off)'}
-                        </span>
-                    </div>
-                </div>`;
-            });
-            html += `</div>`;
-            return html;
-        };
-
-        window.bukaModalKelolaHotlineSekolah = function() {
-            const cfg = window.cloudState.hotlineConfig || DEFAULT_HOTLINE_CONFIG;
-            const k = cfg.kepsek || {};
-            const b = cfg.bendahara || {};
-            const kp = cfg.ketuaPanitia || {};
-            const sp = cfg.sekretarisPanitia || {};
-
-            window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">📞 Kelola Kontak Hotline & Penandaan</h3>
-                <p style="font-size:11px; color:#475569; margin-bottom:14px; line-height:1.4;">
-                    Input nama, NIP, nomor HP, lalu <b>beri centang</b> pada siapa saja yang ingin dicantumkan di Dashboard Orang Tua (Kontak Sekolah) dan Dashboard Industri (Hotline SMK).
-                </p>
-
-                <div style="display:flex; flex-direction:column; gap:12px; max-height:65vh; overflow-y:auto; padding-right:4px;">
-                    <!-- 1. KEPALA SEKOLAH -->
-                    <div style="background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:14px; padding:12px;">
-                        <div style="font-size:12px; font-weight:900; color:#0369a1; margin-bottom:8px;">🎓 1. Kepala Sekolah</div>
-                        <div class="form-group" style="margin-bottom:8px;">
-                            <label class="form-label">Nama Lengkap & Gelar:</label>
-                            <input type="text" id="hlKepsekNama" class="form-control" value="${k.nama || ''}" placeholder="Contoh: Drs. H. Saiful Hinta, M.Pd">
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label class="form-label">NIP:</label>
-                                <input type="text" id="hlKepsekNip" class="form-control" value="${k.nip || ''}" placeholder="Nomor Induk Pegawai">
-                            </div>
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label class="form-label">Nomor WhatsApp / HP:</label>
-                                <input type="tel" id="hlKepsekHp" class="form-control" value="${k.noHp || ''}" placeholder="08xxxxxxxxxx">
-                            </div>
-                        </div>
-                        <div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:10px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
-                            <div style="font-size:10px; font-weight:800; color:#475569;">TANDAI KELAYAKAN TAMPIL:</div>
-                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
-                                <input type="checkbox" id="hlKepsekTampilOrtu" ${k.tampilOrtu ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
-                                <span>Tampilkan di Kontak Sekolah (Orang Tua / Wali)</span>
-                            </label>
-                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
-                                <input type="checkbox" id="hlKepsekTampilInd" ${k.tampilIndustri ? 'checked' : ''} style="width:16px; height:16px; accent-color:#10b981;">
-                                <span>Tampilkan di Hotline SMK (Mitra Industri DUDI)</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- 2. BENDAHARA SEKOLAH -->
-                    <div style="background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:14px; padding:12px;">
-                        <div style="font-size:12px; font-weight:900; color:#0369a1; margin-bottom:8px;">💰 2. Bendahara Sekolah</div>
-                        <div class="form-group" style="margin-bottom:8px;">
-                            <label class="form-label">Nama Lengkap & Gelar:</label>
-                            <input type="text" id="hlBendaharaNama" class="form-control" value="${b.nama || ''}" placeholder="Contoh: Hj. Ratna Dewi, S.E">
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label class="form-label">NIP:</label>
-                                <input type="text" id="hlBendaharaNip" class="form-control" value="${b.nip || ''}" placeholder="Nomor Induk Pegawai">
-                            </div>
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label class="form-label">Nomor WhatsApp / HP:</label>
-                                <input type="tel" id="hlBendaharaHp" class="form-control" value="${b.noHp || ''}" placeholder="08xxxxxxxxxx">
-                            </div>
-                        </div>
-                        <div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:10px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
-                            <div style="font-size:10px; font-weight:800; color:#475569;">TANDAI KELAYAKAN TAMPIL:</div>
-                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
-                                <input type="checkbox" id="hlBendaharaTampilOrtu" ${b.tampilOrtu ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
-                                <span>Tampilkan di Kontak Sekolah (Orang Tua / Wali)</span>
-                            </label>
-                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
-                                <input type="checkbox" id="hlBendaharaTampilInd" ${b.tampilIndustri ? 'checked' : ''} style="width:16px; height:16px; accent-color:#10b981;">
-                                <span>Tampilkan di Hotline SMK (Mitra Industri DUDI)</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- 3. KETUA PANITIA PKL -->
-                    <div style="background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:14px; padding:12px;">
-                        <div style="font-size:12px; font-weight:900; color:#0369a1; margin-bottom:8px;">👨‍💼 3. Ketua Panitia PKL</div>
-                        <div class="form-group" style="margin-bottom:8px;">
-                            <label class="form-label">Nama Lengkap & Gelar:</label>
-                            <input type="text" id="hlKetuaNama" class="form-control" value="${kp.nama || ''}" placeholder="Contoh: Wilasia S. Talaa, S.ST">
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label class="form-label">NIP:</label>
-                                <input type="text" id="hlKetuaNip" class="form-control" value="${kp.nip || ''}" placeholder="Nomor Induk Pegawai">
-                            </div>
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label class="form-label">Nomor WhatsApp / HP:</label>
-                                <input type="tel" id="hlKetuaHp" class="form-control" value="${kp.noHp || ''}" placeholder="08xxxxxxxxxx">
-                            </div>
-                        </div>
-                        <div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:10px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
-                            <div style="font-size:10px; font-weight:800; color:#475569;">TANDAI KELAYAKAN TAMPIL:</div>
-                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
-                                <input type="checkbox" id="hlKetuaTampilOrtu" ${kp.tampilOrtu ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
-                                <span>Tampilkan di Kontak Sekolah (Orang Tua / Wali)</span>
-                            </label>
-                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
-                                <input type="checkbox" id="hlKetuaTampilInd" ${kp.tampilIndustri ? 'checked' : ''} style="width:16px; height:16px; accent-color:#10b981;">
-                                <span>Tampilkan di Hotline SMK (Mitra Industri DUDI)</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- 4. SEKRETARIS PANITIA PKL -->
-                    <div style="background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:14px; padding:12px;">
-                        <div style="font-size:12px; font-weight:900; color:#0369a1; margin-bottom:8px;">📝 4. Sekretaris Panitia PKL</div>
-                        <div class="form-group" style="margin-bottom:8px;">
-                            <label class="form-label">Nama Lengkap & Gelar:</label>
-                            <input type="text" id="hlSekretarisNama" class="form-control" value="${sp.nama || ''}" placeholder="Contoh: Ulco Masrun Arbie, S.Pd">
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label class="form-label">NIP:</label>
-                                <input type="text" id="hlSekretarisNip" class="form-control" value="${sp.nip || ''}" placeholder="Nomor Induk Pegawai">
-                            </div>
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label class="form-label">Nomor WhatsApp / HP:</label>
-                                <input type="tel" id="hlSekretarisHp" class="form-control" value="${sp.noHp || ''}" placeholder="08xxxxxxxxxx">
-                            </div>
-                        </div>
-                        <div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:10px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
-                            <div style="font-size:10px; font-weight:800; color:#475569;">TANDAI KELAYAKAN TAMPIL:</div>
-                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
-                                <input type="checkbox" id="hlSekretarisTampilOrtu" ${sp.tampilOrtu ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
-                                <span>Tampilkan di Kontak Sekolah (Orang Tua / Wali)</span>
-                            </label>
-                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
-                                <input type="checkbox" id="hlSekretarisTampilInd" ${sp.tampilIndustri ? 'checked' : ''} style="width:16px; height:16px; accent-color:#10b981;">
-                                <span>Tampilkan di Hotline SMK (Mitra Industri DUDI)</span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanHotlineSekolah()" class="btn-action btn-emerald" style="font-weight:900; padding:10px 20px;">
-                        💾 Simpan & Sinkronkan Hotline ⚡
-                    </button>
-                </div>
-            `);
-        };
-
-        window.simpanHotlineSekolah = function() {
-            const kepsek = {
-                jabatan: "Kepala Sekolah",
-                nama: document.getElementById("hlKepsekNama")?.value.trim() || "Drs. H. Saiful Hinta, M.Pd",
-                nip: document.getElementById("hlKepsekNip")?.value.trim() || "-",
-                noHp: document.getElementById("hlKepsekHp")?.value.trim() || "-",
-                tampilOrtu: !!document.getElementById("hlKepsekTampilOrtu")?.checked,
-                tampilIndustri: !!document.getElementById("hlKepsekTampilInd")?.checked
-            };
-
-            const bendahara = {
-                jabatan: "Bendahara Sekolah",
-                nama: document.getElementById("hlBendaharaNama")?.value.trim() || "Hj. Ratna Dewi, S.E",
-                nip: document.getElementById("hlBendaharaNip")?.value.trim() || "-",
-                noHp: document.getElementById("hlBendaharaHp")?.value.trim() || "-",
-                tampilOrtu: !!document.getElementById("hlBendaharaTampilOrtu")?.checked,
-                tampilIndustri: !!document.getElementById("hlBendaharaTampilInd")?.checked
-            };
-
-            const ketuaPanitia = {
-                jabatan: "Ketua Panitia PKL",
-                nama: document.getElementById("hlKetuaNama")?.value.trim() || "Wilasia S. Talaa, S.ST",
-                nip: document.getElementById("hlKetuaNip")?.value.trim() || "-",
-                noHp: document.getElementById("hlKetuaHp")?.value.trim() || "-",
-                tampilOrtu: !!document.getElementById("hlKetuaTampilOrtu")?.checked,
-                tampilIndustri: !!document.getElementById("hlKetuaTampilInd")?.checked
-            };
-
-            const sekretarisPanitia = {
-                jabatan: "Sekretaris Panitia PKL",
-                nama: document.getElementById("hlSekretarisNama")?.value.trim() || "Ulco Masrun Arbie, S.Pd",
-                nip: document.getElementById("hlSekretarisNip")?.value.trim() || "-",
-                noHp: document.getElementById("hlSekretarisHp")?.value.trim() || "-",
-                tampilOrtu: !!document.getElementById("hlSekretarisTampilOrtu")?.checked,
-                tampilIndustri: !!document.getElementById("hlSekretarisTampilInd")?.checked
-            };
-
-            window.cloudState.hotlineConfig = {
-                kepsek,
-                bendahara,
-                ketuaPanitia,
-                sekretarisPanitia
-            };
-
-            window.simpanDatabasePersisten(true);
-            window.closeDynamicModal();
-
-            window.showModalInfo(
-                "Kontak Hotline Tersimpan! 📞",
-                "Data Kepala Sekolah, Bendahara, dan 2 Panitia PKL berhasil disimpan dan ditandai. Data langsung terhubung secara sinkron ke <b>Kontak Sekolah (Orang Tua)</b> dan <b>Hotline SMK (Industri DUDI)</b>."
-            );
-
-            window.openFeature("dashboard", "Beranda Utama");
-        };
-
-        window.renderHotlineContactsForOrtu = function(namaAnanda) {
-            const cfg = window.cloudState.hotlineConfig || DEFAULT_HOTLINE_CONFIG;
-            const keys = ['kepsek', 'bendahara', 'ketuaPanitia', 'sekretarisPanitia'];
-            const active = [];
-            keys.forEach(k => {
-                if (cfg[k] && cfg[k].tampilOrtu) {
-                    active.push(cfg[k]);
-                }
-            });
-
-            if (active.length === 0) {
-                return `
-                <div style="grid-column:span 2; background:#ffffff; border:1px dashed #cbd5e1; border-radius:12px; padding:10px; text-align:center; color:#94a3b8; font-size:11px;">
-                    Belum ada kontak panitia/sekolah yang ditandai oleh Admin untuk tampil.
-                </div>`;
-            }
-
-            let html = "";
-            active.forEach(c => {
-                const waLink = window.formatNoWaLink(c.noHp, `Halo Bapak/Ibu ${c.jabatan} (${c.nama}), saya orang tua/wali dari ${namaAnanda} peserta PKL SMKN 1 Marisa...`);
-                html += `
-                <div style="grid-column:span 2; background:#ffffff; border:1.5px solid #86efac; border-radius:12px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                    <div>
-                        <div style="font-size:9.5px; font-weight:850; color:#15803d; text-transform:uppercase;">🏛️ ${c.jabatan || 'Panitia PKL'}</div>
-                        <div style="font-size:12.5px; font-weight:900; color:#0f172a; margin-top:1px;">${c.nama}</div>
-                        <div style="font-size:10px; color:#475569;">NIP: <b>${c.nip || '-'}</b> &bull; No. HP/WA: <b>${c.noHp || '-'}</b></div>
-                    </div>
-                    ${waLink ? `
-                        <a href="${waLink}" target="_blank" class="btn-action btn-emerald" style="text-decoration:none; font-size:11px; font-weight:900; padding:6px 12px; display:inline-flex; align-items:center; gap:4px; box-shadow:0 2px 6px rgba(16,185,129,0.25);">
-                            💬 Chat WA ${c.jabatan}
-                        </a>
-                    ` : `<span style="font-size:10px; color:#94a3b8;">Nomor belum aktif</span>`}
-                </div>`;
-            });
-            return html;
-        };
-
-        window.renderHotlineContactsForIndustri = function(industriNama) {
-            const cfg = window.cloudState.hotlineConfig || DEFAULT_HOTLINE_CONFIG;
-            const keys = ['kepsek', 'bendahara', 'ketuaPanitia', 'sekretarisPanitia'];
-            const active = [];
-            keys.forEach(k => {
-                if (cfg[k] && cfg[k].tampilIndustri) {
-                    active.push(cfg[k]);
-                }
-            });
-
-            if (active.length === 0) {
-                return `
-                <div style="background:#ffffff; border:1px dashed #cbd5e1; border-radius:12px; padding:12px; text-align:center; color:#94a3b8; font-size:11px;">
-                    Belum ada kontak pimpinan/panitia sekolah yang ditandai untuk ditampilkan ke industri.
-                </div>`;
-            }
-
-            let html = "";
-            active.forEach(c => {
-                const waLink = window.formatNoWaLink(c.noHp, `Halo Bapak/Ibu ${c.jabatan} (${c.nama}), kami dari pihak Mitra Industri DUDI (${industriNama}) ingin berkoordinasi mengenai pelaksanaan PKL siswa SMKN 1 Marisa...`);
-                html += `
-                <div style="background:#ffffff; border:1.5px solid #86efac; border-radius:14px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                    <div>
-                        <div style="font-size:9.5px; font-weight:850; color:#15803d; text-transform:uppercase;">🏛️ ${c.jabatan || 'Panitia PKL'}</div>
-                        <div style="font-size:13px; font-weight:900; color:#0f172a; margin-top:1px;">${c.nama}</div>
-                        <div style="font-size:10px; color:#475569;">NIP: <b>${c.nip || '-'}</b> &bull; No. HP/WA: <b>${c.noHp || '-'}</b></div>
-                    </div>
-                    ${waLink ? `
-                        <a href="${waLink}" target="_blank" class="btn-action btn-emerald" style="text-decoration:none; font-size:11px; font-weight:900; padding:6px 12px; display:inline-flex; align-items:center; gap:4px; box-shadow:0 2px 6px rgba(16,185,129,0.25);">
-                            💬 Hubungi via WA ↗
-                        </a>
-                    ` : `<span style="font-size:10px; color:#94a3b8;">Nomor belum aktif</span>`}
-                </div>`;
-            });
-            return html;
-        };
-
-        window.renderHotlineSMK = function() {
-            const profile = window.cloudState.userProfile || { nama: "Mitra Industri" };
-
-            return `
-            <div class="card" style="border: 2px solid #86efac; background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);">
-                <div style="margin-bottom:12px;">
-                    <div style="font-size:11px; font-weight:900; color:#15803d; letter-spacing:0.5px;">LAYANAN KOORDINASI RESMI &bull; DUDI & SEKOLAH</div>
-                    <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📞 Hotline SMK Negeri 1 Marisa</h3>
-                    <p style="font-size:11.5px; color:#475569; margin-top:4px; line-height:1.4;">
-                        Daftar kontak pimpinan sekolah dan panitia PKL resmi yang ditandai untuk memudahkan koordinasi langsung, kendala siswa, atau kebutuhan administrasi magang.
-                    </p>
-                </div>
-
-                <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
-                    ${window.renderHotlineContactsForIndustri(profile.nama)}
                 </div>
             </div>`;
         };
@@ -3137,23 +2642,6 @@
                 </div>
             </div>
 
-            <!-- KARTU HOTLINE SMK UNTUK MITRA INDUSTRI DUDI -->
-            <div class="card" style="background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%); border: 1.5px solid #86efac;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <div>
-                        <div style="font-size:10.5px; font-weight:900; color:#15803d; letter-spacing:0.5px; text-transform:uppercase;">📞 HOTLINE RESMI SMK NEGERI 1 MARISA</div>
-                        <h3 style="font-size:14.5px; font-weight:950; color:#0f172a; margin-top:2px;">Kontak Pimpinan Sekolah & Panitia PKL</h3>
-                    </div>
-                    <button type="button" onclick="window.openFeature('hotline-smk', 'Hotline SMK')" class="btn-action btn-emerald" style="font-size:10.5px; padding:5px 10px;">
-                        Buka Halaman ➔
-                    </button>
-                </div>
-                <p style="font-size:11px; color:#475569; margin-bottom:10px;">Hubungi pimpinan sekolah atau panitia PKL resmi yang ditandai untuk koordinasi teknis magang.</p>
-                <div style="display:flex; flex-direction:column; gap:8px;">
-                    ${window.renderHotlineContactsForIndustri(profile.nama)}
-                </div>
-            </div>
-
             <!-- Ringkasan Magang DUDI -->
             <div class="card" style="background:#ffffff; border:1.5px solid #bfdbfe;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -3303,13 +2791,9 @@
             const jc = window.cloudState.jamConfig || { masukMulai: "06:30", masukBatasAkhir: "15:00", pulangMulai: "16:00", pulangBatasAkhir: "23:00" };
             const bannerHtml = window.renderBannerCarouselHtml();
 
-            const sData = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, profile.nama)) || {};
-            const penempatan = (window.cloudState.penempatan || []).find(p => {
-                const sList = window.extractStudentList(p.siswa);
-                return sList.some(s => window.isNameMatch(s, profile.nama));
-            });
-            const guruName = (sData.guru && sData.guru !== '-') ? sData.guru : (penempatan ? penempatan.guru : "Wilasia S. Talaa, S.ST");
-            const industriName = (sData.industri && sData.industri !== '-') ? sData.industri : (penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "PT. Telkom Marisa");
+            const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
+            const guruName = penempatan ? penempatan.guru : "Wilasia S. Talaa, S.ST";
+            const industriName = penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "PT. Telkom Marisa";
 
             const todayStr = new Date().toISOString().split('T')[0];
             const absenMasuk = (window.cloudState.absensi || []).find(a => a.nama === profile.nama && a.tipe_absen === 'Masuk' && a.tanggal === todayStr);
@@ -4917,10 +4401,7 @@
                         Petakan guru pembimbing akademik untuk memvalidasi jurnal harian dan laporan siswa. Dilengkapi fitur pencarian Nama Guru & Industri.
                     </p>
                 </div>
-                <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
-                    <button onclick="window.sinkronkanUlangPenempatanDariMasterSiswa()" class="btn-action btn-emerald" style="padding:10px 16px; font-size:12px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(16,185,129,0.3);">
-                        🔄 Pulihkan & Sinkronkan Semua Alokasi (${window.cloudState.penempatan ? window.cloudState.penempatan.length : 0} Terdata)
-                    </button>
+                <div style="margin-bottom:12px;">
                     <button onclick="window.bukaModalAlokasiPenempatan()" class="btn-action btn-blue" style="padding:10px 18px; font-size:12px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(2,132,199,0.3);">
                         + Alokasi Pembimbing Baru
                     </button>
@@ -6991,8 +6472,15 @@
                             </div>
                         </div>
 
-                        <!-- DAFTAR KONTAK HOTLINE PEJABAT & PANITIA YANG DITANDAI ADMIN UNTUK ORANG TUA -->
-                        ${window.renderHotlineContactsForOrtu(namaAnanda)}
+                        <div style="grid-column:span 2; background:#ffffff; border:1px solid #86efac; border-radius:12px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <div style="font-size:10px; font-weight:850; color:#15803d;">👨‍💼 SEKRETARIAT PANITIA PKL SMKN 1 MARISA</div>
+                                <div style="font-size:11px; font-weight:900; color:#0f172a;">Layanan Hotline & Bantuan Sekolah</div>
+                            </div>
+                            <a href="${linkWaPanitia}" target="_blank" class="btn-action btn-emerald" style="text-decoration:none; font-size:11px; font-weight:900; padding:6px 12px;">
+                                💬 Chat Panitia WA
+                            </a>
+                        </div>
                     </div>
                 </div>
             ` : ''}
@@ -7386,14 +6874,10 @@
             window.inisialisasiSupabaseClient();
             if (window.supabaseClient) {
                 await window.tarikDataDariCloud(false);
-                // Pulihkan data siswa yang belum masuk ke alokasi secara otomatis di latar belakang
-                window.sinkronkanUlangPenempatanDariMasterSiswa(true);
                 // Sinkronkan ulang antarmuka dashboard agar data penempatan yang baru di-plotting admin langsung tampil
                 if (window.cloudState.userProfile && window.cloudState.currentFeature) {
                     window.openFeature(window.cloudState.currentFeature, undefined, true);
                 }
-            } else {
-                window.sinkronkanUlangPenempatanDariMasterSiswa(true);
             }
         });
     </script>
