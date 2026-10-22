@@ -1589,7 +1589,80 @@
             window.kembaliKeGerbangEkosistem();
         };
 
+        window.currentBannerIndex = 0;
+        window.bannerSlideInterval = null;
+
+        window.mulaiAutoSlideBanner = function() {
+            if (window.bannerSlideInterval) {
+                clearInterval(window.bannerSlideInterval);
+            }
+            window.currentBannerIndex = 0;
+            window.bannerSlideInterval = setInterval(() => {
+                const slides = document.querySelectorAll('.banner-slide');
+                const dots = document.querySelectorAll('.banner-dot');
+                if (!slides || slides.length <= 1) return;
+
+                slides[window.currentBannerIndex]?.classList.remove('active');
+                dots[window.currentBannerIndex]?.classList.remove('active');
+
+                window.currentBannerIndex = (window.currentBannerIndex + 1) % slides.length;
+
+                slides[window.currentBannerIndex]?.classList.add('active');
+                dots[window.currentBannerIndex]?.classList.add('active');
+            }, 4000);
+        };
+
+        window.keSlideBanner = function(targetIdx) {
+            const slides = document.querySelectorAll('.banner-slide');
+            const dots = document.querySelectorAll('.banner-dot');
+            if (!slides || slides.length === 0) return;
+
+            slides[window.currentBannerIndex]?.classList.remove('active');
+            dots[window.currentBannerIndex]?.classList.remove('active');
+
+            window.currentBannerIndex = targetIdx % slides.length;
+
+            slides[window.currentBannerIndex]?.classList.add('active');
+            dots[window.currentBannerIndex]?.classList.add('active');
+        };
+
+        window.renderBannerCarouselHtml = function(customSloganSub = null) {
+            const banners = (window.cloudState.bannerSliderImages && window.cloudState.bannerSliderImages.length > 0)
+                ? window.cloudState.bannerSliderImages
+                : DEFAULT_BANNER_IMAGES;
+
+            let slidesHtml = "";
+            let dotsHtml = "";
+            banners.forEach((b, idx) => {
+                const slogan1 = b.slogan1 || 'SMK BISA! SMK HEBAT!';
+                const slogan2 = customSloganSub || b.slogan2 || 'SIAP KERJA, SANTUN, MANDIRI, KREATIF';
+                slidesHtml += `
+                <div class="banner-slide ${idx === 0 ? 'active' : ''}">
+                    <img src="${b.url}" class="banner-slide-bg" alt="Banner ${idx + 1}" onerror="this.src='https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80'">
+                    <div class="banner-slide-overlay"></div>
+                    <div class="banner-slogan-wrap">
+                        <div class="banner-slogan-title">${slogan1}</div>
+                        <div class="banner-slogan-sub">${slogan2}</div>
+                    </div>
+                </div>`;
+                dotsHtml += `<div class="banner-dot ${idx === 0 ? 'active' : ''}" onclick="window.keSlideBanner(${idx})"></div>`;
+            });
+
+            setTimeout(() => {
+                window.mulaiAutoSlideBanner();
+            }, 100);
+
+            return `
+            <div class="banner-carousel-wrap">
+                ${slidesHtml}
+                <div class="banner-dots-wrap">
+                    ${dotsHtml}
+                </div>
+            </div>`;
+        };
+
         window.renderAdminDashboard = function() {
+            const bannerHtml = window.renderBannerCarouselHtml("PANEL KONTROL ADMINISTRATOR / PANITIA PKL");
             const adminItems = [
                 { id: "kelola-akun", icon: "🔑", title: "Buat Akun & Kredensial" },
                 { id: "master-siswa", icon: "👨‍🎓", title: "Data Master Siswa" },
@@ -1622,6 +1695,8 @@
             const currentCfg = Object.assign({}, DEFAULT_PKL_CONFIG, window.cloudState.pklConfig || {});
 
             return `
+            ${bannerHtml}
+
             <div class="admin-welcome-card">
                 <div style="font-size: 11px; font-weight: 900; color: #0284c7; letter-spacing: 0.5px;">PANEL KONTROL ADMINISTRATOR / PANITIA PKL</div>
                 <h3 style="font-size: 18px; font-weight: 950; color: #0f172a; margin-top: 2px;">Selamat Bertugas, Tim Panitia PKL</h3>
@@ -1748,6 +1823,7 @@
 
         window.renderGuruOfficialDashboard = function() {
             const profile = window.cloudState.userProfile || { nama: "Guru Pembimbing" };
+            const bannerHtml = window.renderBannerCarouselHtml("RUANG GURU PEMBIMBING LAPANGAN");
             const myStudents = (window.cloudState.penempatan || [])
                 .filter(p => p.guru && p.guru.toLowerCase().trim() === profile.nama.toLowerCase().trim())
                 .flatMap(p => p.siswa || []);
@@ -1756,6 +1832,8 @@
                 .filter(j => myStudents.includes(j.siswa) && j.status !== 'Disetujui').length;
 
             return `
+            ${bannerHtml}
+
             <div class="card" style="background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%); border: 2px solid #86efac;">
                 <div style="font-size:11px; font-weight:900; color:#16a34a; letter-spacing:0.5px;">RUANG GURU PEMBIMBING</div>
                 <h3 style="font-size:17px; font-weight:950; color:#0f172a; margin-top:2px;">Selamat Datang, ${profile.nama}</h3>
@@ -1799,6 +1877,7 @@
         window.renderOrangTuaDashboard = function() {
             const profile = window.cloudState.userProfile || { nama: "Orang Tua / Wali", namaAnanda: "" };
             const namaAnanda = profile.namaAnanda || profile.nama.replace("Wali dari ", "");
+            const bannerHtml = window.renderBannerCarouselHtml("PORTAL MONITORING WALI MURID");
             const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(namaAnanda));
             const industriName = penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "Mitra Industri";
             const guruName = penempatan ? penempatan.guru : "Guru Pembimbing";
@@ -1806,6 +1885,8 @@
             const jurnalCount = (window.cloudState.jurnal || []).filter(j => j.siswa === namaAnanda).length;
 
             return `
+            ${bannerHtml}
+
             <div class="card" style="background: linear-gradient(135deg, #faf5ff 0%, #ffffff 100%); border: 2px solid #d8b4fe;">
                 <div style="font-size:11px; font-weight:900; color:#7e22ce; letter-spacing:0.5px;">PORTAL ORANG TUA / WALI SISWA</div>
                 <h3 style="font-size:17px; font-weight:950; color:#0f172a; margin-top:2px;">Ananda: ${namaAnanda}</h3>
@@ -1855,6 +1936,7 @@
             const profile = window.cloudState.userProfile || { nama: "Mitra Industri" };
             const cfg = window.cloudState.pklConfig || DEFAULT_PKL_CONFIG;
             const obs = window.cloudState.observasiConfig || DEFAULT_OBSERVASI_CONFIG;
+            const bannerHtml = window.renderBannerCarouselHtml("PANEL MITRA INDUSTRI DUDI");
 
             const placements = (window.cloudState.penempatan || []).filter(p => {
                 if (!p.industri) return false;
@@ -1866,6 +1948,8 @@
             placements.forEach(p => { if (Array.isArray(p.siswa)) totalMagang += p.siswa.length; });
 
             return `
+            ${bannerHtml}
+
             <!-- Kartu Khusus Lembar Observasi PKL Terkoneksi -->
             <div class="card" style="border: 2px solid #0284c7; background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%); box-shadow: 0 8px 24px rgba(2,132,199,0.18);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
@@ -1929,25 +2013,7 @@
             const profile = window.cloudState.userProfile || { nama: "Siswa PKL" };
             const cfg = window.cloudState.pklConfig || DEFAULT_PKL_CONFIG;
             const jc = window.cloudState.jamConfig || { masukMulai: "06:30", masukBatasAkhir: "15:00", pulangMulai: "16:00", pulangBatasAkhir: "23:00" };
-
-            const banners = (window.cloudState.bannerSliderImages && window.cloudState.bannerSliderImages.length > 0)
-                ? window.cloudState.bannerSliderImages
-                : DEFAULT_BANNER_IMAGES;
-
-            let slidesHtml = "";
-            let dotsHtml = "";
-            banners.forEach((b, idx) => {
-                slidesHtml += `
-                <div class="banner-slide ${idx === 0 ? 'active' : ''}">
-                    <img src="${b.url}" class="banner-slide-bg" alt="Banner" onerror="this.src='https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80'">
-                    <div class="banner-slide-overlay"></div>
-                    <div class="banner-slogan-wrap">
-                        <div class="banner-slogan-title">${b.slogan1 || 'SMK BISA! SMK HEBAT!'}</div>
-                        <div class="banner-slogan-sub">${b.slogan2 || 'SIAP KERJA, SANTUN, MANDIRI, KREATIF'}</div>
-                    </div>
-                </div>`;
-                dotsHtml += `<div class="banner-dot ${idx === 0 ? 'active' : ''}"></div>`;
-            });
+            const bannerHtml = window.renderBannerCarouselHtml();
 
             const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
             const guruName = penempatan ? penempatan.guru : "Wilasia S. Talaa, S.ST";
@@ -1958,12 +2024,7 @@
             const absenPulang = (window.cloudState.absensi || []).find(a => a.nama === profile.nama && a.tipe_absen === 'Pulang' && a.tanggal === todayStr);
 
             return `
-            <div class="banner-carousel-wrap">
-                ${slidesHtml}
-                <div class="banner-dots-wrap">
-                    ${dotsHtml}
-                </div>
-            </div>
+            ${bannerHtml}
 
             <div class="absensi-digital-card">
                 <div class="absensi-header-wrap">
