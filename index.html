@@ -1881,7 +1881,7 @@
                 return a.tanggal === todayStr && a.nama && myStudentMap.has(a.nama.trim().toLowerCase());
             });
 
-            // 5. PERINGATAN SISWA HARI INI:
+            // 5. PERINGATAN KEDISIPLINAN SISWA HARI INI:
             // a. Siswa yang belum mengisi jurnal hari ini
             const belumIsiJurnalList = myStudentKeys.filter(sKey => {
                 return !journalsToday.some(j => (j.siswa || '').trim().toLowerCase() === sKey);
@@ -2012,7 +2012,31 @@
                     <span class="badge-status badge-green">${totalSiswaBimbingan} Siswa Dibimbing</span>
                 </div>
                 <h3 style="font-size:17px; font-weight:950; color:#0f172a; margin-top:2px;">Selamat Datang, ${profile.nama}</h3>
-                <p style="font-size:11.5px; color:#475569; margin-top:4px;">Monitoring kedisiplinan dan validasi aktivitas jurnal khusus siswa bimbingan resmi Anda.</p>
+                <p style="font-size:11.5px; color:#475569; margin-top:4px;">Monitoring kegiatan PKL, validasi jurnal harian, dan evaluasi praktik lapangan siswa.</p>
+            </div>
+
+            <!-- Ringkasan Bimbingan PKL -->
+            <div class="card" style="background:#ffffff; border:1.5px solid #bfdbfe;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <div style="font-size:12px; font-weight:900; color:#0f172a;">RINGKASAN BIMBINGAN PKL</div>
+                    <span style="font-size:10px; font-weight:850; color:#0284c7; background:#e0f2fe; padding:2px 8px; border-radius:6px;">PEMBIMBING RESMI</span>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div onclick="window.openFeature('siswa-bimbingan', 'Siswa Bimbingan')" style="background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:16px; padding:12px; cursor:pointer; display:flex; align-items:center; gap:10px;">
+                        <div style="font-size:26px;">👥</div>
+                        <div>
+                            <div style="font-size:12px; font-weight:900; color:#0f172a;">SISWA BIMBINGAN</div>
+                            <div style="font-size:10.5px; font-weight:800; color:#0284c7;">${totalSiswaBimbingan} Siswa Terdaftar</div>
+                        </div>
+                    </div>
+                    <div onclick="window.openFeature('validasi-jurnal', 'Validasi Jurnal Siswa')" style="background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:16px; padding:12px; cursor:pointer; display:flex; align-items:center; gap:10px;">
+                        <div style="font-size:26px;">📋</div>
+                        <div>
+                            <div style="font-size:12px; font-weight:900; color:#0f172a;">VALIDASI JURNAL</div>
+                            <div style="font-size:10.5px; font-weight:800; color:#0284c7;">${countMenungguReview} Jurnal Perlu Review</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- 4 KARTU MONITORING PKL (PERSIS SESUAI GAMBAR 2) -->
