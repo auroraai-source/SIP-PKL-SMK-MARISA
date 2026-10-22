@@ -824,7 +824,8 @@
             <form onsubmit="window.submitOnlineAuth(event)">
                 <div class="form-group">
                     <label id="labelLoginUsername" class="form-label">Username / NISN:</label>
-                    <input type="text" id="loginUsernameInput" class="form-control" placeholder="Masukkan username resmi" required>
+                    <input type="text" id="loginUsernameInput" class="form-control" placeholder="Masukkan username resmi" list="listSiswaDatalist" required>
+                    <datalist id="listSiswaDatalist"></datalist>
                 </div>
 
                 <div id="groupLoginPassword" class="form-group">
@@ -1141,6 +1142,77 @@
             }
         };
 
+        // =========================================================================
+        // HELPER PEMBERSIH & PENCOCOKAN NAMA CERDAS (ANTI GAGAL SPASI / TYPO)
+        // =========================================================================
+        window.normalizeTextCompact = function(str) {
+            if (!str) return "";
+            return String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
+        };
+
+        window.extractStudentList = function(rawSiswa) {
+            if (!rawSiswa) return [];
+            if (Array.isArray(rawSiswa)) {
+                let list = [];
+                rawSiswa.forEach(item => {
+                    if (typeof item === 'string') {
+                        if (item.includes(',')) {
+                            list.push(...item.split(',').map(x => x.trim()));
+                        } else {
+                            list.push(item.trim());
+                        }
+                    } else if (item && typeof item === 'object' && item.nama) {
+                        list.push(String(item.nama).trim());
+                    } else if (item) {
+                        list.push(String(item).trim());
+                    }
+                });
+                return list.filter(Boolean);
+            }
+            if (typeof rawSiswa === 'string') {
+                return rawSiswa.split(',').map(x => x.trim()).filter(Boolean);
+            }
+            return [String(rawSiswa).trim()];
+        };
+
+        window.isNameMatch = function(nameA, nameB) {
+            if (!nameA || !nameB) return false;
+            const a = String(nameA).toLowerCase().trim();
+            const b = String(nameB).toLowerCase().trim();
+            if (a === b) return true;
+
+            const ca = window.normalizeTextCompact(a);
+            const cb = window.normalizeTextCompact(b);
+            if (!ca || !cb) return false;
+            if (ca === cb) return true;
+
+            // Toleransi huruf ganda (contoh: "annisa" vs "anisa")
+            const collapsedA = ca.replace(/(.)\1+/g, '$1');
+            const collapsedB = cb.replace(/(.)\1+/g, '$1');
+            if (collapsedA === collapsedB) return true;
+
+            // Pencocokan substring jika nama cukup panjang (>= 3 karakter)
+            if (ca.length >= 3 && cb.length >= 3) {
+                if (ca.includes(cb) || cb.includes(ca)) return true;
+                if (collapsedA.includes(collapsedB) || collapsedB.includes(collapsedA)) return true;
+            }
+
+            // Pencocokan per kata (contoh: "Annisa Maele" cocok dengan kata "Annisa" atau "Maele")
+            const wordsA = a.split(/[\s,.-]+/).filter(w => w.length >= 3);
+            const wordsB = b.split(/[\s,.-]+/).filter(w => w.length >= 3);
+            for (let wa of wordsA) {
+                for (let wb of wordsB) {
+                    const cwa = window.normalizeTextCompact(wa);
+                    const cwb = window.normalizeTextCompact(wb);
+                    if (cwa === cwb || (cwa.length >= 4 && cwb.length >= 4 && (cwa.includes(cwb) || cwb.includes(cwa)))) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        };
+
         window.isCloudConnected = false;
         window.supabaseClient = null;
 
@@ -1240,6 +1312,21 @@
             window.cloudState.userProfile = myUser;
             window.cloudState.activeRole = myRole;
             window.cloudState.currentFeature = myFeature;
+
+            try {
+                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(window.getSanitizedCloudPayload()));
+            } catch(e) {}
+
+            // Otomatis refresh tampilan aktif (terutama dashboard) saat data cloud tiba agar penempatan langsung muncul
+            const activeEl = document.activeElement;
+            const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+            const isModalOpen = (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex');
+
+            if (!isTyping && !isModalOpen && myUser && myFeature) {
+                const scrollY = window.scrollY || window.pageYOffset || 0;
+                window.openFeature(myFeature, undefined, true);
+                window.scrollTo({ top: scrollY, behavior: 'instant' });
+            }
         };
 
         const roleDefaults = {
@@ -1485,15 +1572,26 @@
 
             const groupPass = document.getElementById("groupLoginPassword");
             const linkLupa = document.getElementById("linkLupaSandiWrap");
+            const dataListEl = document.getElementById("listSiswaDatalist");
 
             if (role === 'orangtua') {
                 groupPass.style.display = "none";
                 linkLupa.style.display = "none";
                 document.getElementById("textPetunjukAkun").innerText = "Masuk cukup dengan mengetik Nama Lengkap Siswa";
+
+                // Isi datalist saran nama siswa agar orang tua mudah memilih nama ananda
+                if (dataListEl) {
+                    let opts = "";
+                    (window.cloudState.siswa || []).forEach(s => {
+                        opts += `<option value="${s.nama}">${s.nama} (${s.kelas || 'Siswa'})</option>`;
+                    });
+                    dataListEl.innerHTML = opts;
+                }
             } else {
                 groupPass.style.display = "block";
                 linkLupa.style.display = "block";
                 document.getElementById("textPetunjukAkun").innerText = "Akun Resmi dari Panitia PKL";
+                if (dataListEl) dataListEl.innerHTML = "";
             }
         };
 
@@ -1524,8 +1622,25 @@
             if (!username) return window.showModalInfo("Identitas Kosong", "Mohon masukkan data identitas Anda!");
 
             if (role === 'orangtua') {
-                const found = (window.cloudState.siswa || []).find(s => s.nama.toLowerCase().includes(username.toLowerCase()));
-                const namaAnanda = found ? found.nama : username;
+                // Cari nama siswa resmi dengan pencocokan cerdas di master siswa & penempatan
+                let foundSiswa = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, username));
+
+                if (!foundSiswa) {
+                    (window.cloudState.penempatan || []).forEach(p => {
+                        const sList = window.extractStudentList(p.siswa);
+                        const matchS = sList.find(s => window.isNameMatch(s, username));
+                        if (matchS && !foundSiswa) {
+                            foundSiswa = { nama: matchS };
+                        }
+                    });
+                }
+
+                if (!foundSiswa) {
+                    const matchUser = (window.cloudState.registeredUsers || []).find(u => u.role === 'siswa' && window.isNameMatch(u.nama, username));
+                    if (matchUser) foundSiswa = { nama: matchUser.nama };
+                }
+
+                const namaAnanda = foundSiswa ? foundSiswa.nama : username;
                 window.suksesLogin({
                     nama: `Wali dari ${namaAnanda}`,
                     namaAnanda: namaAnanda,
@@ -2160,28 +2275,79 @@
 
         window.renderOrangTuaDashboard = function() {
             const profile = window.cloudState.userProfile || { nama: "Orang Tua / Wali", namaAnanda: "" };
-            const namaAnanda = profile.namaAnanda || profile.nama.replace("Wali dari ", "").trim();
+            let rawAnanda = profile.namaAnanda || profile.nama.replace(/^Wali dari\s*/i, "").trim();
+
+            // 1. Cari data resmi siswa di master data siswa agar nama ananda tampil rapi dengan format resmi
+            const matchInSiswa = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, rawAnanda));
+            const namaAnanda = matchInSiswa ? matchInSiswa.nama : rawAnanda;
+
+            // Otomatis perbarui sesi aktif jika ditemukan nama resmi yang sesuai
+            if (matchInSiswa && profile.namaAnanda !== matchInSiswa.nama) {
+                profile.namaAnanda = matchInSiswa.nama;
+                profile.nama = `Wali dari ${matchInSiswa.nama}`;
+                try { localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(profile)); } catch(e) {}
+                const nameEl = document.getElementById("topbarUserName");
+                if (nameEl) nameEl.innerText = profile.nama;
+            }
+
             const bannerHtml = window.renderBannerCarouselHtml("PORTAL MONITORING WALI MURID");
 
-            // Pencocokan fleksibel data penempatan resmi ananda
-            const penempatan = (window.cloudState.penempatan || []).find(p => {
-                const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
-                return sList.some(s => s && s.toLowerCase().trim() === namaAnanda.toLowerCase().trim());
+            // 2. Pencarian data penempatan resmi ananda yang sangat fleksibel & toleran
+            const myPlacements = (window.cloudState.penempatan || []).filter(p => {
+                const sList = window.extractStudentList(p.siswa);
+                return sList.some(s => window.isNameMatch(s, namaAnanda) || window.isNameMatch(s, rawAnanda));
             });
 
-            const industriName = penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "Belum Ditentukan";
-            const guruName = penempatan ? penempatan.guru : "Belum Ditentukan";
+            let indList = [];
+            let guruList = [];
+            myPlacements.forEach(p => {
+                if (p.guru && typeof p.guru === 'string' && p.guru.trim() && !guruList.includes(p.guru.trim())) {
+                    guruList.push(p.guru.trim());
+                }
+                const inds = Array.isArray(p.industri)
+                    ? p.industri
+                    : (typeof p.industri === 'string' && p.industri.includes(',') ? p.industri.split(',') : [p.industri]);
+                inds.forEach(i => {
+                    if (i && typeof i === 'string' && i.trim() && !indList.includes(i.trim())) {
+                        indList.push(i.trim());
+                    }
+                });
+            });
 
-            // Hitung statistik presensi dan jurnal ananda
-            const absenCount = (window.cloudState.absensi || []).filter(a => (a.nama || '').toLowerCase().trim() === namaAnanda.toLowerCase().trim()).length;
-            const jurnalCount = (window.cloudState.jurnal || []).filter(j => (j.siswa || '').toLowerCase().trim() === namaAnanda.toLowerCase().trim()).length;
+            // Fallback: Cek penugasan monitoring jika nama industri/guru ada di sana
+            if (indList.length === 0 || guruList.length === 0) {
+                (window.cloudState.penugasanMonitoring || []).forEach(m => {
+                    const sList = window.extractStudentList(m.siswaList);
+                    if (sList.some(s => window.isNameMatch(s, namaAnanda) || window.isNameMatch(s, rawAnanda))) {
+                        if (m.guru && !guruList.includes(m.guru.trim())) guruList.push(m.guru.trim());
+                        const mInds = Array.isArray(m.industriList) ? m.industriList : [m.industriList];
+                        mInds.forEach(mi => {
+                            if (mi && typeof mi === 'string' && mi.trim() && !indList.includes(mi.trim())) {
+                                indList.push(mi.trim());
+                            }
+                        });
+                    }
+                });
+            }
+
+            const industriName = indList.length > 0 ? indList.join(', ') : "Belum Ditentukan";
+            const guruName = guruList.length > 0 ? guruList.join(', ') : "Belum Ditentukan";
+
+            // 3. Hitung statistik presensi dan jurnal ananda dengan pencocokan nama fleksibel
+            const absenCount = (window.cloudState.absensi || []).filter(a => window.isNameMatch(a.nama, namaAnanda) || window.isNameMatch(a.nama, rawAnanda)).length;
+            const jurnalCount = (window.cloudState.jurnal || []).filter(j => window.isNameMatch(j.siswa, namaAnanda) || window.isNameMatch(j.siswa, rawAnanda)).length;
 
             return `
             ${bannerHtml}
 
             <!-- Sambutan Portal Orang Tua -->
             <div class="card" style="background: linear-gradient(135deg, #faf5ff 0%, #ffffff 100%); border: 2px solid #d8b4fe;">
-                <div style="font-size:11px; font-weight:900; color:#7e22ce; letter-spacing:0.5px;">PORTAL ORANG TUA / WALI SISWA</div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-size:11px; font-weight:900; color:#7e22ce; letter-spacing:0.5px;">PORTAL ORANG TUA / WALI SISWA</div>
+                    <button onclick="window.refreshDataOrangTuaDashboard()" class="btn-action btn-blue" style="font-size:10px; padding:3px 8px; font-weight:800;">
+                        🔄 Segarkan Data
+                    </button>
+                </div>
                 <h3 style="font-size:17px; font-weight:950; color:#0f172a; margin-top:2px;">Ananda: 👨‍🎓 ${namaAnanda}</h3>
                 <p style="font-size:11.5px; color:#475569; margin-top:4px;">Pantau kehadiran, catatan kegiatan harian, serta sampaikan kendala ananda langsung ke sekolah melalui menu Kontak Sekolah.</p>
             </div>
@@ -2212,7 +2378,12 @@
 
             <!-- Bagian 2: PENEMPATAN PKL ANANDA (Tempat PKL & Guru Pembimbing) -->
             <div class="mentor-info-card" style="background: linear-gradient(180deg, #f0f9ff 0%, #e0f2fe 40%, #0284c7 100%);">
-                <div class="mentor-label" style="color:#0369a1;">PENEMPATAN PKL ANANDA:</div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div class="mentor-label" style="color:#0369a1;">PENEMPATAN PKL ANANDA:</div>
+                    <span class="badge-status ${industriName !== 'Belum Ditentukan' ? 'badge-green' : 'badge-amber'}" style="font-size:9.5px;">
+                        ${industriName !== 'Belum Ditentukan' ? '✓ Ditempatkan' : 'Menunggu Plotting'}
+                    </span>
+                </div>
                 <div class="mentor-name" style="color:#0f172a;">👨‍🎓 ${namaAnanda}</div>
 
                 <div class="details-white-sheet">
@@ -2226,6 +2397,15 @@
                     </div>
                 </div>
             </div>`;
+        };
+
+        window.refreshDataOrangTuaDashboard = async function() {
+            window.showModalInfo("Menyinkronkan...", "Sedang mengambil data penempatan & aktivitas ananda terbaru dari cloud...");
+            if (window.supabaseClient) {
+                await window.tarikDataDariCloud(false);
+            }
+            window.closeModalInfo();
+            window.openFeature("dashboard", "Beranda", true);
         };
 
         window.isIndustriMatch = function(targetInd, currentIndName) {
@@ -5424,8 +5604,11 @@
 
         window.renderPresensiAnandaOnly = function() {
             const profile = window.cloudState.userProfile || { nama: "Orang Tua Siswa" };
-            const namaAnanda = profile.namaAnanda || profile.nama.replace("Wali dari ", "");
-            const list = (window.cloudState.absensi || []).filter(a => a.nama === namaAnanda);
+            const rawAnanda = profile.namaAnanda || profile.nama.replace(/^Wali dari\s*/i, "").trim();
+            const matchInSiswa = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, rawAnanda));
+            const namaAnanda = matchInSiswa ? matchInSiswa.nama : rawAnanda;
+
+            const list = (window.cloudState.absensi || []).filter(a => window.isNameMatch(a.nama, namaAnanda) || window.isNameMatch(a.nama, rawAnanda));
 
             let rows = "";
             list.forEach((ab, idx) => {
@@ -5462,8 +5645,11 @@
 
         window.renderJurnalAnandaOnly = function() {
             const profile = window.cloudState.userProfile || { nama: "Orang Tua Siswa" };
-            const namaAnanda = profile.namaAnanda || profile.nama.replace("Wali dari ", "");
-            const list = (window.cloudState.jurnal || []).filter(j => j.siswa === namaAnanda);
+            const rawAnanda = profile.namaAnanda || profile.nama.replace(/^Wali dari\s*/i, "").trim();
+            const matchInSiswa = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, rawAnanda));
+            const namaAnanda = matchInSiswa ? matchInSiswa.nama : rawAnanda;
+
+            const list = (window.cloudState.jurnal || []).filter(j => window.isNameMatch(j.siswa, namaAnanda) || window.isNameMatch(j.siswa, rawAnanda));
 
             let rows = "";
             list.forEach((j, idx) => {
@@ -5671,17 +5857,19 @@
             const role = window.cloudState.activeRole || "siswa";
             const profile = window.cloudState.userProfile || { nama: "Pengguna" };
             const isOrangTua = (role === 'orangtua');
-            const namaAnanda = isOrangTua ? (profile.namaAnanda || profile.nama.replace("Wali dari ", "").trim()) : "";
+            const rawAnanda = isOrangTua ? (profile.namaAnanda || profile.nama.replace(/^Wali dari\s*/i, "").trim()) : "";
+            const matchInSiswa = isOrangTua ? (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, rawAnanda)) : null;
+            const namaAnanda = matchInSiswa ? matchInSiswa.nama : rawAnanda;
 
             // Pencarian data penempatan ananda untuk Kontak Sekolah
             const penempatanAnanda = (window.cloudState.penempatan || []).find(p => {
-                const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
-                return sList.some(s => s && s.toLowerCase().trim() === namaAnanda.toLowerCase().trim());
+                const sList = window.extractStudentList(p.siswa);
+                return sList.some(s => window.isNameMatch(s, namaAnanda) || window.isNameMatch(s, rawAnanda));
             });
-            const guruAnandaNama = penempatanAnanda ? penempatanAnanda.guru : "Belum Ditentukan";
+            const guruAnandaNama = penempatanAnanda ? (penempatanAnanda.guru || "Belum Ditentukan") : "Belum Ditentukan";
             const indAnandaNama = penempatanAnanda ? (Array.isArray(penempatanAnanda.industri) ? penempatanAnanda.industri.join(', ') : penempatanAnanda.industri) : "Belum Ditentukan";
 
-            const dataGuru = (window.cloudState.guru || []).find(g => window.isGuruMatch ? window.isGuruMatch(g.nama, guruAnandaNama) : (g.nama === guruAnandaNama)) || {};
+            const dataGuru = (window.cloudState.guru || []).find(g => window.isNameMatch(g.nama, guruAnandaNama)) || {};
             const dataInd = (window.cloudState.industri || []).find(i => window.isIndustriMatch ? window.isIndustriMatch(i.nama, indAnandaNama) : (i.nama === indAnandaNama)) || {};
             const noWaGuru = dataGuru.noHp || "-";
             const noWaInd = dataInd.noWa || "-";
@@ -6220,6 +6408,10 @@
             window.inisialisasiSupabaseClient();
             if (window.supabaseClient) {
                 await window.tarikDataDariCloud(false);
+                // Sinkronkan ulang antarmuka dashboard agar data penempatan yang baru di-plotting admin langsung tampil
+                if (window.cloudState.userProfile && window.cloudState.currentFeature) {
+                    window.openFeature(window.cloudState.currentFeature, undefined, true);
+                }
             }
         });
     </script>
