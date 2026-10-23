@@ -2092,21 +2092,16 @@
                 <h3 style="font-size: 18px; font-weight: 950; color: #0f172a; margin-top: 2px;">Selamat Bertugas, Tim Panitia PKL</h3>
                 <p style="font-size: 11px; color: #64748b; margin-top: 4px;">Kelola akun, alokasi pembimbing, rekap jurnal, observasi industri, dan sinkronisasi cloud.</p>
 
-                <!-- FITUR PINTASAN INPUT & PENANDAAN KONTAK HOTLINE RESMI SEKOLAH -->
+                <!-- FITUR PINTASAN INPUT & PENANDAAN KONTAK HOTLINE RESMI SEKOLAH (COLLAPSIBLE) -->
                 <div style="margin-top:14px; padding-top:12px; border-top:1.5px dashed #bfdbfe;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
-                        <div>
-                            <div style="font-size:10px; font-weight:900; color:#0284c7; text-transform:uppercase; letter-spacing:0.5px;">📞 PINTASAN KONTAK HOTLINE SEKOLAH</div>
-                            <div style="font-size:13px; font-weight:950; color:#0f172a; margin-top:2px;">Kepala Sekolah, Bendahara & 2 Panitia PKL</div>
-                            <div style="font-size:10.5px; color:#64748b; margin-top:1px;">Tandai kontak yang tercantum di Kontak Sekolah (Wali) & Hotline SMK (Industri)</div>
-                        </div>
-                        <button type="button" onclick="window.bukaModalKelolaHotlineSekolah()" class="btn-action btn-emerald" style="padding:8px 14px; font-size:11.5px; font-weight:900; box-shadow:0 3px 10px rgba(16,185,129,0.3);">
-                            ✏️ Atur & Tandai Kontak ➔
-                        </button>
-                    </div>
+                    <button type="button" onclick="window.toggleFormHotlineInline()" style="width:100%; background:linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color:#ffffff; border:none; border-radius:14px; padding:12px 16px; font-size:12px; font-weight:900; display:flex; justify-content:space-between; align-items:center; cursor:pointer; box-shadow:0 4px 12px rgba(2,132,199,0.25); letter-spacing:0.4px;">
+                        <span>📞 PINTASAN KONTAK HOTLINE SEKOLAH</span>
+                        <span id="iconToggleHotlineInline" style="font-size:12px; transition:transform 0.25s ease;">▼</span>
+                    </button>
 
-                    <!-- Ringkasan Pejabat & Panitia yang Ditandai -->
-                    ${window.renderHotlineSummaryAdmin()}
+                    <div id="boxFormHotlineInline" style="display:none; margin-top:12px; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:16px; padding:14px;">
+                        ${window.renderHotlineInlineFormAdmin()}
+                    </div>
                 </div>
             </div>
 
@@ -2119,6 +2114,162 @@
                     ${gridCardsHtml}
                 </div>
             </div>`;
+        };
+
+        window.toggleFormHotlineInline = function() {
+            const box = document.getElementById("boxFormHotlineInline");
+            const icon = document.getElementById("iconToggleHotlineInline");
+            if (!box) return;
+            if (box.style.display === "none" || !box.style.display) {
+                box.style.display = "block";
+                if (icon) icon.innerText = "▲";
+            } else {
+                box.style.display = "none";
+                if (icon) icon.innerText = "▼";
+            }
+        };
+
+        window.renderHotlineInlineFormAdmin = function() {
+            const cfg = window.cloudState.hotlineConfig || DEFAULT_HOTLINE_CONFIG;
+            const k = cfg.kepsek || {};
+            const b = cfg.bendahara || {};
+            const kp = cfg.ketuaPanitia || {};
+            const sp = cfg.sekretarisPanitia || {};
+
+            return `
+                <div style="font-size:11px; color:#475569; margin-bottom:12px; line-height:1.4;">
+                    Edit Nama, NIP, Nomor HP/WA, dan <b>tandai kontak</b> yang akan ditampilkan pada menu <b>Kontak Sekolah (Orang Tua)</b> serta <b>Hotline SMK (Industri DUDI)</b>.
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                    <!-- 1. KEPALA SEKOLAH -->
+                    <div style="background:#ffffff; border:1.5px solid #bfdbfe; border-radius:14px; padding:12px;">
+                        <div style="font-size:12px; font-weight:900; color:#0369a1; margin-bottom:8px;">🎓 1. Kepala Sekolah</div>
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label class="form-label">Nama Lengkap & Gelar:</label>
+                            <input type="text" id="hlKepsekNama" class="form-control" value="${k.nama || ''}" placeholder="Contoh: Drs. H. Saiful Hinta, M.Pd">
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label">NIP:</label>
+                                <input type="text" id="hlKepsekNip" class="form-control" value="${k.nip || ''}" placeholder="Nomor Induk Pegawai">
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label">Nomor WhatsApp / HP:</label>
+                                <input type="tel" id="hlKepsekHp" class="form-control" value="${k.noHp || ''}" placeholder="08xxxxxxxxxx">
+                            </div>
+                        </div>
+                        <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
+                            <div style="font-size:10px; font-weight:800; color:#475569;">TANDAI KELAYAKAN TAMPIL:</div>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
+                                <input type="checkbox" id="hlKepsekTampilOrtu" ${k.tampilOrtu ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
+                                <span>Tampilkan di Kontak Sekolah (Orang Tua / Wali)</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
+                                <input type="checkbox" id="hlKepsekTampilInd" ${k.tampilIndustri ? 'checked' : ''} style="width:16px; height:16px; accent-color:#10b981;">
+                                <span>Tampilkan di Hotline SMK (Mitra Industri DUDI)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 2. BENDAHARA SEKOLAH -->
+                    <div style="background:#ffffff; border:1.5px solid #bfdbfe; border-radius:14px; padding:12px;">
+                        <div style="font-size:12px; font-weight:900; color:#0369a1; margin-bottom:8px;">💰 2. Bendahara Sekolah</div>
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label class="form-label">Nama Lengkap & Gelar:</label>
+                            <input type="text" id="hlBendaharaNama" class="form-control" value="${b.nama || ''}" placeholder="Contoh: Hj. Ratna Dewi, S.E">
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label">NIP:</label>
+                                <input type="text" id="hlBendaharaNip" class="form-control" value="${b.nip || ''}" placeholder="Nomor Induk Pegawai">
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label">Nomor WhatsApp / HP:</label>
+                                <input type="tel" id="hlBendaharaHp" class="form-control" value="${b.noHp || ''}" placeholder="08xxxxxxxxxx">
+                            </div>
+                        </div>
+                        <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
+                            <div style="font-size:10px; font-weight:800; color:#475569;">TANDAI KELAYAKAN TAMPIL:</div>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
+                                <input type="checkbox" id="hlBendaharaTampilOrtu" ${b.tampilOrtu ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
+                                <span>Tampilkan di Kontak Sekolah (Orang Tua / Wali)</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
+                                <input type="checkbox" id="hlBendaharaTampilInd" ${b.tampilIndustri ? 'checked' : ''} style="width:16px; height:16px; accent-color:#10b981;">
+                                <span>Tampilkan di Hotline SMK (Mitra Industri DUDI)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 3. KETUA PANITIA PKL -->
+                    <div style="background:#ffffff; border:1.5px solid #bfdbfe; border-radius:14px; padding:12px;">
+                        <div style="font-size:12px; font-weight:900; color:#0369a1; margin-bottom:8px;">👨‍💼 3. Ketua Panitia PKL</div>
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label class="form-label">Nama Lengkap & Gelar:</label>
+                            <input type="text" id="hlKetuaNama" class="form-control" value="${kp.nama || ''}" placeholder="Contoh: Wilasia S. Talaa, S.ST">
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label">NIP:</label>
+                                <input type="text" id="hlKetuaNip" class="form-control" value="${kp.nip || ''}" placeholder="Nomor Induk Pegawai">
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label">Nomor WhatsApp / HP:</label>
+                                <input type="tel" id="hlKetuaHp" class="form-control" value="${kp.noHp || ''}" placeholder="08xxxxxxxxxx">
+                            </div>
+                        </div>
+                        <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
+                            <div style="font-size:10px; font-weight:800; color:#475569;">TANDAI KELAYAKAN TAMPIL:</div>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
+                                <input type="checkbox" id="hlKetuaTampilOrtu" ${kp.tampilOrtu ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
+                                <span>Tampilkan di Kontak Sekolah (Orang Tua / Wali)</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
+                                <input type="checkbox" id="hlKetuaTampilInd" ${kp.tampilIndustri ? 'checked' : ''} style="width:16px; height:16px; accent-color:#10b981;">
+                                <span>Tampilkan di Hotline SMK (Mitra Industri DUDI)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 4. SEKRETARIS PANITIA PKL -->
+                    <div style="background:#ffffff; border:1.5px solid #bfdbfe; border-radius:14px; padding:12px;">
+                        <div style="font-size:12px; font-weight:900; color:#0369a1; margin-bottom:8px;">📝 4. Sekretaris Panitia PKL</div>
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label class="form-label">Nama Lengkap & Gelar:</label>
+                            <input type="text" id="hlSekretarisNama" class="form-control" value="${sp.nama || ''}" placeholder="Contoh: Ulco Masrun Arbie, S.Pd">
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label">NIP:</label>
+                                <input type="text" id="hlSekretarisNip" class="form-control" value="${sp.nip || ''}" placeholder="Nomor Induk Pegawai">
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label">Nomor WhatsApp / HP:</label>
+                                <input type="tel" id="hlSekretarisHp" class="form-control" value="${sp.noHp || ''}" placeholder="08xxxxxxxxxx">
+                            </div>
+                        </div>
+                        <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
+                            <div style="font-size:10px; font-weight:800; color:#475569;">TANDAI KELAYAKAN TAMPIL:</div>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
+                                <input type="checkbox" id="hlSekretarisTampilOrtu" ${sp.tampilOrtu ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
+                                <span>Tampilkan di Kontak Sekolah (Orang Tua / Wali)</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:750; color:#0f172a; cursor:pointer;">
+                                <input type="checkbox" id="hlSekretarisTampilInd" ${sp.tampilIndustri ? 'checked' : ''} style="width:16px; height:16px; accent-color:#10b981;">
+                                <span>Tampilkan di Hotline SMK (Mitra Industri DUDI)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button type="button" onclick="window.toggleFormHotlineInline()" class="btn-action" style="background:#94a3b8; color:#fff; padding:9px 16px;">Tutup ▲</button>
+                    <button type="button" onclick="window.simpanHotlineSekolah()" class="btn-action btn-emerald" style="font-weight:900; padding:9px 18px;">
+                        💾 Simpan & Sinkronkan Hotline ⚡
+                    </button>
+                </div>
+            `;
         };
 
         window.renderHotlineSummaryAdmin = function() {
@@ -2988,11 +3139,9 @@
         };
 
         window.refreshDataOrangTuaDashboard = async function() {
-            window.showModalInfo("Menyinkronkan...", "Sedang mengambil data penempatan & aktivitas ananda terbaru dari cloud...");
             if (window.supabaseClient) {
-                await window.tarikDataDariCloud(false);
+                await window.tarikDataDariCloud(true);
             }
-            window.closeModalInfo();
             window.openFeature("dashboard", "Beranda", true);
         };
 
@@ -8104,8 +8253,8 @@
             }
             window.inisialisasiSupabaseClient();
             if (window.supabaseClient) {
-                await window.tarikDataDariCloud(false);
-                // Sinkronkan ulang antarmuka dashboard agar data penempatan yang baru di-plotting admin langsung tampil
+                await window.tarikDataDariCloud(true);
+                // Sinkronkan ulang antarmuka dashboard secara senyap agar data terbaru langsung tampil tanpa popup
                 if (window.cloudState.userProfile && window.cloudState.currentFeature) {
                     window.openFeature(window.cloudState.currentFeature, undefined, true);
                 }
