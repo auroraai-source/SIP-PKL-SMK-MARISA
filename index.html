@@ -5261,6 +5261,7 @@
                     : '<span style="font-size:10.5px; color:#64748b;">Semua Siswa Terkait</span>';
 
                 rowsMonitoring += `<tr>
+                    <td><input type="checkbox" class="cb-monitoring" value="${idx}"></td>
                     <td>${idx + 1}</td>
                     <td><b>${m.guru}</b><div style="font-size:10px; color:#15803d; font-weight:800;">GURU MONITORING</div></td>
                     <td><b>${m.judulTugas || 'Monitoring DUDI'}</b><div style="font-size:10px; color:#64748b;">${m.tanggalMulai || '-'} s/d ${m.tanggalSelesai || '-'}</div></td>
@@ -5292,6 +5293,7 @@
                     : '<span style="color:#94a3b8; font-size:11px;">-</span>';
 
                 rowsPembimbing += `<tr>
+                    <td><input type="checkbox" class="cb-penempatan" value="${idx}"></td>
                     <td>${idx + 1}</td>
                     <td><b>${p.guru}</b></td>
                     <td>${indBadges}</td>
@@ -5313,9 +5315,24 @@
                         Bagi dan kelompokkan guru monitoring yang akan turun ke lapangan beserta daftar industri dan siswa yang dikunjungi. Dilengkapi fitur pencarian Nama Guru & Industri.
                     </p>
                 </div>
-                <div style="margin-bottom:12px;">
-                    <button onclick="window.bukaModalAlokasiMonitoring()" class="btn-action btn-emerald" style="padding:10px 18px; font-size:12px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(16,185,129,0.3);">
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+                    <button onclick="window.bukaModalAlokasiMonitoring()" class="btn-action btn-emerald" style="padding:9px 15px; font-size:12px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(16,185,129,0.3);">
                         + Tugaskan Guru Monitoring
+                    </button>
+                    <button onclick="window.bukaModalDiagnostikDanPulihkanAlokasi()" class="btn-action btn-amber" style="padding:9px 14px; font-size:11.5px; font-weight:900; border-radius:12px;">
+                        🛠️ Diagnostik & Pulihkan
+                    </button>
+                    <button onclick="window.unduhTemplateExcelMonitoring()" class="btn-action btn-emerald" style="padding:9px 12px; font-size:11.5px; font-weight:850; border-radius:12px;">
+                        📄 Template Excel
+                    </button>
+                    <button onclick="window.bukaModalImportExcelMonitoring()" class="btn-action btn-blue" style="padding:9px 12px; font-size:11.5px; font-weight:850; border-radius:12px;">
+                        📥 Import Excel
+                    </button>
+                    <button onclick="window.exportExcelMonitoring()" class="btn-action btn-emerald" style="padding:9px 12px; font-size:11.5px; font-weight:850; border-radius:12px;">
+                        📊 Export Excel
+                    </button>
+                    <button onclick="window.hapusMasalMonitoring()" class="btn-action btn-red" style="padding:9px 12px; font-size:11.5px; font-weight:850; border-radius:12px;">
+                        🗑️ Hapus Terpilih
                     </button>
                 </div>
 
@@ -5323,6 +5340,7 @@
                     <table>
                         <thead>
                             <tr>
+                                <th style="width:36px;"><input type="checkbox" onchange="window.toggleAllCheckboxes('monitoring', this.checked)"></th>
                                 <th style="width:36px;">No</th>
                                 <th>Nama Guru Monitoring</th>
                                 <th>Agenda / Periode</th>
@@ -5332,7 +5350,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${rowsMonitoring || '<tr><td colspan="6" class="empty-placeholder">Belum ada penugasan guru monitoring yang dibuat</td></tr>'}
+                            ${rowsMonitoring || '<tr><td colspan="7" class="empty-placeholder">Belum ada penugasan guru monitoring yang dibuat</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -5348,14 +5366,23 @@
                     </p>
                 </div>
                 <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-                    <button onclick="window.bukaModalAlokasiPenempatan()" class="btn-action btn-blue" style="padding:10px 16px; font-size:12px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(2,132,199,0.3);">
+                    <button onclick="window.bukaModalAlokasiPenempatan()" class="btn-action btn-blue" style="padding:9px 15px; font-size:12px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(2,132,199,0.3);">
                         + Alokasi Pembimbing Baru
                     </button>
-                    <button onclick="window.bukaModalDiagnostikDanPulihkanAlokasi()" class="btn-action btn-amber" style="padding:10px 16px; font-size:12px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(245,158,11,0.3); background:#f59e0b; color:#ffffff;">
+                    <button onclick="window.bukaModalDiagnostikDanPulihkanAlokasi()" class="btn-action btn-amber" style="padding:9px 14px; font-size:11.5px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(245,158,11,0.3); background:#f59e0b; color:#ffffff;">
                         🛠️ Diagnostik & Pulihkan Alokasi
                     </button>
-                    <button onclick="window.handleManualUploadCloud()" class="btn-action btn-emerald" style="padding:10px 14px; font-size:11.5px; font-weight:900; border-radius:12px; box-shadow:0 3px 10px rgba(16,185,129,0.3);">
-                        ⚡ Simpan ke Cloud
+                    <button onclick="window.unduhTemplateExcelPenempatan()" class="btn-action btn-emerald" style="padding:9px 12px; font-size:11.5px; font-weight:850; border-radius:12px;">
+                        📄 Template Excel
+                    </button>
+                    <button onclick="window.bukaModalImportExcelPenempatan()" class="btn-action btn-blue" style="padding:9px 12px; font-size:11.5px; font-weight:850; border-radius:12px;">
+                        📥 Import Excel
+                    </button>
+                    <button onclick="window.exportExcelPenempatanPembimbing()" class="btn-action btn-emerald" style="padding:9px 12px; font-size:11.5px; font-weight:850; border-radius:12px;">
+                        📊 Export Excel
+                    </button>
+                    <button onclick="window.hapusMasalPenempatan()" class="btn-action btn-red" style="padding:9px 12px; font-size:11.5px; font-weight:850; border-radius:12px;">
+                        🗑️ Hapus Terpilih
                     </button>
                 </div>
 
@@ -5363,6 +5390,7 @@
                     <table>
                         <thead>
                             <tr>
+                                <th style="width:36px;"><input type="checkbox" onchange="window.toggleAllCheckboxes('penempatan', this.checked)"></th>
                                 <th style="width:36px;">No</th>
                                 <th>Guru Pembimbing</th>
                                 <th>Industri Magang</th>
@@ -5371,11 +5399,269 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${rowsPembimbing || '<tr><td colspan="5" class="empty-placeholder">Belum ada alokasi pembimbing siswa</td></tr>'}
+                            ${rowsPembimbing || '<tr><td colspan="6" class="empty-placeholder">Belum ada alokasi pembimbing siswa</td></tr>'}
                         </tbody>
                     </table>
                 </div>
             </div>`;
+        };
+
+        // --- FUNGSI EXPORT, IMPORT, TEMPLATE & HAPUS MASAL ALOKASI MONITORING & PEMBIMBING ---
+        window.unduhTemplateExcelPenempatan = function() {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+            const data = [
+                ["Guru Pembimbing", "Industri Magang", "Siswa Bimbingan (Pisahkan dengan koma)"],
+                ["Wilasia S. Talaa, S.ST", "PT. Telkom Marisa", "Ahmad Dani"],
+                ["Ulco Masrun Arbie, S.Pd.", "Toko Zainab", "Nurul Hidayah, An'nisa Putri Maele"]
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Template Alokasi");
+            XLSX.writeFile(wb, "Template_Alokasi_Pembimbing_SMKN1_Marisa.xlsx");
+        };
+
+        window.exportExcelPenempatanPembimbing = function() {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+            const list = window.cloudState.penempatan || [];
+            const data = [
+                ["No", "Guru Pembimbing", "Industri Magang", "Siswa Bimbingan"]
+            ];
+            list.forEach((p, idx) => {
+                const indStr = Array.isArray(p.industri) ? p.industri.join(", ") : (p.industri || "-");
+                const siswaStr = Array.isArray(p.siswa) ? p.siswa.join(", ") : (p.siswa || "-");
+                data.push([
+                    idx + 1,
+                    p.guru || "-",
+                    indStr,
+                    siswaStr
+                ]);
+            });
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Alokasi Pembimbing");
+            XLSX.writeFile(wb, `Data_Alokasi_Guru_Siswa_SMKN1_Marisa_${new Date().toISOString().split('T')[0]}.xlsx`);
+        };
+
+        window.bukaModalImportExcelPenempatan = function() {
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:8px;">📥 Import Excel Alokasi Guru & Siswa</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Unggah file Excel hasil Export atau Template untuk memulihkan atau menambahkan data Alokasi Guru Pembimbing & Siswa Magang.</p>
+                <div class="form-group">
+                    <input type="file" id="fileExcelPenempatanInput" class="form-control" accept=".xlsx, .xls">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.prosesImportExcelPenempatan()" class="btn-action btn-blue">Unggah & Pulihkan Alokasi</button>
+                </div>
+            `);
+        };
+
+        window.prosesImportExcelPenempatan = function() {
+            const fileInput = document.getElementById("fileExcelPenempatanInput");
+            if (!fileInput || !fileInput.files[0]) return window.showModalInfo("Pilih Berkas", "Silakan pilih berkas Excel terlebih dahulu!");
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(sheet);
+
+                    if (json.length === 0) return window.showModalInfo("Berkas Kosong", "Data pada lembar Excel tidak ditemukan!");
+
+                    if (!Array.isArray(window.cloudState.penempatan)) window.cloudState.penempatan = [];
+                    let count = 0;
+
+                    json.forEach(row => {
+                        const guru = (row['Guru Pembimbing'] || row['Nama Guru'] || row['Guru'] || '').toString().trim();
+                        const rawInd = (row['Industri Magang'] || row['Tempat PKL'] || row['Industri'] || '').toString().trim();
+                        const rawSiswa = (row['Siswa Bimbingan'] || row['Siswa Bimbingan (Pisahkan dengan koma)'] || row['Siswa'] || '').toString().trim();
+
+                        if (guru && rawInd) {
+                            const indList = rawInd.includes(',') ? rawInd.split(',').map(x => x.trim()).filter(Boolean) : [rawInd];
+                            const siswaList = rawSiswa ? rawSiswa.split(',').map(x => x.trim()).filter(Boolean) : [];
+                            const indVal = indList.length === 1 ? indList[0] : indList;
+
+                            const existIdx = window.cloudState.penempatan.findIndex(p => {
+                                const pInd = Array.isArray(p.industri) ? p.industri.join(', ') : (p.industri || '');
+                                return p.guru.toLowerCase().trim() === guru.toLowerCase() && pInd.toLowerCase().trim() === rawInd.toLowerCase();
+                            });
+
+                            if (existIdx !== -1) {
+                                const combined = Array.from(new Set([...(window.cloudState.penempatan[existIdx].siswa || []), ...siswaList]));
+                                window.cloudState.penempatan[existIdx].siswa = combined;
+                            } else {
+                                window.cloudState.penempatan.push({
+                                    id: "pen_" + Date.now() + Math.floor(Math.random() * 1000),
+                                    guru: guru,
+                                    industri: indVal,
+                                    siswa: siswaList
+                                });
+                            }
+
+                            // Sinkronkan juga ke master siswa
+                            siswaList.forEach(sNama => {
+                                const foundS = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, sNama));
+                                if (foundS) {
+                                    foundS.guru = guru;
+                                    foundS.industri = indList[0];
+                                }
+                            });
+
+                            count++;
+                        }
+                    });
+
+                    window.simpanDatabasePersisten(true);
+                    window.closeDynamicModal();
+                    window.showModalInfo("Import Alokasi Berhasil ✅", `Berhasil memproses dan memulihkan <b>${count} kelompok alokasi</b> guru pembimbing & siswa.`);
+                    window.openFeature("penempatan", "Alokasi Guru & Siswa");
+                } catch(err) {
+                    window.showModalInfo("Gagal Membaca Berkas", err.message);
+                }
+            };
+            reader.readAsArrayBuffer(fileInput.files[0]);
+        };
+
+        window.hapusMasalPenempatan = function() {
+            const cbs = document.querySelectorAll('.cb-penempatan:checked');
+            if (cbs.length === 0) return window.showModalInfo("Pilih Data", "Centang minimal 1 baris alokasi pembimbing yang ingin dihapus!");
+
+            window.showConfirmDialog("Hapus Masal Alokasi", `Yakin ingin menghapus <b>${cbs.length} kelompok alokasi</b> pembimbing terpilih?`, () => {
+                const indices = Array.from(cbs).map(c => parseInt(c.value)).sort((a, b) => b - a);
+                indices.forEach(idx => {
+                    if (window.cloudState.penempatan && window.cloudState.penempatan[idx]) {
+                        window.cloudState.penempatan.splice(idx, 1);
+                    }
+                });
+                window.simpanDatabasePersisten(true);
+                window.openFeature("penempatan", "Alokasi Guru & Siswa");
+            });
+        };
+
+        window.unduhTemplateExcelMonitoring = function() {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+            const todayStr = new Date().toISOString().split('T')[0];
+            const data = [
+                ["Nama Guru Monitoring", "Agenda Tugas", "Tanggal Mulai", "Tanggal Selesai", "Daftar Industri (Pisahkan koma)", "Siswa yang Dimonitoring (Pisahkan koma)", "Catatan"],
+                ["Wilasia S. Talaa, S.ST", "Monitoring & Evaluasi PKL DUDI", todayStr, todayStr, "PT. Telkom Marisa", "Ahmad Dani", "Koordinasi presensi & jurnal"]
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Template Monitoring");
+            XLSX.writeFile(wb, "Template_Alokasi_Monitoring_SMKN1_Marisa.xlsx");
+        };
+
+        window.exportExcelMonitoring = function() {
+            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+            const list = window.cloudState.penugasanMonitoring || [];
+            const data = [
+                ["No", "Nama Guru Monitoring", "Agenda Tugas", "Tanggal Mulai", "Tanggal Selesai", "Daftar Industri", "Siswa yang Dimonitoring", "Catatan"]
+            ];
+            list.forEach((m, idx) => {
+                const indStr = Array.isArray(m.industriList) ? m.industriList.join(", ") : (m.industriList || "-");
+                const siswaStr = Array.isArray(m.siswaList) ? m.siswaList.join(", ") : (m.siswaList || "-");
+                data.push([
+                    idx + 1,
+                    m.guru || "-",
+                    m.judulTugas || "Monitoring DUDI",
+                    m.tanggalMulai || "-",
+                    m.tanggalSelesai || "-",
+                    indStr,
+                    siswaStr,
+                    m.catatan || "-"
+                ]);
+            });
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Alokasi Monitoring");
+            XLSX.writeFile(wb, `Data_Alokasi_Guru_Monitoring_SMKN1_Marisa_${new Date().toISOString().split('T')[0]}.xlsx`);
+        };
+
+        window.bukaModalImportExcelMonitoring = function() {
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:8px;">📥 Import Excel Alokasi Guru Monitoring</h3>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">Unggah file Excel hasil Export atau Template untuk memulihkan atau menambahkan data Surat Tugas Guru Monitoring.</p>
+                <div class="form-group">
+                    <input type="file" id="fileExcelMonitoringInput" class="form-control" accept=".xlsx, .xls">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button onclick="window.prosesImportExcelMonitoring()" class="btn-action btn-emerald">Unggah & Simpan Monitoring</button>
+                </div>
+            `);
+        };
+
+        window.prosesImportExcelMonitoring = function() {
+            const fileInput = document.getElementById("fileExcelMonitoringInput");
+            if (!fileInput || !fileInput.files[0]) return window.showModalInfo("Pilih Berkas", "Silakan pilih berkas Excel terlebih dahulu!");
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(sheet);
+
+                    if (json.length === 0) return window.showModalInfo("Berkas Kosong", "Data pada lembar Excel tidak ditemukan!");
+
+                    if (!Array.isArray(window.cloudState.penugasanMonitoring)) window.cloudState.penugasanMonitoring = [];
+                    let count = 0;
+
+                    json.forEach(row => {
+                        const guru = (row['Nama Guru Monitoring'] || row['Guru Monitoring'] || row['Guru'] || '').toString().trim();
+                        const judul = (row['Agenda Tugas'] || row['Agenda'] || 'Monitoring & Evaluasi PKL DUDI').toString().trim();
+                        const tglMulai = (row['Tanggal Mulai'] || new Date().toISOString().split('T')[0]).toString().trim();
+                        const tglSelesai = (row['Tanggal Selesai'] || tglMulai).toString().trim();
+                        const rawInd = (row['Daftar Industri'] || row['Daftar Industri (Pisahkan koma)'] || row['Industri'] || '').toString().trim();
+                        const rawSiswa = (row['Siswa yang Dimonitoring'] || row['Siswa yang Dimonitoring (Pisahkan koma)'] || row['Siswa'] || '').toString().trim();
+                        const catatan = (row['Catatan'] || '-').toString().trim();
+
+                        if (guru && rawInd) {
+                            const indList = rawInd.split(',').map(x => x.trim()).filter(Boolean);
+                            const siswaList = rawSiswa ? rawSiswa.split(',').map(x => x.trim()).filter(Boolean) : [];
+
+                            window.cloudState.penugasanMonitoring.push({
+                                id: "mon_" + Date.now() + Math.floor(Math.random() * 1000),
+                                guru: guru,
+                                judulTugas: judul,
+                                tanggalMulai: tglMulai,
+                                tanggalSelesai: tglSelesai,
+                                industriList: indList,
+                                siswaList: siswaList,
+                                catatan: catatan
+                            });
+                            count++;
+                        }
+                    });
+
+                    window.simpanDatabasePersisten(true);
+                    window.closeDynamicModal();
+                    window.showModalInfo("Import Monitoring Berhasil ✅", `Berhasil memproses <b>${count} surat tugas</b> guru monitoring.`);
+                    window.openFeature("penempatan", "Alokasi Guru & Siswa");
+                } catch(err) {
+                    window.showModalInfo("Gagal Membaca Berkas", err.message);
+                }
+            };
+            reader.readAsArrayBuffer(fileInput.files[0]);
+        };
+
+        window.hapusMasalMonitoring = function() {
+            const cbs = document.querySelectorAll('.cb-monitoring:checked');
+            if (cbs.length === 0) return window.showModalInfo("Pilih Data", "Centang minimal 1 baris tugas monitoring yang ingin dihapus!");
+
+            window.showConfirmDialog("Hapus Masal Monitoring", `Yakin ingin menghapus <b>${cbs.length} surat tugas monitoring</b> terpilih?`, () => {
+                const indices = Array.from(cbs).map(c => parseInt(c.value)).sort((a, b) => b - a);
+                indices.forEach(idx => {
+                    if (window.cloudState.penugasanMonitoring && window.cloudState.penugasanMonitoring[idx]) {
+                        window.cloudState.penugasanMonitoring.splice(idx, 1);
+                    }
+                });
+                window.simpanDatabasePersisten(true);
+                window.openFeature("penempatan", "Alokasi Guru & Siswa");
+            });
         };
 
         // --- MODAL ALOKASI GURU MONITORING (DENGAN PENCARIAN GURU & INDUSTRI) ---
