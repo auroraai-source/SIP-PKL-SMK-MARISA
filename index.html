@@ -1068,6 +1068,29 @@
             }
         };
 
+        window.DEFAULT_OFFICIAL_CREDENTIALS = [
+            { role: "admin", nama: "Panitia PKL SMKN 1 Marisa", username: "Panitia PKL", pass: "SMKBisa2000", identitas: "PANITIA-2026" },
+            { role: "guru", nama: "Wilasia S. Talaa, S.ST", username: "198501012010012001", pass: "guru123", identitas: "198501012010012001" },
+            { role: "guru", nama: "Ulco Masrun Arbie, S.Pd.", username: "198803152015031002", pass: "guru123", identitas: "198803152015031002" },
+            { role: "guru", nama: "Marlini Bahan Subu, S.Pd.I", username: "198005102008012015", pass: "guru123", identitas: "198005102008012015" },
+            { role: "guru", nama: "Sumiyati Ahmad, S.Pd.", username: "198207122011012008", pass: "guru123", identitas: "198207122011012008" },
+            { role: "guru", nama: "Abd. Rahman Feri Hasan, S.ST", username: "198904202019031005", pass: "guru123", identitas: "198904202019031005" },
+            { role: "industri", nama: "PT. Telkom Marisa", username: "telkom_marisa", pass: "dudi123", identitas: "telkom_marisa" },
+            { role: "industri", nama: "Toko Zainab", username: "toko_zainab", pass: "dudi123", identitas: "toko_zainab" },
+            { role: "industri", nama: "REZOTA Indo Fashion", username: "rezota_indo_fashion", pass: "dudi123", identitas: "rezota_indo_fashion" },
+            { role: "industri", nama: "SULUTGO MARISA", username: "sulutgo_marisa", pass: "dudi123", identitas: "sulutgo_marisa" },
+            { role: "industri", nama: "PT. HASJRAT ABADI CAB. MARISA", username: "pt_hasjrat_abadi", pass: "dudi123", identitas: "pt_hasjrat_abadi" },
+            { role: "industri", nama: "Kantor Notaris Helce, S.H.,M.Kn.", username: "kantor_notaris_helce", pass: "dudi123", identitas: "kantor_notaris_helce" },
+            { role: "industri", nama: "Dinas Catatan Sipil Kab Pohuwato", username: "dinas_catatan_sipil", pass: "dudi123", identitas: "dinas_catatan_sipil" },
+            { role: "industri", nama: "BADAN PENGELOLAAN KEUANGAN DAN ASET DAERAH PROVINSI GORONTALO", username: "bpkad_prov_gorontalo", pass: "dudi123", identitas: "bpkad_prov_gorontalo" },
+            { role: "siswa", nama: "Ahmad Dani", username: "1001", pass: "siswa123", identitas: "1001" },
+            { role: "siswa", nama: "Nurul Hidayah", username: "1002", pass: "siswa123", identitas: "1002" },
+            { role: "siswa", nama: "An'nisa Putri Maele", username: "1003", pass: "siswa123", identitas: "1003" },
+            { role: "siswa", nama: "Julyyana Dwiputri Mamonto", username: "1004", pass: "siswa123", identitas: "1004" },
+            { role: "siswa", nama: "Tia Nurkamila Haras", username: "1005", pass: "siswa123", identitas: "1005" },
+            { role: "siswa", nama: "Aditya Bakari", username: "1006", pass: "siswa123", identitas: "1006" }
+        ];
+
         window.cloudState = {
             userProfile: null,
             activeRole: "siswa",
@@ -1086,12 +1109,7 @@
                 pulang: "16:00",
                 toleransi: 50
             },
-            registeredUsers: [
-                { role: "admin", nama: "Panitia PKL SMKN 1 Marisa", username: "Panitia PKL", pass: "SMKBisa2000", identitas: "PANITIA-2026" },
-                { role: "guru", nama: "Wilasia S. Talaa, S.ST", username: "198501012010012001", pass: "guru123", identitas: "198501012010012001" },
-                { role: "siswa", nama: "Ahmad Dani", username: "1001", pass: "siswa123", identitas: "1001" },
-                { role: "industri", nama: "PT. Telkom Marisa", username: "telkom_marisa", pass: "dudi123", identitas: "telkom_marisa" }
-            ],
+            registeredUsers: JSON.parse(JSON.stringify(window.DEFAULT_OFFICIAL_CREDENTIALS)),
             siswa: [
                 { nama: "Ahmad Dani", kelas: "Teknik Jaringan Komputer & Telekomunikasi (TJKT)", nis: "1001", jk: "L", industri: "PT. Telkom Marisa", guru: "Wilasia S. Talaa, S.ST", noHp: "081234567890" },
                 { nama: "Nurul Hidayah", kelas: "Akuntansi (AK)", nis: "1002", jk: "P", industri: "Toko Zainab", guru: "Ulco Masrun Arbie, S.Pd.", noHp: "081234567891" },
@@ -4954,6 +4972,38 @@
 
         window.activeCredentialTab = "siswa";
 
+        window.sinkronkanSemuaAkunKredensialOtomatis = function() {
+            window.showModalInfo("⏳ Menyinkronkan Akun...", "Sedang membuat akun untuk semua Siswa, Guru, dan Industri dari Data Master serta mengirimkannya ke Cloud...");
+            
+            setTimeout(() => {
+                if (typeof window.deduplicateAndConsolidateState === 'function') {
+                    window.deduplicateAndConsolidateState();
+                }
+
+                const userMap = new Map();
+                (window.cloudState.registeredUsers || []).forEach(u => {
+                    if (u && u.role && u.username) {
+                        userMap.set(u.role + '___' + String(u.username).toLowerCase().trim(), u);
+                    }
+                });
+                
+                (window.DEFAULT_OFFICIAL_CREDENTIALS || []).forEach(u => {
+                    const uKey = u.role + '___' + String(u.username).toLowerCase().trim();
+                    if (!userMap.has(uKey)) {
+                        userMap.set(uKey, u);
+                    }
+                });
+                window.cloudState.registeredUsers = Array.from(userMap.values());
+
+                // Paksa penyimpanan dan upload ke Supabase Cloud
+                window.simpanDatabasePersisten(true);
+                
+                window.closeModalInfo();
+                window.showModalInfo("Sinkronisasi Akun Berhasil ✅", `Berhasil membuat dan menyinkronkan <b>${window.cloudState.registeredUsers.length} akun kredensial</b> secara utuh ke database Supabase Cloud.`);
+                window.openFeature("kelola-akun", "Buat Akun & Kredensial");
+            }, 500);
+        };
+
         window.setTabKredensial = function(tab) {
             window.activeCredentialTab = tab;
             window.openFeature("kelola-akun", "Buat Akun & Kredensial");
@@ -4995,6 +5045,7 @@
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🔑 Akun & Kredensial: ${meta.label}</h3>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.sinkronkanSemuaAkunKredensialOtomatis()" class="btn-action btn-blue" style="font-weight:900; box-shadow:0 3px 10px rgba(2,132,199,0.3);">⚡ Sinkronkan Akun Master</button>
                         <button onclick="window.unduhTemplateExcelAkunPeran('${tab}')" class="btn-action btn-emerald">📄 Template</button>
                         <button onclick="window.bukaModalUploadExcelAkunPeran('${tab}')" class="btn-action btn-blue">📥 Impor Excel</button>
                         <button onclick="window.exportExcelAkunPeran('${tab}')" class="btn-action btn-emerald">📊 Export Excel</button>
