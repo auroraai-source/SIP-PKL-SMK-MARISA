@@ -2192,113 +2192,102 @@
 
             if (!username) return window.showModalInfo("Identitas Kosong", "Mohon masukkan data identitas Anda!");
 
-            // Pastikan seluruh kredensial dari master data selalu tersinkron sebelum cek login
-            if (typeof window.deduplicateAndConsolidateState === 'function') {
-                window.deduplicateAndConsolidateState();
-            }
-
-            // Helper pencarian akun KETAT TAPI CERDAS (Toleran terhadap spasi & alias excel)
-            const findMatchingUser = (inputUser, inputPass, targetRole) => {
-                const cleanU = inputUser.toString().toLowerCase().trim();
-                const cleanP = inputPass.toString().trim();
-
-                // HANYA mencari di database Kredensial Akun Resmi (registeredUsers)
-                let found = (window.cloudState.registeredUsers || []).find(u => {
-                    if (u.role !== targetRole) return false;
-                    
-                    // Baca username/password dan alias jika ada dari hasil impor Excel lawas
-                    const dbUser = (u.username || u.nip || u.nis || u.id || '').toString().toLowerCase().trim();
-                    const dbPass = (u.pass || u.password || u.kataSandi || u.sandi || '').toString().trim();
-                    
-                    const uNameMatch = (dbUser === cleanU);
-                    const passMatch = (dbPass === cleanP); 
-                    
-                    return uNameMatch && passMatch;
-                });
-
-                return found;
-            };
-
-            if (role === 'orangtua') {
-                // Jika data siswa lokal masih sedikit (belum selesai tarik cloud), tarik dulu otomatis tanpa perlu refresh
-                let foundSiswa = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, username));
-                if (!foundSiswa) {
-                    if (btnSubmit) { btnSubmit.innerText = "SINKRONISASI SERVER... ⏳"; btnSubmit.disabled = true; }
-                    await window.tarikDataDariCloud(true);
-                    if (btnSubmit) { btnSubmit.innerText = "MASUK KE ROOM SEKARANG ⚡"; btnSubmit.disabled = false; }
-                    foundSiswa = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, username));
-                }
-
-                if (!foundSiswa) {
-                    (window.cloudState.penempatan || []).forEach(p => {
-                        const sList = window.extractStudentList(p.siswa);
-                        const matchS = sList.find(s => window.isNameMatch(s, username));
-                        if (matchS && !foundSiswa) {
-                            foundSiswa = { nama: matchS };
-                        }
-                    });
-                }
-
-                if (!foundSiswa) {
-                    const matchUser = (window.cloudState.registeredUsers || []).find(u => u.role === 'siswa' && window.isNameMatch(u.nama, username));
-                    if (matchUser) foundSiswa = { nama: matchUser.nama };
-                }
-
-                const namaAnanda = foundSiswa ? foundSiswa.nama : username;
-                window.suksesLogin({
-                    nama: `Wali dari ${namaAnanda}`,
-                    namaAnanda: namaAnanda,
-                    role: "orangtua",
-                    identitas: namaAnanda
-                });
-                return;
-            }
-
-            if (!pass) return window.showModalInfo("Kata Sandi Kosong", "Silakan masukkan kata sandi Anda!");
-
             // Bypass khusus akun panitia default agar tidak terkunci
             if (role === 'admin' && (username.toLowerCase() === 'panitia pkl' || username.toLowerCase() === 'admin') && pass === 'SMKBisa2000') {
                 window.suksesLogin({ nama: "Panitia PKL SMKN 1 Marisa", role: "admin", identitas: "PANITIA-2026" });
                 return;
             }
 
-            // Cek di memori lokal terlebih dahulu dengan pencocokan KETAT
-            let user = findMatchingUser(username, pass, role);
+            const origText = btnSubmit ? btnSubmit.innerText : "MASUK KE ROOM SEKARANG ⚡";
+            if (btnSubmit) {
+                btnSubmit.innerText = "MEMERIKSA KREDENSIAL... ⏳";
+                btnSubmit.disabled = true;
+            }
 
-            // SOLUSI PATEN HP: Jika tidak cocok, KITA PAKSA SINKRON DENGAN SERVER SAAT ITU JUGA!
-            if (!user) {
-                const origText = btnSubmit ? btnSubmit.innerText : "MASUK KE ROOM SEKARANG ⚡";
-                if (btnSubmit) {
-                    btnSubmit.innerText = "SINKRONISASI SERVER... ⏳";
-                    btnSubmit.disabled = true;
-                }
-                
-                // Gunakan jalur REST API anti-gagal
+            try {
+                // Paksa tarik data terbaru agar selalu sinkron jika ada data impor baru
                 await window.tarikDataDariCloud(true);
-                
                 if (typeof window.deduplicateAndConsolidateState === 'function') {
                     window.deduplicateAndConsolidateState();
                 }
-                
+
+                if (role === 'orangtua') {
+                    let foundSiswa = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, username));
+                    if (!foundSiswa) {
+                        (window.cloudState.penempatan || []).forEach(p => {
+                            const sList = window.extractStudentList(p.siswa);
+                            const matchS = sList.find(s => window.isNameMatch(s, username));
+                            if (matchS && !foundSiswa) foundSiswa = { nama: matchS };
+                        });
+                    }
+                    if (!foundSiswa) {
+                        const matchUser = (window.cloudState.registeredUsers || []).find(u => u.role === 'siswa' && window.isNameMatch(u.nama, username));
+                        if (matchUser) foundSiswa = { nama: matchUser.nama };
+                    }
+
+                    if (btnSubmit) {
+                        btnSubmit.innerText = origText;
+                        btnSubmit.disabled = false;
+                    }
+
+                    if (foundSiswa) {
+                        window.suksesLogin({
+                            nama: `Wali dari ${foundSiswa.nama}`,
+                            namaAnanda: foundSiswa.nama,
+                            role: "orangtua",
+                            identitas: foundSiswa.nama
+                        });
+                    } else {
+                        window.suksesLogin({
+                            nama: `Wali dari ${username}`,
+                            namaAnanda: username,
+                            role: "orangtua",
+                            identitas: username
+                        });
+                    }
+                    return;
+                }
+
+                if (!pass) {
+                    if (btnSubmit) { btnSubmit.innerText = origText; btnSubmit.disabled = false; }
+                    return window.showModalInfo("Kata Sandi Kosong", "Silakan masukkan kata sandi Anda!");
+                }
+
+                // PENCARIAN KETAT SUPER AMAN (Force String Cast Anti-Crash)
+                const cleanU = String(username).toLowerCase().trim();
+                const cleanP = String(pass).trim();
+
+                let matchedUser = (window.cloudState.registeredUsers || []).find(u => {
+                    if (String(u.role).toLowerCase() !== String(role).toLowerCase()) return false;
+                    
+                    const dbUser = String(u.username || u.nip || u.nis || u.id || '').toLowerCase().trim();
+                    const dbPass = String(u.pass || u.password || u.kataSandi || u.sandi || '').trim();
+                    
+                    return (dbUser === cleanU && dbPass === cleanP);
+                });
+
                 if (btnSubmit) {
                     btnSubmit.innerText = origText;
                     btnSubmit.disabled = false;
                 }
-                
-                // Cek ulang setelah tersinkron dengan cloud
-                user = findMatchingUser(username, pass, role);
-            }
 
-            if (user) {
-                window.suksesLogin({
-                    nama: user.nama,
-                    role: user.role,
-                    identitas: user.identitas || user.username
-                });
-                return;
-            }
+                if (matchedUser) {
+                    window.suksesLogin({
+                        nama: matchedUser.nama,
+                        role: matchedUser.role,
+                        identitas: matchedUser.identitas || matchedUser.username
+                    });
+                } else {
+                    window.showModalInfo("Login Gagal", `Username atau kata sandi tidak cocok untuk <b>${roleDefaults[role]?.label}</b>.<br><br>Periksa kembali akun Anda atau hubungi Panitia.`);
+                }
 
-            window.showModalInfo("Login Gagal", `Username atau kata sandi tidak cocok untuk <b>${roleDefaults[role]?.label}</b>.<br><br>Periksa kembali akun Anda atau hubungi Panitia.`);
+            } catch (error) {
+                if (btnSubmit) {
+                    btnSubmit.innerText = origText;
+                    btnSubmit.disabled = false;
+                }
+                window.showModalInfo("Terjadi Kesalahan Sistem", "Sistem gagal memeriksa data Anda karena ada data yang rusak atau koneksi terputus. Silakan coba lagi. <br><br>Info Error: " + error.message);
+            }
         };
 
         window.suksesLogin = function(profile) {
