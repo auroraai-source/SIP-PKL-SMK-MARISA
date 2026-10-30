@@ -5433,25 +5433,32 @@
 
                     let count = 0;
                     json.forEach(row => {
-                        const nama = (row['Nama Lengkap'] || row['Nama'] || row['nama'] || '').toString().trim();
-                        const username = (row['Username'] || row['username'] || '').toString().trim();
-                        const pass = (row['Password'] || row['password'] || '123456').toString().trim();
+                        // Pencarian Kolom Cerdas (Otomatis mendeteksi variasi nama kolom dari Excel)
+                        const getVal = (keywords) => {
+                            const key = Object.keys(row).find(k => keywords.some(kw => k.toLowerCase().includes(kw)));
+                            return key ? row[key].toString().trim() : '';
+                        };
+
+                        const nama = getVal(['nama']);
+                        const username = getVal(['username', 'nip', 'nis', 'id']);
+                        const pass = getVal(['sandi', 'password', 'pass']); // Prioritaskan membaca sandi spesifik dari Excel
 
                         if (nama && username) {
                             window.cloudState.registeredUsers.push({
                                 role: targetRole,
-                                nama,
-                                username,
-                                pass,
+                                nama: nama,
+                                username: username,
+                                pass: pass || (targetRole === 'guru' ? 'guru123' : (targetRole === 'siswa' ? 'siswa123' : 'dudi123')), // Hanya fallback jika sel Excel benar-benar dibiarkan kosong
                                 identitas: username
                             });
                             count++;
                         }
                     });
 
+                    // Memastikan akun yang baru diimpor dari Excel ini menjadi prioritas utama (Reverse Override)
                     window.simpanDatabasePersisten(true);
                     window.closeDynamicModal();
-                    window.showModalInfo("Impor Berhasil", `Berhasil menambahkan ${count} akun.`);
+                    window.showModalInfo("Impor Berhasil ✅", `Berhasil memproses dan menyimpan <b>${count} akun</b> beserta kata sandi khusus dari file Excel Anda.`);
                     window.openFeature("kelola-akun", "Buat Akun & Kredensial");
                 } catch(err) {
                     window.showModalInfo("Gagal", err.message);
