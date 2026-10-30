@@ -2197,15 +2197,22 @@
                 window.deduplicateAndConsolidateState();
             }
 
-            // Helper pencarian akun KETAT (HANYA membaca Username dan Password)
+            // Helper pencarian akun KETAT TAPI CERDAS (Toleran terhadap spasi & alias excel)
             const findMatchingUser = (inputUser, inputPass, targetRole) => {
-                const cleanU = inputUser.toLowerCase().trim();
+                const cleanU = inputUser.toString().toLowerCase().trim();
+                const cleanP = inputPass.toString().trim();
 
                 // HANYA mencari di database Kredensial Akun Resmi (registeredUsers)
                 let found = (window.cloudState.registeredUsers || []).find(u => {
                     if (u.role !== targetRole) return false;
-                    const uNameMatch = (u.username || '').toLowerCase().trim() === cleanU;
-                    const passMatch = (u.pass === inputPass); // Password harus sama persis (case-sensitive)
+                    
+                    // Baca username/password dan alias jika ada dari hasil impor Excel lawas
+                    const dbUser = (u.username || u.nip || u.nis || u.id || '').toString().toLowerCase().trim();
+                    const dbPass = (u.pass || u.password || u.kataSandi || u.sandi || '').toString().trim();
+                    
+                    const uNameMatch = (dbUser === cleanU);
+                    const passMatch = (dbPass === cleanP); 
+                    
                     return uNameMatch && passMatch;
                 });
 
