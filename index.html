@@ -2192,8 +2192,9 @@
 
             if (!username) return window.showModalInfo("Identitas Kosong", "Mohon masukkan data identitas Anda!");
 
-            // Bypass khusus akun panitia default agar tidak terkunci
-            if (role === 'admin' && (username.toLowerCase() === 'panitia pkl' || username.toLowerCase() === 'admin') && pass === 'SMKBisa2000') {
+            // Bypass khusus akun panitia default agar tidak terkunci (kebal spasi/kapital)
+            const cleanAdminU = String(username).toLowerCase().replace(/\s+/g, '');
+            if (role === 'admin' && (cleanAdminU === 'panitiapkl' || cleanAdminU === 'admin') && String(pass).toLowerCase().replace(/\s+/g, '') === 'smkbisa2000') {
                 window.suksesLogin({ nama: "Panitia PKL SMKN 1 Marisa", role: "admin", identitas: "PANITIA-2026" });
                 return;
             }
@@ -2205,11 +2206,20 @@
             }
 
             try {
-                // Paksa tarik data terbaru agar selalu sinkron jika ada data impor baru
-                await window.tarikDataDariCloud(true);
-                if (typeof window.deduplicateAndConsolidateState === 'function') {
-                    window.deduplicateAndConsolidateState();
-                }
+                // FUNGSI PENCARI SUPER TOLERAN (Mengabaikan Spasi Gaib & Huruf Besar dari Keyboard HP)
+                const findMatchedUser = () => {
+                    const cleanU = String(username).toLowerCase().replace(/\s+/g, '');
+                    const cleanP = String(pass).toLowerCase().replace(/\s+/g, ''); 
+
+                    return (window.cloudState.registeredUsers || []).find(u => {
+                        if (!u || String(u.role).toLowerCase() !== String(role).toLowerCase()) return false;
+                        
+                        const dbUser = String(u.username || u.identitas || u.nip || u.nis || '').toLowerCase().replace(/\s+/g, '');
+                        const dbPass = String(u.pass || u.password || u.kataSandi || '').toLowerCase().replace(/\s+/g, '');
+                        
+                        return (dbUser === cleanU && dbPass === cleanP);
+                    });
+                };
 
                 if (role === 'orangtua') {
                     let foundSiswa = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, username));
@@ -2253,24 +2263,28 @@
                     return window.showModalInfo("Kata Sandi Kosong", "Silakan masukkan kata sandi Anda!");
                 }
 
-                // PENCARIAN KETAT SUPER AMAN (Force String Cast Anti-Crash)
-                const cleanU = String(username).toLowerCase().trim();
-                const cleanP = String(pass).trim();
+                // 1. CEK CEPAT DI MEMORI LOKAL TERLEBIH DAHULU
+                let matchedUser = findMatchedUser();
 
-                let matchedUser = (window.cloudState.registeredUsers || []).find(u => {
-                    if (String(u.role).toLowerCase() !== String(role).toLowerCase()) return false;
+                // 2. JIKA GAGAL: Tarik Cloud Server (Mungkin data Excel baru diimpor di PC lain)
+                if (!matchedUser) {
+                    if (btnSubmit) btnSubmit.innerText = "SINKRONISASI SERVER... ⏳";
+                    await window.tarikDataDariCloud(true);
                     
-                    const dbUser = String(u.username || u.nip || u.nis || u.id || '').toLowerCase().trim();
-                    const dbPass = String(u.pass || u.password || u.kataSandi || u.sandi || '').trim();
+                    if (typeof window.bersihkanDanDeduplikasiAkun === 'function') {
+                        window.bersihkanDanDeduplikasiAkun();
+                    }
                     
-                    return (dbUser === cleanU && dbPass === cleanP);
-                });
+                    // Cek Ulang Setelah Sinkronisasi
+                    matchedUser = findMatchedUser();
+                }
 
                 if (btnSubmit) {
                     btnSubmit.innerText = origText;
                     btnSubmit.disabled = false;
                 }
 
+                // 3. KEPUTUSAN FINAL
                 if (matchedUser) {
                     window.suksesLogin({
                         nama: matchedUser.nama,
@@ -2278,7 +2292,7 @@
                         identitas: matchedUser.identitas || matchedUser.username
                     });
                 } else {
-                    window.showModalInfo("Login Gagal", `Username atau kata sandi tidak cocok untuk <b>${roleDefaults[role]?.label}</b>.<br><br>Periksa kembali akun Anda atau hubungi Panitia.`);
+                    window.showModalInfo("Login Gagal", `Username atau kata sandi tidak cocok untuk <b>${roleDefaults[role]?.label || role}</b>.<br><br>Sistem telah menelusuri data lokal maupun cloud server, namun kredensial Anda tidak ditemukan. Periksa kembali atau hubungi Panitia.`);
                 }
 
             } catch (error) {
@@ -2286,7 +2300,7 @@
                     btnSubmit.innerText = origText;
                     btnSubmit.disabled = false;
                 }
-                window.showModalInfo("Terjadi Kesalahan Sistem", "Sistem gagal memeriksa data Anda karena ada data yang rusak atau koneksi terputus. Silakan coba lagi. <br><br>Info Error: " + error.message);
+                window.showModalInfo("Terjadi Kesalahan Sistem", "Koneksi terputus saat memverifikasi data. Info Error: " + error.message);
             }
         };
 
@@ -5314,32 +5328,35 @@
 
                     let count = 0;
                     json.forEach(row => {
-                        // Pencarian Kolom Cerdas (Otomatis mendeteksi variasi nama kolom dari Excel)
+                        // Pencarian Kolom Cerdas & Kebal Spasi (Mendeteksi berbagai variasi nama kolom Excel)
                         const getVal = (keywords) => {
-                            const key = Object.keys(row).find(k => keywords.some(kw => k.toLowerCase().includes(kw)));
-                            return key ? row[key].toString().trim() : '';
+                            const key = Object.keys(row).find(k => {
+                                const cleanK = String(k).toLowerCase().replace(/[^a-z0-9]/g, '');
+                                return keywords.some(kw => cleanK.includes(kw));
+                            });
+                            return key ? String(row[key]).trim() : '';
                         };
 
-                        const nama = getVal(['nama']);
-                        const username = getVal(['username', 'nip', 'nis', 'id']);
-                        const pass = getVal(['sandi', 'password', 'pass']); // Prioritaskan membaca sandi spesifik dari Excel
+                        const nama = getVal(['nama', 'name', 'lengkap']);
+                        const username = getVal(['user', 'nip', 'nis', 'id', 'akun']);
+                        const pass = getVal(['pass', 'sandi']); 
 
                         if (nama && username) {
                             window.cloudState.registeredUsers.push({
                                 role: targetRole,
                                 nama: nama,
                                 username: username,
-                                pass: pass || (targetRole === 'guru' ? 'guru123' : (targetRole === 'siswa' ? 'siswa123' : 'dudi123')), // Hanya fallback jika sel Excel benar-benar dibiarkan kosong
+                                pass: pass || (targetRole === 'guru' ? 'guru123' : (targetRole === 'siswa' ? 'siswa123' : 'dudi123')),
                                 identitas: username
                             });
                             count++;
                         }
                     });
 
-                    // Memastikan akun yang baru diimpor dari Excel ini menjadi prioritas utama (Reverse Override)
+                    window.bersihkanDanDeduplikasiAkun();
                     window.simpanDatabasePersisten(true);
                     window.closeDynamicModal();
-                    window.showModalInfo("Impor Berhasil ✅", `Berhasil memproses dan menyimpan <b>${count} akun</b> beserta kata sandi khusus dari file Excel Anda.`);
+                    window.showModalInfo("Impor Berhasil ✅", `Berhasil memproses dan menyimpan <b>${count} akun</b>. Kredensial siap digunakan untuk login.`);
                     window.openFeature("kelola-akun", "Buat Akun & Kredensial");
                 } catch(err) {
                     window.showModalInfo("Gagal", err.message);
