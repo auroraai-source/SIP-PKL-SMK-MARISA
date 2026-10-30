@@ -1391,6 +1391,16 @@
                     const indArr = window.extractIndustryList(item.industri);
                     const siswaArr = window.extractStudentList(item.siswa);
 
+                    // PENTING: Inisialisasi pengikat spesifik industri per siswa
+                    let currentSiswaIndMap = item.siswaIndustriMap || {};
+
+                    // Jika dari Excel (Map kosong) tapi ada industri & siswa spesifik di baris ini
+                    if (Object.keys(currentSiswaIndMap).length === 0 && indArr.length > 0) {
+                        siswaArr.forEach(s => {
+                            currentSiswaIndMap[s] = indArr[0]; // Ikat siswa di baris ini dengan industri di baris ini
+                        });
+                    }
+
                     siswaArr.forEach(sName => {
                         const sObj = (p.siswa || []).find(s => window.isNameMatch(s.nama, sName));
                         if (sObj && sObj.industri && sObj.industri !== '-') {
@@ -1398,6 +1408,8 @@
                             if (sIndKey && !indArr.some(i => window.normalizeTextCompact(i) === sIndKey)) {
                                 indArr.push(sObj.industri.trim());
                             }
+                            // Jika ada di data master, perkuat ikatannya
+                            if (!currentSiswaIndMap[sName]) currentSiswaIndMap[sName] = sObj.industri.trim();
                         }
                     });
 
@@ -1407,7 +1419,7 @@
                             guru: officialGuruName,
                             industri: indArr,
                             siswa: siswaArr,
-                            siswaIndustriMap: item.siswaIndustriMap || {}
+                            siswaIndustriMap: currentSiswaIndMap
                         });
                     } else {
                         const ex = penMap.get(gKey);
@@ -1421,6 +1433,10 @@
                             const sKey = window.normalizeTextCompact(newSiswa);
                             if (sKey && !ex.siswa.some(existingSiswa => window.normalizeTextCompact(existingSiswa) === sKey)) {
                                 ex.siswa.push(newSiswa);
+                            }
+                            // Pastikan siswa yang baru digabung juga dimasukkan ke map eksisting guru tersebut
+                            if (currentSiswaIndMap[newSiswa]) {
+                                ex.siswaIndustriMap[newSiswa] = currentSiswaIndMap[newSiswa];
                             }
                         });
                         if (item.siswaIndustriMap && typeof item.siswaIndustriMap === 'object') {
@@ -1437,7 +1453,14 @@
                         const sObj = (p.siswa || []).find(s => window.isNameMatch(s.nama, sName));
                         if (sObj) {
                             sObj.guru = pen.guru;
-                            const mappedInd = (pen.siswaIndustriMap && pen.siswaIndustriMap[sObj.nama]) || (pen.siswaIndustriMap && pen.siswaIndustriMap[sName]);
+                            
+                            // Cari kecocokan map industri dengan aman
+                            let mappedInd = null;
+                            if (pen.siswaIndustriMap) {
+                                const mapKey = Object.keys(pen.siswaIndustriMap).find(k => window.isNameMatch(k, sName));
+                                if (mapKey) mappedInd = pen.siswaIndustriMap[mapKey];
+                            }
+
                             if (mappedInd && mappedInd !== '-') {
                                 sObj.industri = mappedInd;
                             } else if (!sObj.industri || sObj.industri === '-' || !indList.some(i => window.normalizeTextCompact(i) === window.normalizeTextCompact(sObj.industri))) {
@@ -3072,10 +3095,21 @@
                     if (s && s.trim()) {
                         const sClean = s.trim();
                         const sMaster = (window.cloudState.siswa || []).find(item => window.isNameMatch(item.nama, sClean));
-                        // Cari industri spesifik siswa ini (dari siswaIndustriMap, atau dari Master Siswa, atau daftar industri alokasi)
-                        let specificInd = (p.siswaIndustriMap && (p.siswaIndustriMap[sClean] || (sMaster && p.siswaIndustriMap[sMaster.nama]))) ||
-                                          (sMaster && sMaster.industri && sMaster.industri !== '-' ? sMaster.industri : '') ||
-                                          (indArr.length > 0 ? indArr.join(', ') : 'DUDI Mitra');
+                        
+                        // Cari industri spesifik siswa ini dengan tangguh (kebal huruf besar/kecil)
+                        let specificInd = null;
+                        if (p.siswaIndustriMap) {
+                            const mapKey = Object.keys(p.siswaIndustriMap).find(k => window.isNameMatch(k, sClean));
+                            if (mapKey) specificInd = p.siswaIndustriMap[mapKey];
+                        }
+                        
+                        if (!specificInd && sMaster && sMaster.industri && sMaster.industri !== '-') {
+                            specificInd = sMaster.industri;
+                        }
+                        if (!specificInd || specificInd === '-') {
+                            specificInd = indArr.length > 0 ? indArr[0] : 'DUDI Mitra';
+                        }
+
                         if (specificInd && specificInd !== 'DUDI Mitra') myIndustriSet.add(specificInd);
 
                         myStudentMap.set(window.normalizeTextCompact(sClean), {
@@ -7814,11 +7848,17 @@
                     const cleanName = sNama.trim();
                     const sData = (window.cloudState.siswa || []).find(s => s.nama.toLowerCase().trim() === cleanName.toLowerCase()) || {};
                     
-                    // Prioritas 1: Mapping Spesifik Siswa -> Industri
+                    // Prioritas 1: Mapping Spesifik Siswa -> Industri (Kebal huruf besar/kecil)
                     // Prioritas 2: Data Master Siswa
                     // Prioritas 3: Industri pertama di dalam array alokasi guru (fallback)
-                    let specificInd = (p.siswaIndustriMap && (p.siswaIndustriMap[cleanName] || (sData.nama && p.siswaIndustriMap[sData.nama]))) || 
-                                      (sData.industri && sData.industri !== '-' ? sData.industri : '');
+                    let specificInd = null;
+                    if (p.siswaIndustriMap) {
+                        const mapKey = Object.keys(p.siswaIndustriMap).find(k => window.isNameMatch(k, cleanName));
+                        if (mapKey) specificInd = p.siswaIndustriMap[mapKey];
+                    }
+                    if (!specificInd && sData.industri && sData.industri !== '-') {
+                        specificInd = sData.industri;
+                    }
                     
                     if (!specificInd || specificInd === '-') {
                         specificInd = indList.length > 0 ? indList[0] : 'DUDI Mitra';
