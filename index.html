@@ -1283,118 +1283,33 @@
             if (!p || !Array.isArray(p.registeredUsers)) return;
 
             const finalUsers = [];
-            const seenSiswa = new Set();
-            const seenGuru = new Set();
-            const seenInd = new Set();
-            const seenAdmin = new Set();
-            const seenOther = new Set();
-
-            const siswaList = p.siswa || [];
-            const guruList = p.guru || [];
-            const indList = p.industri || [];
+            const seenKeys = new Set();
 
             // Balik urutan agar data Kredensial yang terbaru/diimpor dari Excel mendapat prioritas utama
             const reversedUsers = [...p.registeredUsers].reverse();
 
             reversedUsers.forEach(u => {
-                if (!u || !u.role) return;
+                if (!u || !u.role || !u.username) return;
                 const role = u.role.toLowerCase().trim();
-                const nama = (u.nama || '').trim();
-                const username = (u.username || '').toString().trim();
+                const username = u.username.toString().toLowerCase().trim();
                 const pass = u.pass || (role === 'guru' ? 'guru123' : (role === 'siswa' ? 'siswa123' : 'dudi123'));
+                
+                // Kunci paten: Role + Username. (Tidak ada lagi penghapusan buta jika nama tidak sama persis)
+                const key = role + '_' + username;
 
-                if (role === 'siswa') {
-                    // Cari referensi siswa di Data Master Siswa
-                    const matchedS = siswaList.find(s => 
-                        window.isNameMatch(s.nama, nama) || 
-                        (s.nis && String(s.nis).trim() === username) ||
-                        window.isNameMatch(s.nama, username)
-                    );
-
-                    // STRICT PURGE: Jika akun siswa ini TIDAK ADA di Data Master Siswa, hapus permanen!
-                    if (!matchedS) return;
-
-                    // Kunci identitas tunggal siswa: nama kanonik kompak dari master data
-                    const canonKey = 'siswa_' + window.normalizeTextCompact(matchedS.nama);
-
-                    if (!seenSiswa.has(canonKey)) {
-                        seenSiswa.add(canonKey);
-                        // Prioritaskan username dari input/Excel jika ada, jika tidak gunakan NIS
-                        const finalUsername = username ? username : ((matchedS.nis && matchedS.nis !== '-') ? String(matchedS.nis).trim() : window.normalizeTextCompact(matchedS.nama));
-                        finalUsers.push({
-                            role: 'siswa',
-                            nama: matchedS.nama,
-                            username: finalUsername,
-                            pass: pass,
-                            identitas: finalUsername
-                        });
-                    }
-                } else if (role === 'guru') {
-                    const matchedG = guruList.find(g => 
-                        window.normalizeGuruKey(g.nama) === window.normalizeGuruKey(nama) ||
-                        (g.nip && String(g.nip).trim() === username) ||
-                        window.normalizeGuruKey(g.nama) === window.normalizeGuruKey(username)
-                    );
-
-                    // STRICT PURGE: Jika akun guru ini TIDAK ADA di Data Master Guru, hapus permanen!
-                    if (!matchedG) return;
-
-                    const canonKey = 'guru_' + window.normalizeGuruKey(matchedG.nama);
-
-                    if (!seenGuru.has(canonKey)) {
-                        seenGuru.add(canonKey);
-                        const finalUsername = username ? username : ((matchedG.nip && matchedG.nip !== '-') ? String(matchedG.nip).trim() : window.normalizeGuruKey(matchedG.nama));
-                        finalUsers.push({
-                            role: 'guru',
-                            nama: matchedG.nama,
-                            username: finalUsername,
-                            pass: pass,
-                            identitas: finalUsername
-                        });
-                    }
-                } else if (role === 'industri') {
-                    const matchedI = indList.find(i => 
-                        window.normalizeTextCompact(i.nama) === window.normalizeTextCompact(nama) ||
-                        (username && window.normalizeTextCompact(i.nama) === window.normalizeTextCompact(username))
-                    );
-
-                    // STRICT PURGE: Jika akun industri ini TIDAK ADA di Master Industri, hapus permanen!
-                    if (!matchedI) return;
-
-                    const canonKey = 'ind_' + window.normalizeTextCompact(matchedI.nama);
-                    if (!seenInd.has(canonKey)) {
-                        seenInd.add(canonKey);
-                        const finalUsername = username ? username : window.normalizeTextCompact(matchedI.nama);
-                        finalUsers.push({
-                            role: 'industri',
-                            nama: matchedI.nama,
-                            username: finalUsername,
-                            pass: pass,
-                            identitas: finalUsername
-                        });
-                    }
-                } else if (role === 'admin') {
-                    const canonKey = 'admin_' + username.toLowerCase();
-                    if (!seenAdmin.has(canonKey)) {
-                        seenAdmin.add(canonKey);
-                        finalUsers.push({
-                            role: 'admin',
-                            nama: nama || 'Panitia PKL SMKN 1 Marisa',
-                            username: username || 'Panitia PKL',
-                            pass: pass || 'SMKBisa2000',
-                            identitas: 'PANITIA-2026'
-                        });
-                    }
-                } else {
-                    const canonKey = role + '_' + username.toLowerCase();
-                    if (!seenOther.has(canonKey)) {
-                        seenOther.add(canonKey);
-                        finalUsers.push(u);
-                    }
+                if (!seenKeys.has(key)) {
+                    seenKeys.add(key);
+                    finalUsers.push({
+                        role: role,
+                        nama: (u.nama || '').trim(),
+                        username: u.username.toString().trim(),
+                        pass: pass,
+                        identitas: u.identitas || u.username.toString().trim()
+                    });
                 }
             });
 
-            // Kembalikan ke urutan asli (data baru akan tampil di posisi aman tanpa menimpa password custom)
+            // Kembalikan ke urutan asli
             p.registeredUsers = finalUsers.reverse();
         };
 
@@ -1688,112 +1603,118 @@
         };
 
         window.kirimSnapshotKeSupabase = async function(payload, silent = false) {
-            if (!window.supabaseClient) {
-                if (!silent) {
-                    window.showModalInfo("Koneksi Belum Terhubung ❌", "Klien Supabase belum terhubung. Periksa konfigurasi URL & Key di menu Database Cloud.");
-                }
-                return false;
-            }
-            try {
-                const cleanData = window.getSanitizedCloudPayload();
-                let okState = false;
-                let okCloud = false;
-                let errMsg = "";
+            const cleanData = window.getSanitizedCloudPayload();
+            let success = false;
+            let errMsg = "";
 
+            // 1. Coba via Supabase JS Client (Utama)
+            if (window.supabaseClient) {
                 try {
                     const resState = await window.supabaseClient.from('app_state').upsert({ id: 1, payload: cleanData }, { onConflict: 'id' });
-                    if (!resState.error) okState = true;
-                    else errMsg += "app_state: " + resState.error.message + "; ";
-                } catch(e) { errMsg += "app_state: " + e.message + "; "; }
-
-                try {
                     const resCloud = await window.supabaseClient.from('app_cloud_db').upsert({ id: 'master', payload: cleanData }, { onConflict: 'id' });
-                    if (!resCloud.error) okCloud = true;
-                    else errMsg += "app_cloud_db: " + resCloud.error.message + "; ";
-                } catch(e) { errMsg += "app_cloud_db: " + e.message + "; "; }
+                    if (!resState.error || !resCloud.error) success = true;
+                    else errMsg = resState.error.message;
+                } catch(e) { errMsg = e.message; }
+            }
 
-                if (okState || okCloud) {
-                    window.isCloudConnected = true;
-                    if (!silent) {
-                        const now = new Date();
-                        const timeStr = now.toLocaleDateString('id-ID') + " " + now.toLocaleTimeString('it-IT') + " WITA";
-                        window.showModalInfo("Berhasil Unggah ke Cloud! ⚡", `
-                            Seluruh database sistem berhasil diunggah dan disimpan permanen ke server Supabase Cloud pada <b>${timeStr}</b>.<br><br>
-                            <b>Ringkasan Data yang Disimpan ke Cloud:</b><br>
-                            &bull; 👨‍🎓 Data Siswa Master: <b>${cleanData.siswa.length}</b> siswa<br>
-                            &bull; 👩‍🏫 Data Guru Master: <b>${cleanData.guru.length}</b> guru<br>
-                            &bull; 🏭 Mitra Industri DUDI: <b>${cleanData.industri.length}</b> industri<br>
-                            &bull; 🔄 Alokasi Guru & Siswa: <b>${cleanData.penempatan.length}</b> kelompok penempatan<br>
-                            &bull; 🚗 Alokasi Guru Monitoring: <b>${cleanData.penugasanMonitoring.length}</b> surat tugas<br>
-                            &bull; 📍 Rekaman Presensi: <b>${cleanData.absensi.length}</b> data log<br>
-                            &bull; 📖 Jurnal Kegiatan: <b>${cleanData.jurnal.length}</b> catatan jurnal<br>
-                            &bull; 🔑 Akun & Kredensial: <b>${cleanData.registeredUsers.length}</b> akun<br><br>
-                            <span style="color:#16a34a; font-weight:800;">✓ Data tersinkronisasi aman dan siap diakses di seluruh perangkat (HP / Laptop)!</span>
-                        `);
-                    }
-                    return true;
-                } else {
-                    if (!silent) {
-                        window.showModalInfo("Gagal Mengunggah ke Cloud ❌", "Terjadi kendala saat menyimpan ke Supabase: " + (errMsg || "Tabel tidak merespons.") + "<br><br><i>Catatan: Seluruh data Anda tetap tersimpan aman di penyimpanan internal perangkat ini.</i>");
-                    }
-                    return false;
+            // 2. JALUR TOL: Fallback tangguh via Native REST API Fetch (Anti Gagal di HP / Jaringan Lemah)
+            if (!success) {
+                const creds = window.getSupabaseCredentials();
+                try {
+                    const url = `${creds.url}/rest/v1/app_state`;
+                    const headers = {
+                        'apikey': creds.key,
+                        'Authorization': `Bearer ${creds.key}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'resolution=merge-duplicates'
+                    };
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify({ id: 1, payload: cleanData })
+                    });
+                    
+                    const url2 = `${creds.url}/rest/v1/app_cloud_db`;
+                    await fetch(url2, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify({ id: 'master', payload: cleanData })
+                    });
+
+                    if (res.ok) success = true;
+                } catch(e) {
+                    if (!errMsg) errMsg = e.message;
                 }
-            } catch (err) {
-                if (!silent) window.showModalInfo("Galat Pengunggahan ❌", err.message);
+            }
+
+            if (success) {
+                window.isCloudConnected = true;
+                if (!silent) {
+                    const now = new Date();
+                    const timeStr = now.toLocaleDateString('id-ID') + " " + now.toLocaleTimeString('it-IT') + " WITA";
+                    window.showModalInfo("Berhasil Unggah ke Cloud! ⚡", `
+                        Seluruh database sistem berhasil diunggah dan disimpan permanen ke server Supabase Cloud pada <b>${timeStr}</b>.<br><br>
+                        <b>Ringkasan Data Tersimpan:</b><br>
+                        &bull; 👨‍🎓 Siswa: <b>${cleanData.siswa.length}</b> &bull; 👩‍🏫 Guru: <b>${cleanData.guru.length}</b> &bull; 🏭 Industri: <b>${cleanData.industri.length}</b><br>
+                        &bull; 🔑 Akun & Kredensial Login: <b>${cleanData.registeredUsers.length}</b> akun siap pakai!<br><br>
+                        <span style="color:#16a34a; font-weight:800;">✓ Data tersinkronisasi aman dan siap diakses di seluruh perangkat (HP / Laptop).</span>
+                    `);
+                }
+                return true;
+            } else {
+                if (!silent) {
+                    window.showModalInfo("Gagal Mengunggah ke Cloud ❌", "Terjadi kendala saat menyimpan ke Supabase: " + (errMsg || "Koneksi terputus.") + "<br><br><i>Catatan: Data tetap tersimpan aman di perangkat Anda.</i>");
+                }
                 return false;
             }
         };
 
         window.tarikDataDariCloud = async function(silent = true) {
-            if (!window.supabaseClient) {
-                if (!silent) {
-                    window.showModalInfo("Koneksi Belum Terhubung ❌", "Klien Supabase belum terinisialisasi. Cek konfigurasi URL & Key di menu Database Cloud.");
-                }
-                return false;
-            }
-            try {
-                let cloudPayload = null;
-                // Coba ambil dari app_state id 1
+            let cloudPayload = null;
+            let errMsg = "";
+
+            // 1. Coba via Supabase JS Client (Utama)
+            if (window.supabaseClient) {
                 try {
                     const { data: dState } = await window.supabaseClient.from('app_state').select('payload').eq('id', 1).maybeSingle();
                     if (dState && dState.payload) cloudPayload = dState.payload;
-                } catch(e) {}
+                } catch(e) { errMsg = e.message; }
+            }
 
-                // Jika tidak ada di app_state, coba ambil dari app_cloud_db master
-                if (!cloudPayload) {
-                    try {
-                        const { data: dCloud } = await window.supabaseClient.from('app_cloud_db').select('payload').eq('id', 'master').maybeSingle();
-                        if (dCloud && dCloud.payload) cloudPayload = dCloud.payload;
-                    } catch(e) {}
+            // 2. JALUR TOL: Fallback tangguh via Native REST API Fetch (Jaminan Download di HP)
+            if (!cloudPayload) {
+                const creds = window.getSupabaseCredentials();
+                try {
+                    const res = await fetch(`${creds.url}/rest/v1/app_state?id=eq.1&select=payload`, {
+                        headers: { 'apikey': creds.key, 'Authorization': `Bearer ${creds.key}` }
+                    });
+                    if (res.ok) {
+                        const json = await res.json();
+                        if (json && json.length > 0) cloudPayload = json[0].payload;
+                    }
+                } catch(e) {
+                    if (!errMsg) errMsg = e.message;
                 }
+            }
 
-                if (cloudPayload) {
-                    window.terapkanDataRealtime(cloudPayload);
-                    window.isCloudConnected = true;
-                    if (!silent) {
-                        const p = window.cloudState;
-                        window.showModalInfo("Data Cloud Berhasil Ditarik! 📥", `
-                            Database terbaru berhasil diambil dari Supabase Cloud dan digabungkan secara aman ke sistem.<br><br>
-                            <b>Ringkasan Database Saat Ini:</b><br>
-                            &bull; 👨‍🎓 Data Siswa: <b>${(p.siswa || []).length}</b> siswa<br>
-                            &bull; 👩‍🏫 Data Guru: <b>${(p.guru || []).length}</b> guru<br>
-                            &bull; 🏭 Mitra Industri DUDI: <b>${(p.industri || []).length}</b> industri<br>
-                            &bull; 🔄 Alokasi Guru & Siswa: <b>${(p.penempatan || []).length}</b> kelompok alokasi<br>
-                            &bull; 🚗 Alokasi Monitoring: <b>${(p.penugasanMonitoring || []).length}</b> tugas<br>
-                            &bull; 📍 Presensi Global: <b>${(p.absensi || []).length}</b> data<br>
-                            &bull; 📖 Jurnal Siswa: <b>${(p.jurnal || []).length}</b> log<br><br>
-                            <span style="color:#0284c7; font-weight:800;">✓ Data lokal telah diperbarui dengan sistem penggabungan aman (Smart Merge) tanpa menghapus data yang sudah ada.</span>
-                        `);
-                    }
-                    return true;
-                } else {
-                    if (!silent) {
-                        window.showModalInfo("Data Cloud Belum Ada", "Tidak ditemukan payload data di tabel Supabase. Klik tombol <b>⚡ Unggah ke Cloud Sekarang</b> untuk mencadangkan data lokal ke server.");
-                    }
-                    return false;
+            if (cloudPayload) {
+                window.terapkanDataRealtime(cloudPayload);
+                window.isCloudConnected = true;
+                if (!silent) {
+                    const p = window.cloudState;
+                    window.showModalInfo("Data Cloud Berhasil Ditarik! 📥", `
+                        Database terbaru berhasil diambil dari Supabase Cloud dan digabungkan secara aman ke sistem.<br><br>
+                        <b>Ringkasan Database Saat Ini:</b><br>
+                        &bull; 👨‍🎓 Siswa: <b>${(p.siswa || []).length}</b> &bull; 👩‍🏫 Guru: <b>${(p.guru || []).length}</b><br>
+                        &bull; 🔑 Kredensial Login Aktif: <b>${(p.registeredUsers || []).length}</b> akun<br><br>
+                        <span style="color:#0284c7; font-weight:800;">✓ Data lokal telah diperbarui dengan sistem penggabungan aman.</span>
+                    `);
                 }
-            } catch (err) {
-                if (!silent) window.showModalInfo("Galat Tarik Data ❌", err.message);
+                return true;
+            } else {
+                if (!silent) {
+                    window.showModalInfo("Data Cloud Belum Ada", "Tidak ditemukan payload data di tabel Supabase, atau koneksi terhalang.");
+                }
                 return false;
             }
         };
@@ -2334,8 +2255,8 @@
             if (role === 'orangtua') {
                 // Jika data siswa lokal masih sedikit (belum selesai tarik cloud), tarik dulu otomatis tanpa perlu refresh
                 let foundSiswa = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, username));
-                if (!foundSiswa && window.supabaseClient) {
-                    if (btnSubmit) { btnSubmit.innerText = "MENYINKRONKAN DATA... ⏳"; btnSubmit.disabled = true; }
+                if (!foundSiswa) {
+                    if (btnSubmit) { btnSubmit.innerText = "SINKRONISASI SERVER... ⏳"; btnSubmit.disabled = true; }
                     await window.tarikDataDariCloud(true);
                     if (btnSubmit) { btnSubmit.innerText = "MASUK KE ROOM SEKARANG ⚡"; btnSubmit.disabled = false; }
                     foundSiswa = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, username));
@@ -2376,24 +2297,27 @@
             // Cek di memori lokal terlebih dahulu
             let user = findMatchingUser(username, pass, role);
 
-            // SOLUSI ANTI-REFRESH: Jika belum cocok (misal 30 guru baru buka web bersamaan dan cloud belum selesai dimuat),
-            // otomatis tarik data terbaru dari Supabase Cloud saat itu juga lalu cek ulang!
-            if (!user && window.supabaseClient) {
+            // SOLUSI PATEN HP: Jika tidak cocok, KITA PAKSA SINKRON DENGAN SERVER SAAT ITU JUGA!
+            if (!user) {
                 const origText = btnSubmit ? btnSubmit.innerText : "MASUK KE ROOM SEKARANG ⚡";
                 if (btnSubmit) {
-                    btnSubmit.innerText = "MEMVERIFIKASI AKUN CLOUD... ⏳";
+                    btnSubmit.innerText = "SINKRONISASI SERVER... ⏳";
                     btnSubmit.disabled = true;
                 }
-                try {
-                    await window.tarikDataDariCloud(true);
-                    if (typeof window.deduplicateAndConsolidateState === 'function') {
-                        window.deduplicateAndConsolidateState();
-                    }
-                } catch(e) {}
+                
+                // Gunakan jalur REST API anti-gagal
+                await window.tarikDataDariCloud(true);
+                
+                if (typeof window.deduplicateAndConsolidateState === 'function') {
+                    window.deduplicateAndConsolidateState();
+                }
+                
                 if (btnSubmit) {
                     btnSubmit.innerText = origText;
                     btnSubmit.disabled = false;
                 }
+                
+                // Cek ulang setelah tersinkron dengan cloud
                 user = findMatchingUser(username, pass, role);
             }
 
@@ -7909,17 +7833,30 @@
 
             const myPlacements = (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru));
             myPlacements.forEach(p => {
-                const indName = Array.isArray(p.industri) ? p.industri.join(', ') : (p.industri || 'DUDI Mitra');
+                const indList = window.extractIndustryList(p.industri);
                 const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                
                 sList.forEach(sNama => {
-                    const sData = (window.cloudState.siswa || []).find(s => s.nama.toLowerCase().trim() === sNama.toLowerCase().trim()) || {};
+                    const cleanName = sNama.trim();
+                    const sData = (window.cloudState.siswa || []).find(s => s.nama.toLowerCase().trim() === cleanName.toLowerCase()) || {};
+                    
+                    // Prioritas 1: Mapping Spesifik Siswa -> Industri
+                    // Prioritas 2: Data Master Siswa
+                    // Prioritas 3: Industri pertama di dalam array alokasi guru (fallback)
+                    let specificInd = (p.siswaIndustriMap && (p.siswaIndustriMap[cleanName] || (sData.nama && p.siswaIndustriMap[sData.nama]))) || 
+                                      (sData.industri && sData.industri !== '-' ? sData.industri : '');
+                    
+                    if (!specificInd || specificInd === '-') {
+                        specificInd = indList.length > 0 ? indList[0] : 'DUDI Mitra';
+                    }
+
                     rows += `<tr>
                         <td>${counter++}</td>
-                        <td><b>${sNama}</b></td>
+                        <td><b>${cleanName}</b></td>
                         <td>${sData.kelas || '-'}</td>
                         <td><code>${sData.nis || '-'}</code></td>
                         <td>${sData.noHp || '-'}</td>
-                        <td><span class="badge-status badge-blue">🏢 ${indName}</span></td>
+                        <td><span class="badge-status badge-blue" style="white-space:normal; text-align:center;">🏢 ${specificInd}</span></td>
                     </tr>`;
                 });
             });
