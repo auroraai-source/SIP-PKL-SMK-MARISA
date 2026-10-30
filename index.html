@@ -3096,16 +3096,16 @@
                         const sClean = s.trim();
                         const sMaster = (window.cloudState.siswa || []).find(item => window.isNameMatch(item.nama, sClean));
                         
-                        // Cari industri spesifik siswa ini dengan tangguh (kebal huruf besar/kecil)
-                        let specificInd = null;
-                        if (p.siswaIndustriMap) {
+                        // PRIORITAS MUTLAK (Sesuai Permintaan): Ambil langsung dari Data Master Siswa
+                        let specificInd = (sMaster && sMaster.industri && sMaster.industri !== '-') ? sMaster.industri : null;
+                        
+                        // Jika di master kosong, baru cari di map alokasi
+                        if (!specificInd && p.siswaIndustriMap) {
                             const mapKey = Object.keys(p.siswaIndustriMap).find(k => window.isNameMatch(k, sClean));
                             if (mapKey) specificInd = p.siswaIndustriMap[mapKey];
                         }
                         
-                        if (!specificInd && sMaster && sMaster.industri && sMaster.industri !== '-') {
-                            specificInd = sMaster.industri;
-                        }
+                        // Jika masih kosong, ambil yang pertama
                         if (!specificInd || specificInd === '-') {
                             specificInd = indArr.length > 0 ? indArr[0] : 'DUDI Mitra';
                         }
@@ -7846,20 +7846,18 @@
                 
                 sList.forEach(sNama => {
                     const cleanName = sNama.trim();
-                    const sData = (window.cloudState.siswa || []).find(s => s.nama.toLowerCase().trim() === cleanName.toLowerCase()) || {};
+                    const sData = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, cleanName)) || {};
                     
-                    // Prioritas 1: Mapping Spesifik Siswa -> Industri (Kebal huruf besar/kecil)
-                    // Prioritas 2: Data Master Siswa
-                    // Prioritas 3: Industri pertama di dalam array alokasi guru (fallback)
-                    let specificInd = null;
-                    if (p.siswaIndustriMap) {
+                    // PRIORITAS MUTLAK (Sesuai Permintaan): Ambil dari Data Master Siswa
+                    let specificInd = (sData.industri && sData.industri !== '-') ? sData.industri : null;
+
+                    // PRIORITAS KEDUA: Jika kosong di master, cek di map alokasi
+                    if (!specificInd && p.siswaIndustriMap) {
                         const mapKey = Object.keys(p.siswaIndustriMap).find(k => window.isNameMatch(k, cleanName));
                         if (mapKey) specificInd = p.siswaIndustriMap[mapKey];
                     }
-                    if (!specificInd && sData.industri && sData.industri !== '-') {
-                        specificInd = sData.industri;
-                    }
                     
+                    // FALLBACK TERAKHIR: Ambil industri pertama dari alokasi
                     if (!specificInd || specificInd === '-') {
                         specificInd = indList.length > 0 ? indList[0] : 'DUDI Mitra';
                     }
