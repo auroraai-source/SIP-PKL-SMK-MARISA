@@ -1278,6 +1278,126 @@
         // Memastikan 1 Guru = Maksimal 1 Baris di Alokasi Pembimbing & Monitoring,
         // serta mendukung banyak industri (Multi-Industri) dalam 1 baris yang sama.
         // =========================================================================
+        window.bersihkanDanDeduplikasiAkun = function() {
+            const p = window.cloudState;
+            if (!p || !Array.isArray(p.registeredUsers)) return;
+
+            const finalUsers = [];
+            const seenSiswa = new Set();
+            const seenGuru = new Set();
+            const seenInd = new Set();
+            const seenAdmin = new Set();
+            const seenOther = new Set();
+
+            const siswaList = p.siswa || [];
+            const guruList = p.guru || [];
+            const indList = p.industri || [];
+
+            // Balik urutan agar data Kredensial yang terbaru/diimpor dari Excel mendapat prioritas utama
+            const reversedUsers = [...p.registeredUsers].reverse();
+
+            reversedUsers.forEach(u => {
+                if (!u || !u.role) return;
+                const role = u.role.toLowerCase().trim();
+                const nama = (u.nama || '').trim();
+                const username = (u.username || '').toString().trim();
+                const pass = u.pass || (role === 'guru' ? 'guru123' : (role === 'siswa' ? 'siswa123' : 'dudi123'));
+
+                if (role === 'siswa') {
+                    // Cari referensi siswa di Data Master Siswa
+                    const matchedS = siswaList.find(s => 
+                        window.isNameMatch(s.nama, nama) || 
+                        (s.nis && String(s.nis).trim() === username) ||
+                        window.isNameMatch(s.nama, username)
+                    );
+
+                    // STRICT PURGE: Jika akun siswa ini TIDAK ADA di Data Master Siswa, hapus permanen!
+                    if (!matchedS) return;
+
+                    // Kunci identitas tunggal siswa: nama kanonik kompak dari master data
+                    const canonKey = 'siswa_' + window.normalizeTextCompact(matchedS.nama);
+
+                    if (!seenSiswa.has(canonKey)) {
+                        seenSiswa.add(canonKey);
+                        // Prioritaskan username dari input/Excel jika ada, jika tidak gunakan NIS
+                        const finalUsername = username ? username : ((matchedS.nis && matchedS.nis !== '-') ? String(matchedS.nis).trim() : window.normalizeTextCompact(matchedS.nama));
+                        finalUsers.push({
+                            role: 'siswa',
+                            nama: matchedS.nama,
+                            username: finalUsername,
+                            pass: pass,
+                            identitas: finalUsername
+                        });
+                    }
+                } else if (role === 'guru') {
+                    const matchedG = guruList.find(g => 
+                        window.normalizeGuruKey(g.nama) === window.normalizeGuruKey(nama) ||
+                        (g.nip && String(g.nip).trim() === username) ||
+                        window.normalizeGuruKey(g.nama) === window.normalizeGuruKey(username)
+                    );
+
+                    // STRICT PURGE: Jika akun guru ini TIDAK ADA di Data Master Guru, hapus permanen!
+                    if (!matchedG) return;
+
+                    const canonKey = 'guru_' + window.normalizeGuruKey(matchedG.nama);
+
+                    if (!seenGuru.has(canonKey)) {
+                        seenGuru.add(canonKey);
+                        const finalUsername = username ? username : ((matchedG.nip && matchedG.nip !== '-') ? String(matchedG.nip).trim() : window.normalizeGuruKey(matchedG.nama));
+                        finalUsers.push({
+                            role: 'guru',
+                            nama: matchedG.nama,
+                            username: finalUsername,
+                            pass: pass,
+                            identitas: finalUsername
+                        });
+                    }
+                } else if (role === 'industri') {
+                    const matchedI = indList.find(i => 
+                        window.normalizeTextCompact(i.nama) === window.normalizeTextCompact(nama) ||
+                        (username && window.normalizeTextCompact(i.nama) === window.normalizeTextCompact(username))
+                    );
+
+                    // STRICT PURGE: Jika akun industri ini TIDAK ADA di Master Industri, hapus permanen!
+                    if (!matchedI) return;
+
+                    const canonKey = 'ind_' + window.normalizeTextCompact(matchedI.nama);
+                    if (!seenInd.has(canonKey)) {
+                        seenInd.add(canonKey);
+                        const finalUsername = username ? username : window.normalizeTextCompact(matchedI.nama);
+                        finalUsers.push({
+                            role: 'industri',
+                            nama: matchedI.nama,
+                            username: finalUsername,
+                            pass: pass,
+                            identitas: finalUsername
+                        });
+                    }
+                } else if (role === 'admin') {
+                    const canonKey = 'admin_' + username.toLowerCase();
+                    if (!seenAdmin.has(canonKey)) {
+                        seenAdmin.add(canonKey);
+                        finalUsers.push({
+                            role: 'admin',
+                            nama: nama || 'Panitia PKL SMKN 1 Marisa',
+                            username: username || 'Panitia PKL',
+                            pass: pass || 'SMKBisa2000',
+                            identitas: 'PANITIA-2026'
+                        });
+                    }
+                } else {
+                    const canonKey = role + '_' + username.toLowerCase();
+                    if (!seenOther.has(canonKey)) {
+                        seenOther.add(canonKey);
+                        finalUsers.push(u);
+                    }
+                }
+            });
+
+            // Kembalikan ke urutan asli (data baru akan tampil di posisi aman tanpa menimpa password custom)
+            p.registeredUsers = finalUsers.reverse();
+        };
+
         window.deduplicateAndConsolidateState = function() {
             const p = window.cloudState;
             if (!p) return;
@@ -1350,14 +1470,12 @@
                     const gKey = window.normalizeGuruKey(item.guru);
                     if (!gKey) return;
 
-                    // Cari nama resmi guru dari Master Guru jika ada
                     const matchedMasterGuru = (p.guru || []).find(g => window.normalizeGuruKey(g.nama) === gKey);
                     const officialGuruName = matchedMasterGuru ? matchedMasterGuru.nama : item.guru.trim();
 
                     const indArr = window.extractIndustryList(item.industri);
                     const siswaArr = window.extractStudentList(item.siswa);
 
-                    // Ambil juga industri dari masing-masing siswa di Master Siswa jika relevan
                     siswaArr.forEach(sName => {
                         const sObj = (p.siswa || []).find(s => window.isNameMatch(s.nama, sName));
                         if (sObj && sObj.industri && sObj.industri !== '-') {
@@ -1378,14 +1496,12 @@
                         });
                     } else {
                         const ex = penMap.get(gKey);
-                        // Gabungkan industri tanpa duplikat
                         indArr.forEach(newInd => {
                             const nKey = window.normalizeTextCompact(newInd);
                             if (nKey && !ex.industri.some(existingInd => window.normalizeTextCompact(existingInd) === nKey)) {
                                 ex.industri.push(newInd);
                             }
                         });
-                        // Gabungkan siswa tanpa duplikat
                         siswaArr.forEach(newSiswa => {
                             const sKey = window.normalizeTextCompact(newSiswa);
                             if (sKey && !ex.siswa.some(existingSiswa => window.normalizeTextCompact(existingSiswa) === sKey)) {
@@ -1400,7 +1516,6 @@
 
                 p.penempatan = Array.from(penMap.values());
 
-                // Sinkronkan guru pembimbing ke Master Siswa, dan jaga industri spesifik per siswa
                 p.penempatan.forEach(pen => {
                     const indList = Array.isArray(pen.industri) ? pen.industri : window.extractIndustryList(pen.industri);
                     (pen.siswa || []).forEach(sName => {
@@ -1422,8 +1537,7 @@
                 });
             }
 
-            // 5. Konsolidasi Alokasi Guru Monitoring (Kunjungan Multi-Industri):
-            // PATEN: 1 Guru Monitoring = 1 Baris Surat Tugas Terpadu (Tidak Ganda)
+            // 5. Konsolidasi Alokasi Guru Monitoring (Kunjungan Multi-Industri)
             if (Array.isArray(p.penugasanMonitoring)) {
                 const monMap = new Map();
                 p.penugasanMonitoring.forEach(m => {
@@ -1467,59 +1581,8 @@
                 p.penugasanMonitoring = Array.from(monMap.values());
             }
 
-            // 6. Pastikan setiap Guru, Siswa, dan Industri di Master Data memiliki Akun Login aktif tanpa duplikat
-            if (!Array.isArray(p.registeredUsers)) p.registeredUsers = [];
-            const userMap = new Map();
-            p.registeredUsers.forEach(u => {
-                if (!u || !u.username || !u.role) return;
-                const uKey = u.role + '___' + String(u.username).toLowerCase().trim();
-                userMap.set(uKey, u);
-            });
-
-            (p.guru || []).forEach(g => {
-                const uname = (g.nip && g.nip !== '-') ? String(g.nip).trim() : g.nama.trim();
-                const uKey = 'guru___' + uname.toLowerCase();
-                if (!userMap.has(uKey)) {
-                    userMap.set(uKey, {
-                        role: 'guru',
-                        nama: g.nama.trim(),
-                        username: uname,
-                        pass: 'guru123',
-                        identitas: uname
-                    });
-                }
-            });
-
-            (p.siswa || []).forEach(s => {
-                const uname = (s.nis && s.nis !== '-') ? String(s.nis).trim() : s.nama.trim();
-                const uKey = 'siswa___' + uname.toLowerCase();
-                if (!userMap.has(uKey)) {
-                    userMap.set(uKey, {
-                        role: 'siswa',
-                        nama: s.nama.trim(),
-                        username: uname,
-                        pass: 'siswa123',
-                        identitas: uname
-                    });
-                }
-            });
-
-            (p.industri || []).forEach(ind => {
-                const defaultUname = ind.nama.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-                const hasExistingInd = Array.from(userMap.values()).some(u => u.role === 'industri' && window.normalizeTextCompact(u.nama) === window.normalizeTextCompact(ind.nama));
-                if (!hasExistingInd && defaultUname) {
-                    const uKey = 'industri___' + defaultUname;
-                    userMap.set(uKey, {
-                        role: 'industri',
-                        nama: ind.nama.trim(),
-                        username: defaultUname,
-                        pass: 'dudi123',
-                        identitas: defaultUname
-                    });
-                }
-            });
-
-            p.registeredUsers = Array.from(userMap.values());
+            // 6. Bersihkan duplikat akun kredensial (1 Siswa = Tepat 1 Akun, 1 Guru = Tepat 1 Akun, tanpa re-insert paksa yang menghambat delete)
+            window.bersihkanDanDeduplikasiAkun();
         };
 
         window.isNameMatch = function(nameA, nameB) {
@@ -1850,6 +1913,9 @@
                     userMap.set((cu.username || '').toLowerCase().trim() + '_' + cu.role, cu);
                 });
                 window.cloudState.registeredUsers = Array.from(userMap.values());
+                if (typeof window.bersihkanDanDeduplikasiAkun === 'function') {
+                    window.bersihkanDanDeduplikasiAkun();
+                }
             }
 
             // 7. Data aktivitas lainnya
@@ -4972,36 +5038,157 @@
 
         window.activeCredentialTab = "siswa";
 
+        window.bersihkanDuplikatAkunSekarang = function() {
+            const beforeCount = (window.cloudState.registeredUsers || []).length;
+            const beforeSiswa = (window.cloudState.registeredUsers || []).filter(u => u.role === 'siswa').length;
+            const beforeGuru = (window.cloudState.registeredUsers || []).filter(u => u.role === 'guru').length;
+
+            window.bersihkanDanDeduplikasiAkun();
+
+            const afterCount = (window.cloudState.registeredUsers || []).length;
+            const afterSiswa = (window.cloudState.registeredUsers || []).filter(u => u.role === 'siswa').length;
+            const afterGuru = (window.cloudState.registeredUsers || []).filter(u => u.role === 'guru').length;
+            const removed = beforeCount - afterCount;
+
+            window.simpanDatabasePersisten(true);
+
+            window.showModalInfo("Pembersihan Duplikat Berhasil 🧹", `
+                Sistem berhasil mendeteksi dan membersihkan <b>${removed} akun ganda/duplikat</b>:<br><br>
+                &bull; 👨‍🎓 <b>Akun Siswa:</b> Dari <b>${beforeSiswa}</b> akun dirapikan menjadi tepat <b>${afterSiswa} akun resmi</b> (1 akun per siswa).<br>
+                &bull; 👩‍🏫 <b>Akun Guru:</b> Dari <b>${beforeGuru}</b> akun dirapikan menjadi tepat <b>${afterGuru} akun resmi</b> (1 akun per guru).<br><br>
+                <span style="color:#16a34a; font-weight:800;">✓ Seluruh akun telah disinkronkan ke Supabase Cloud. Pengguna dapat login dengan lancar menggunakan NIS/NIP maupun Nama Lengkap!</span>
+            `);
+
+            window.openFeature("kelola-akun", "Buat Akun & Kredensial");
+        };
+
+        window.konfirmasiResetAkunTabIni = function(tab) {
+            const meta = roleConfigMeta[tab] || roleConfigMeta.siswa;
+            if (tab === 'admin') {
+                return window.showModalInfo("Aksi Dibatasi", "Akun Panitia/Admin tidak dapat dikosongkan demi keamanan sistem.");
+            }
+            window.showConfirmDialog(
+                `Kosongkan Semua Akun ${meta.label}`,
+                `Apakah Anda yakin ingin menghapus <b>SEMUA akun ${meta.label}</b> yang ada saat ini?<br><br>Setelah dikosongkan, Anda dapat mengklik tombol <b>⚡ Sinkronkan Akun Master</b> untuk membuat ulang akun resmi sesuai master data secara bersih tanpa duplikat.`,
+                () => {
+                    window.cloudState.registeredUsers = (window.cloudState.registeredUsers || []).filter(u => u.role !== tab);
+                    window.simpanDatabasePersisten(true);
+                    window.showModalInfo("Berhasil Dikosongkan 🗑️", `Seluruh akun ${meta.label} telah dibersihkan.`);
+                    window.openFeature("kelola-akun", "Buat Akun & Kredensial");
+                }
+            );
+        };
+
+        window.filterTabelAkunKredensial = function(q) {
+            const query = (q || '').toLowerCase().trim();
+            const rows = document.querySelectorAll('.row-akun-item');
+            rows.forEach(r => {
+                const text = r.innerText.toLowerCase();
+                r.style.display = (!query || text.includes(query)) ? '' : 'none';
+            });
+        };
+
         window.sinkronkanSemuaAkunKredensialOtomatis = function() {
-            window.showModalInfo("⏳ Menyinkronkan Akun...", "Sedang membuat akun untuk semua Siswa, Guru, dan Industri dari Data Master serta mengirimkannya ke Cloud...");
+            window.showModalInfo("⏳ Menyinkronkan Akun Master...", "Sedang memindai Data Master Siswa, Guru, dan Industri untuk membuatkan akun resmi yang belum ada...");
             
             setTimeout(() => {
-                if (typeof window.deduplicateAndConsolidateState === 'function') {
-                    window.deduplicateAndConsolidateState();
+                const p = window.cloudState;
+                if (!Array.isArray(p.registeredUsers)) p.registeredUsers = [];
+
+                // 1. Akun default admin
+                const hasAdmin = p.registeredUsers.some(u => u.role === 'admin');
+                if (!hasAdmin) {
+                    p.registeredUsers.push({
+                        role: 'admin',
+                        nama: 'Panitia PKL SMKN 1 Marisa',
+                        username: 'Panitia PKL',
+                        pass: 'SMKBisa2000',
+                        identitas: 'PANITIA-2026'
+                    });
                 }
 
-                const userMap = new Map();
-                (window.cloudState.registeredUsers || []).forEach(u => {
-                    if (u && u.role && u.username) {
-                        userMap.set(u.role + '___' + String(u.username).toLowerCase().trim(), u);
+                // 2. Buat akun untuk setiap guru di Master Guru jika belum ada
+                (p.guru || []).forEach(g => {
+                    const uname = (g.nip && g.nip !== '-') ? String(g.nip).trim() : g.nama.trim();
+                    const exists = p.registeredUsers.some(u => 
+                        u.role === 'guru' && (
+                            (u.username && u.username.toLowerCase().trim() === uname.toLowerCase()) ||
+                            (g.nip && u.username === String(g.nip).trim()) ||
+                            window.normalizeGuruKey(u.nama) === window.normalizeGuruKey(g.nama)
+                        )
+                    );
+                    if (!exists) {
+                        p.registeredUsers.push({
+                            role: 'guru',
+                            nama: g.nama.trim(),
+                            username: uname,
+                            pass: 'guru123',
+                            identitas: uname
+                        });
                     }
                 });
-                
-                (window.DEFAULT_OFFICIAL_CREDENTIALS || []).forEach(u => {
-                    const uKey = u.role + '___' + String(u.username).toLowerCase().trim();
-                    if (!userMap.has(uKey)) {
-                        userMap.set(uKey, u);
-                    }
-                });
-                window.cloudState.registeredUsers = Array.from(userMap.values());
 
-                // Paksa penyimpanan dan upload ke Supabase Cloud
+                // 3. Buat akun untuk setiap siswa di Master Siswa jika belum ada
+                (p.siswa || []).forEach(s => {
+                    const uname = (s.nis && s.nis !== '-') ? String(s.nis).trim() : s.nama.trim();
+                    const exists = p.registeredUsers.some(u => 
+                        u.role === 'siswa' && (
+                            (u.username && u.username.toLowerCase().trim() === uname.toLowerCase()) ||
+                            (s.nis && u.username === String(s.nis).trim()) ||
+                            window.isNameMatch(u.nama, s.nama)
+                        )
+                    );
+                    if (!exists) {
+                        p.registeredUsers.push({
+                            role: 'siswa',
+                            nama: s.nama.trim(),
+                            username: uname,
+                            pass: 'siswa123',
+                            identitas: uname
+                        });
+                    }
+                });
+
+                // 4. Buat akun untuk setiap industri di Master Industri jika belum ada
+                (p.industri || []).forEach(ind => {
+                    const defaultUname = ind.nama.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+                    const exists = p.registeredUsers.some(u => 
+                        u.role === 'industri' && (
+                            window.normalizeTextCompact(u.nama) === window.normalizeTextCompact(ind.nama) ||
+                            (u.username && u.username.toLowerCase().trim() === defaultUname)
+                        )
+                    );
+                    if (!exists && defaultUname) {
+                        p.registeredUsers.push({
+                            role: 'industri',
+                            nama: ind.nama.trim(),
+                            username: defaultUname,
+                            pass: 'dudi123',
+                            identitas: defaultUname
+                        });
+                    }
+                });
+
+                // 5. Bersihkan duplikat secara menyeluruh
+                window.bersihkanDanDeduplikasiAkun();
+
+                // 6. Simpan dan paksa upload ke Supabase Cloud
                 window.simpanDatabasePersisten(true);
                 
+                const totalSiswa = p.registeredUsers.filter(u => u.role === 'siswa').length;
+                const totalGuru = p.registeredUsers.filter(u => u.role === 'guru').length;
+                const totalInd = p.registeredUsers.filter(u => u.role === 'industri').length;
+
                 window.closeModalInfo();
-                window.showModalInfo("Sinkronisasi Akun Berhasil ✅", `Berhasil membuat dan menyinkronkan <b>${window.cloudState.registeredUsers.length} akun kredensial</b> secara utuh ke database Supabase Cloud.`);
+                window.showModalInfo("Sinkronisasi Akun Berhasil ✅", `
+                    Berhasil menyinkronkan seluruh akun resmi dari master data tanpa duplikat:<br><br>
+                    &bull; 👨‍🎓 <b>${totalSiswa} Akun Siswa</b> (Username: NIS, Sandi: <code>siswa123</code>)<br>
+                    &bull; 👩‍🏫 <b>${totalGuru} Akun Guru</b> (Username: NIP, Sandi: <code>guru123</code>)<br>
+                    &bull; 🏭 <b>${totalInd} Akun Mitra Industri</b> (Sandi: <code>dudi123</code>)<br><br>
+                    Seluruh data telah tersimpan permanen dan diunggah ke <b>Supabase Cloud</b>.
+                `);
                 window.openFeature("kelola-akun", "Buat Akun & Kredensial");
-            }, 500);
+            }, 300);
         };
 
         window.setTabKredensial = function(tab) {
@@ -5017,6 +5204,11 @@
         };
 
         window.renderKelolaAkunPengguna = function() {
+            // Pastikan deduplikasi akun berjalan agar angka akurat sesuai master data
+            if (typeof window.bersihkanDanDeduplikasiAkun === 'function') {
+                window.bersihkanDanDeduplikasiAkun();
+            }
+
             const tab = window.activeCredentialTab || "siswa";
             const meta = roleConfigMeta[tab] || roleConfigMeta.siswa;
             const users = (window.cloudState.registeredUsers || []).filter(u => u.role === tab);
@@ -5024,15 +5216,15 @@
             let rows = "";
             users.forEach((u, displayIdx) => {
                 const originalIdx = (window.cloudState.registeredUsers || []).indexOf(u);
-                rows += `<tr>
+                rows += `<tr class="row-akun-item">
                     <td><input type="checkbox" class="cb-akun" value="${originalIdx}"></td>
                     <td>${displayIdx + 1}</td>
                     <td><b>${u.nama}</b></td>
                     <td><code style="color:#0284c7; font-weight:800;">${u.username}</code></td>
                     <td><span style="font-family:monospace; background:#f1f5f9; padding:2px 8px; border-radius:6px; font-weight:700;">${u.pass}</span></td>
                     <td style="display:flex; gap:6px;">
-                        <button onclick="window.bukaModalEditKredensial(${originalIdx})" class="btn-action btn-amber" style="padding:4px 8px; font-size:11px;">Edit</button>
-                        ${u.role !== 'admin' ? `<button onclick="window.konfirmasiHapusKredensial(${originalIdx})" class="btn-action btn-red" style="padding:4px 8px; font-size:11px;">Hapus</button>` : ''}
+                        <button onclick="window.bukaModalEditKredensial(${originalIdx})" class="btn-action btn-amber" style="padding:4px 8px; font-size:11px;">Edit Sandi</button>
+                        ${u.role === 'admin' ? '' : `<button onclick="window.konfirmasiHapusKredensial(${originalIdx})" class="btn-action btn-red" style="padding:4px 8px; font-size:11px;">Hapus</button>`}
                     </td>
                 </tr>`;
             });
@@ -5042,23 +5234,31 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">KREDENSIAL LOGIN EKOSISTEM</div>
-                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🔑 Akun & Kredensial: ${meta.label}</h3>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🔑 Akun & Kredensial: ${meta.label} <span style="font-size:13px; color:#0284c7; font-weight:800;">(${users.length} Akun)</span></h3>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Akun ${meta.label} kini terikat secara ketat dan otomatis menyesuaikan dengan Data Master.</p>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button onclick="window.bersihkanDuplikatAkunSekarang()" class="btn-action btn-amber" style="font-weight:900; box-shadow:0 3px 10px rgba(245,158,11,0.3);">🧹 Bersihkan Akun Yatim</button>
                         <button onclick="window.sinkronkanSemuaAkunKredensialOtomatis()" class="btn-action btn-blue" style="font-weight:900; box-shadow:0 3px 10px rgba(2,132,199,0.3);">⚡ Sinkronkan Akun Master</button>
                         <button onclick="window.unduhTemplateExcelAkunPeran('${tab}')" class="btn-action btn-emerald">📄 Template</button>
                         <button onclick="window.bukaModalUploadExcelAkunPeran('${tab}')" class="btn-action btn-blue">📥 Impor Excel</button>
+                        <button onclick="window.bukaModalTambahKredensial('${tab}')" class="btn-action btn-blue">+ Tambah Manual</button>
                         <button onclick="window.exportExcelAkunPeran('${tab}')" class="btn-action btn-emerald">📊 Export Excel</button>
-                        <button onclick="window.bukaModalTambahKredensial('${tab}')" class="btn-action btn-blue">+ Tambah Akun</button>
-                        <button onclick="window.hapusMasalAkun()" class="btn-action btn-red">🗑️ Hapus</button>
+                        <button onclick="window.hapusMasalAkun()" class="btn-action btn-red">🗑️ Hapus Terpilih</button>
+                        ${tab !== 'admin' ? `<button onclick="window.konfirmasiResetAkunTabIni('${tab}')" class="btn-action btn-red" style="background:#b91c1c;">⚠️ Kosongkan Tab Ini</button>` : ''}
                     </div>
                 </div>
 
                 <div style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1.5px solid #bfdbfe; padding-bottom:8px; overflow-x:auto;">
-                    <button onclick="window.setTabKredensial('siswa')" class="btn-action ${tab === 'siswa' ? 'btn-blue' : ''}" style="background:${tab === 'siswa' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'siswa' ? '#fff' : '#0369a1'};">👨‍🎓 Siswa PKL</button>
-                    <button onclick="window.setTabKredensial('guru')" class="btn-action ${tab === 'guru' ? 'btn-blue' : ''}" style="background:${tab === 'guru' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'guru' ? '#fff' : '#0369a1'};">👩‍🏫 Guru Pembimbing</button>
-                    <button onclick="window.setTabKredensial('industri')" class="btn-action ${tab === 'industri' ? 'btn-blue' : ''}" style="background:${tab === 'industri' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'industri' ? '#fff' : '#0369a1'};">🏭 Mitra Industri DUDI</button>
-                    <button onclick="window.setTabKredensial('admin')" class="btn-action ${tab === 'admin' ? 'btn-blue' : ''}" style="background:${tab === 'admin' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'admin' ? '#fff' : '#0369a1'};">👨‍💼 Panitia / Admin</button>
+                    <button onclick="window.setTabKredensial('siswa')" class="btn-action ${tab === 'siswa' ? 'btn-blue' : ''}" style="background:${tab === 'siswa' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'siswa' ? '#fff' : '#0369a1'};">👨‍🎓 Siswa PKL (${(window.cloudState.registeredUsers || []).filter(u => u.role === 'siswa').length})</button>
+                    <button onclick="window.setTabKredensial('guru')" class="btn-action ${tab === 'guru' ? 'btn-blue' : ''}" style="background:${tab === 'guru' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'guru' ? '#fff' : '#0369a1'};">👩‍🏫 Guru Pembimbing (${(window.cloudState.registeredUsers || []).filter(u => u.role === 'guru').length})</button>
+                    <button onclick="window.setTabKredensial('industri')" class="btn-action ${tab === 'industri' ? 'btn-blue' : ''}" style="background:${tab === 'industri' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'industri' ? '#fff' : '#0369a1'};">🏭 Mitra Industri DUDI (${(window.cloudState.registeredUsers || []).filter(u => u.role === 'industri').length})</button>
+                    <button onclick="window.setTabKredensial('admin')" class="btn-action ${tab === 'admin' ? 'btn-blue' : ''}" style="background:${tab === 'admin' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'admin' ? '#fff' : '#0369a1'};">👨‍💼 Panitia / Admin (${(window.cloudState.registeredUsers || []).filter(u => u.role === 'admin').length})</button>
+                </div>
+
+                <!-- KOTAK PENCARIAN AKUN REALTIME -->
+                <div style="margin-bottom:10px;">
+                    <input type="text" class="form-control" placeholder="🔍 Cari nama atau username ${meta.label}..." oninput="window.filterTabelAkunKredensial(this.value)" style="padding:8px 12px; font-size:12px; border-radius:12px; background:#f8fafc; border:1.5px solid #bfdbfe;">
                 </div>
 
                 <div class="table-wrap">
@@ -5167,9 +5367,11 @@
 
         window.konfirmasiHapusKredensial = function(idx) {
             const user = window.cloudState.registeredUsers[idx];
-            window.showConfirmDialog("Hapus Akun", `Hapus akun <b>${user.nama}</b> (${user.username})?`, () => {
+            if (!user) return;
+            window.showConfirmDialog("Hapus Akun", `Hapus akun <b>${user.nama}</b> (${user.username}) secara permanen?`, () => {
                 window.cloudState.registeredUsers.splice(idx, 1);
                 window.simpanDatabasePersisten(true);
+                window.showModalInfo("Akun Dihapus 🗑️", `Akun <b>${user.nama}</b> berhasil dihapus dari sistem.`);
                 window.openFeature("kelola-akun", "Buat Akun & Kredensial");
             });
         };
@@ -5178,7 +5380,7 @@
             const cbs = document.querySelectorAll('.cb-akun:checked');
             if (cbs.length === 0) return window.showModalInfo("Pilih Akun", "Centang minimal 1 akun yang ingin dihapus!");
 
-            window.showConfirmDialog("Hapus Akun Terpilih", `Yakin ingin menghapus <b>${cbs.length} akun</b> terpilih?`, () => {
+            window.showConfirmDialog("Hapus Akun Terpilih", `Yakin ingin menghapus <b>${cbs.length} akun</b> terpilih secara permanen?`, () => {
                 const indices = Array.from(cbs).map(c => parseInt(c.value)).sort((a,b) => b - a);
                 indices.forEach(idx => {
                     if (window.cloudState.registeredUsers[idx]?.role !== 'admin') {
@@ -5186,6 +5388,7 @@
                     }
                 });
                 window.simpanDatabasePersisten(true);
+                window.showModalInfo("Penghapusan Berhasil 🗑️", `Sebanyak <b>${cbs.length} akun</b> berhasil dihapus.`);
                 window.openFeature("kelola-akun", "Buat Akun & Kredensial");
             });
         };
@@ -8758,6 +8961,9 @@
         };
 
         window.addEventListener('DOMContentLoaded', async () => {
+            if (typeof window.bersihkanDanDeduplikasiAkun === 'function') {
+                window.bersihkanDanDeduplikasiAkun();
+            }
             if (typeof window.deduplicateAndConsolidateState === 'function') {
                 window.deduplicateAndConsolidateState();
             }
@@ -8771,10 +8977,12 @@
             window.inisialisasiSupabaseClient();
             if (window.supabaseClient) {
                 await window.tarikDataDariCloud(true);
+                if (typeof window.bersihkanDanDeduplikasiAkun === 'function') {
+                    window.bersihkanDanDeduplikasiAkun();
+                }
                 if (typeof window.deduplicateAndConsolidateState === 'function') {
                     window.deduplicateAndConsolidateState();
                 }
-                // Sinkronkan ulang antarmuka dashboard secara senyap agar data terbaru langsung tampil tanpa popup
                 if (window.cloudState.userProfile && window.cloudState.currentFeature) {
                     window.openFeature(window.cloudState.currentFeature, undefined, true);
                 }
