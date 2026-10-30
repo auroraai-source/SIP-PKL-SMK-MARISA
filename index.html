@@ -1891,11 +1891,11 @@
         };
 
         const roleDefaults = {
-            siswa: { label: "ROOM SISWA PKL", icon: "👨‍🎓", usernameLabel: "Username / NIS Siswa:", placeholder: "Masukkan NIS Siswa Terdaftar", needPass: true },
-            guru: { label: "ROOM GURU PEMBIMBING", icon: "👩‍🏫", usernameLabel: "Username / NIP Guru:", placeholder: "Masukkan NIP Guru Terdaftar", needPass: true },
+            siswa: { label: "ROOM SISWA PKL", icon: "👨‍🎓", usernameLabel: "Username:", placeholder: "Masukkan Username Resmi", needPass: true },
+            guru: { label: "ROOM GURU PEMBIMBING", icon: "👩‍🏫", usernameLabel: "Username:", placeholder: "Masukkan Username Resmi", needPass: true },
             orangtua: { label: "ROOM ORANG TUA SISWA", icon: "👨‍👩‍👧", usernameLabel: "Nama Lengkap Ananda (Siswa):", placeholder: "Ketik Nama Lengkap Siswa / Ananda", needPass: false },
             admin: { label: "ROOM PANITIA / ADMIN PKL", icon: "👨‍💼", usernameLabel: "Username Panitia / Admin:", placeholder: "Masukkan Username Panitia PKL", needPass: true },
-            industri: { label: "ROOM INDUSTRI MITRA DUDI", icon: "🏭", usernameLabel: "Username Mitra DUDI:", placeholder: "Masukkan ID Mitra Terdaftar", needPass: true }
+            industri: { label: "ROOM INDUSTRI MITRA DUDI", icon: "🏭", usernameLabel: "Username:", placeholder: "Masukkan Username Industri", needPass: true }
         };
         window.roleDefaults = roleDefaults;
 
@@ -2157,7 +2157,7 @@
             } else {
                 groupPass.style.display = "block";
                 linkLupa.style.display = "block";
-                document.getElementById("textPetunjukAkun").innerText = "Akun Resmi dari Panitia PKL";
+                document.getElementById("textPetunjukAkun").innerText = "Gunakan Username & Password Kredensial";
                 if (dataListEl) dataListEl.innerHTML = "";
             }
         };
@@ -2197,59 +2197,19 @@
                 window.deduplicateAndConsolidateState();
             }
 
-            // Helper pencarian akun fleksibel (Bisa via Username/NIP/NIS/ID maupun Nama Lengkap)
+            // Helper pencarian akun KETAT (HANYA membaca Username dan Password)
             const findMatchingUser = (inputUser, inputPass, targetRole) => {
                 const cleanU = inputUser.toLowerCase().trim();
-                const compactU = window.normalizeTextCompact(inputUser);
 
-                // 1. Cek di daftar registeredUsers
+                // HANYA mencari di database Kredensial Akun Resmi (registeredUsers)
                 let found = (window.cloudState.registeredUsers || []).find(u => {
                     if (u.role !== targetRole) return false;
-                    const uNameMatch = (u.username || '').toLowerCase().trim() === cleanU ||
-                                       (u.identitas || '').toLowerCase().trim() === cleanU ||
-                                       (u.nama || '').toLowerCase().trim() === cleanU ||
-                                       (compactU.length >= 5 && window.normalizeTextCompact(u.nama) === compactU);
-                    const passMatch = (u.pass === inputPass);
+                    const uNameMatch = (u.username || '').toLowerCase().trim() === cleanU;
+                    const passMatch = (u.pass === inputPass); // Password harus sama persis (case-sensitive)
                     return uNameMatch && passMatch;
                 });
-                if (found) return found;
 
-                // 2. Fallback langsung ke Master Guru jika role === 'guru'
-                if (targetRole === 'guru' && inputPass === 'guru123') {
-                    const gMatch = (window.cloudState.guru || []).find(g =>
-                        (g.nip && String(g.nip).toLowerCase().trim() === cleanU) ||
-                        (g.nama && g.nama.toLowerCase().trim() === cleanU) ||
-                        (compactU.length >= 5 && window.normalizeGuruKey(g.nama) === compactU)
-                    );
-                    if (gMatch) {
-                        return { role: 'guru', nama: gMatch.nama, username: gMatch.nip || gMatch.nama, identitas: gMatch.nip || gMatch.nama };
-                    }
-                }
-
-                // 3. Fallback langsung ke Master Siswa jika role === 'siswa'
-                if (targetRole === 'siswa' && inputPass === 'siswa123') {
-                    const sMatch = (window.cloudState.siswa || []).find(s =>
-                        (s.nis && String(s.nis).toLowerCase().trim() === cleanU) ||
-                        (s.nama && s.nama.toLowerCase().trim() === cleanU) ||
-                        (compactU.length >= 5 && window.normalizeTextCompact(s.nama) === compactU)
-                    );
-                    if (sMatch) {
-                        return { role: 'siswa', nama: sMatch.nama, username: sMatch.nis || sMatch.nama, identitas: sMatch.nis || sMatch.nama };
-                    }
-                }
-
-                // 4. Fallback langsung ke Master Industri jika role === 'industri'
-                if (targetRole === 'industri' && inputPass === 'dudi123') {
-                    const iMatch = (window.cloudState.industri || []).find(i =>
-                        (i.nama && i.nama.toLowerCase().trim() === cleanU) ||
-                        (compactU.length >= 4 && window.normalizeTextCompact(i.nama) === compactU)
-                    );
-                    if (iMatch) {
-                        return { role: 'industri', nama: iMatch.nama, username: iMatch.id || iMatch.nama, identitas: iMatch.nama };
-                    }
-                }
-
-                return null;
+                return found;
             };
 
             if (role === 'orangtua') {
@@ -2289,12 +2249,13 @@
 
             if (!pass) return window.showModalInfo("Kata Sandi Kosong", "Silakan masukkan kata sandi Anda!");
 
+            // Bypass khusus akun panitia default agar tidak terkunci
             if (role === 'admin' && (username.toLowerCase() === 'panitia pkl' || username.toLowerCase() === 'admin') && pass === 'SMKBisa2000') {
                 window.suksesLogin({ nama: "Panitia PKL SMKN 1 Marisa", role: "admin", identitas: "PANITIA-2026" });
                 return;
             }
 
-            // Cek di memori lokal terlebih dahulu
+            // Cek di memori lokal terlebih dahulu dengan pencocokan KETAT
             let user = findMatchingUser(username, pass, role);
 
             // SOLUSI PATEN HP: Jika tidak cocok, KITA PAKSA SINKRON DENGAN SERVER SAAT ITU JUGA!
