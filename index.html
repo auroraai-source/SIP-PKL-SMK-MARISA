@@ -1292,8 +1292,7 @@
                 if (!u || !u.role || !u.username) return;
                 const role = u.role.toLowerCase().trim();
                 const username = u.username.toString().toLowerCase().trim();
-                // AMAN: Tangkap semua kemungkinan nama kolom password tanpa mengubah besar/kecilnya
-                const pass = (u.pass || u.password || u.kataSandi || (role === 'guru' ? 'guru123' : (role === 'siswa' ? 'siswa123' : 'dudi123'))).toString().trim();
+                const pass = u.pass || (role === 'guru' ? 'guru123' : (role === 'siswa' ? 'siswa123' : 'dudi123'));
                 
                 // Kunci paten: Role + Username. (Tidak ada lagi penghapusan buta jika nama tidak sama persis)
                 const key = role + '_' + username;
@@ -1455,17 +1454,19 @@
                         if (sObj) {
                             sObj.guru = pen.guru;
                             
-                            // JANGAN MENIMPA INDUSTRI JIKA DI MASTER SISWA SUDAH TERISI
-                            if (!sObj.industri || sObj.industri === '-') {
-                                let mappedInd = null;
-                                if (pen.siswaIndustriMap) {
-                                    const mapKey = Object.keys(pen.siswaIndustriMap).find(k => window.isNameMatch(k, sName));
-                                    if (mapKey) mappedInd = pen.siswaIndustriMap[mapKey];
-                                }
+                            // Cari kecocokan map industri dengan aman
+                            let mappedInd = null;
+                            if (pen.siswaIndustriMap) {
+                                const mapKey = Object.keys(pen.siswaIndustriMap).find(k => window.isNameMatch(k, sName));
+                                if (mapKey) mappedInd = pen.siswaIndustriMap[mapKey];
+                            }
 
-                                if (mappedInd && mappedInd !== '-') {
-                                    sObj.industri = mappedInd;
-                                } else if (indList.length === 1) {
+                            if (mappedInd && mappedInd !== '-') {
+                                sObj.industri = mappedInd;
+                            } else if (!sObj.industri || sObj.industri === '-' || !indList.some(i => window.normalizeTextCompact(i) === window.normalizeTextCompact(sObj.industri))) {
+                                if (indList.length === 1) {
+                                    sObj.industri = indList[0];
+                                } else if ((!sObj.industri || sObj.industri === '-') && indList.length > 0) {
                                     sObj.industri = indList[0];
                                 }
                             }
@@ -2231,7 +2232,7 @@
                 // FUNGSI PENCARI SUPER TOLERAN (Mengabaikan Spasi Gaib & Huruf Besar dari Keyboard HP)
                 const findMatchedUser = () => {
                     const cleanU = String(username).toLowerCase().replace(/\s+/g, '');
-                    const cleanP = String(pass).toLowerCase().replace(/\s+/g, ''); // Toleransi mutlak: password diubah kecil semua dan tanpa spasi
+                    const cleanP = String(pass).toLowerCase().replace(/\s+/g, ''); 
 
                     return (window.cloudState.registeredUsers || []).find(u => {
                         if (!u || String(u.role).toLowerCase() !== String(role).toLowerCase()) return false;
@@ -2239,13 +2240,7 @@
                         const dbUser = String(u.username || u.identitas || u.nip || u.nis || '').toLowerCase().replace(/\s+/g, '');
                         const dbPass = String(u.pass || u.password || u.kataSandi || '').toLowerCase().replace(/\s+/g, '');
                         
-                        // JURUS PAMUNGKAS: "buka123" untuk tembus masuk
-                        if (String(pass).trim() === 'buka123' && dbUser === cleanU) return true;
-
-                        if (dbUser === cleanU && dbPass === cleanP) {
-                            return true;
-                        }
-                        return false;
+                        return (dbUser === cleanU && dbPass === cleanP);
                     });
                 };
 
@@ -3078,28 +3073,66 @@
             const profile = window.cloudState.userProfile || { nama: "Guru Pembimbing" };
             const bannerHtml = window.renderBannerCarouselHtml("RUANG GURU PEMBIMBING LAPANGAN");
 
-            // Pencocokan nama guru presisi
+            // Pencocokan nama guru presisi menggunakan normalizeGuruKey
             const isMatchGuru = (guruName) => {
                 if (!guruName || !profile.nama) return false;
                 return window.normalizeGuruKey(guruName) === window.normalizeGuruKey(profile.nama) || window.isNameMatch(guruName, profile.nama);
             };
 
-            // 1. ISOLASI DATA KETAT: Ambil MUTLAK hanya dari Data Master Siswa (Sesuai Permintaan)
+            // 1. ISOLASI DATA KETAT: Ambil penempatan siswa resmi guru ini dari Alokasi Guru & Siswa DAN Master Siswa
+            const myPlacements = (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru));
+
+            // Pemetaan nama siswa bimbingan -> data industri spesifik masing-masing siswa (mendukung multi-industri!)
             const myStudentMap = new Map();
             const myIndustriSet = new Set();
 
+            myPlacements.forEach(p => {
+                const indArr = window.extractIndustryList(p.industri);
+                indArr.forEach(i => myIndustriSet.add(i));
+
+                const sList = window.extractStudentList(p.siswa);
+                sList.forEach(s => {
+                    if (s && s.trim()) {
+                        const sClean = s.trim();
+                        const sMaster = (window.cloudState.siswa || []).find(item => window.isNameMatch(item.nama, sClean));
+                        
+                        // Cari industri spesifik siswa ini dengan tangguh (kebal huruf besar/kecil)
+                        let specificInd = null;
+                        if (p.siswaIndustriMap) {
+                            const mapKey = Object.keys(p.siswaIndustriMap).find(k => window.isNameMatch(k, sClean));
+                            if (mapKey) specificInd = p.siswaIndustriMap[mapKey];
+                        }
+                        
+                        if (!specificInd && sMaster && sMaster.industri && sMaster.industri !== '-') {
+                            specificInd = sMaster.industri;
+                        }
+                        if (!specificInd || specificInd === '-') {
+                            specificInd = indArr.length > 0 ? indArr[0] : 'DUDI Mitra';
+                        }
+
+                        if (specificInd && specificInd !== 'DUDI Mitra') myIndustriSet.add(specificInd);
+
+                        myStudentMap.set(window.normalizeTextCompact(sClean), {
+                            nama: sMaster ? sMaster.nama : sClean,
+                            kelas: sMaster ? (sMaster.kelas || '') : '',
+                            industri: specificInd
+                        });
+                    }
+                });
+            });
+
+            // Periksa juga di Master Siswa jika ada siswa yang tercatat dengan nama guru pembimbing ini
             (window.cloudState.siswa || []).forEach(s => {
                 if (s.guru && isMatchGuru(s.guru)) {
                     const sKey = window.normalizeTextCompact(s.nama);
-                    const specificInd = (s.industri && s.industri !== '-') ? s.industri : 'Belum Ditentukan';
-                    
-                    if (specificInd !== 'Belum Ditentukan') myIndustriSet.add(specificInd);
-                    
-                    myStudentMap.set(sKey, {
-                        nama: s.nama,
-                        kelas: s.kelas || '',
-                        industri: specificInd
-                    });
+                    if (s.industri && s.industri !== '-') myIndustriSet.add(s.industri);
+                    if (!myStudentMap.has(sKey)) {
+                        myStudentMap.set(sKey, {
+                            nama: s.nama,
+                            kelas: s.kelas || '',
+                            industri: (s.industri && s.industri !== '-') ? s.industri : 'DUDI Mitra'
+                        });
+                    }
                 }
             });
 
@@ -7806,18 +7839,214 @@
                 return cleanA.includes(cleanB) || cleanB.includes(cleanA);
             };
 
-            // PRIORITAS MUTLAK: Render baris tabel langsung berdasarkan Data Master Siswa
-            const myStudents = (window.cloudState.siswa || []).filter(s => s.guru && isMatchGuru(s.guru));
-            
-            myStudents.forEach((sData) => {
-                const specificInd = (sData.industri && sData.industri !== '-') ? sData.industri : 'Belum Ditentukan';
+            const myPlacements = (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru));
+            myPlacements.forEach(p => {
+                const indList = window.extractIndustryList(p.industri);
+                const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                
+                sList.forEach(sNama => {
+                    const cleanName = sNama.trim();
+                    const sData = (window.cloudState.siswa || []).find(s => s.nama.toLowerCase().trim() === cleanName.toLowerCase()) || {};
+                    
+                    // Prioritas 1: Mapping Spesifik Siswa -> Industri (Kebal huruf besar/kecil)
+                    // Prioritas 2: Data Master Siswa
+                    // Prioritas 3: Industri pertama di dalam array alokasi guru (fallback)
+                    let specificInd = null;
+                    if (p.siswaIndustriMap) {
+                        const mapKey = Object.keys(p.siswaIndustriMap).find(k => window.isNameMatch(k, cleanName));
+                        if (mapKey) specificInd = p.siswaIndustriMap[mapKey];
+                    }
+                    if (!specificInd && sData.industri && sData.industri !== '-') {
+                        specificInd = sData.industri;
+                    }
+                    
+                    if (!specificInd || specificInd === '-') {
+                        specificInd = indList.length > 0 ? indList[0] : 'DUDI Mitra';
+                    }
+
+                    rows += `<tr>
+                        <td>${counter++}</td>
+                        <td><b>${cleanName}</b></td>
+                        <td>${sData.kelas || '-'}</td>
+                        <td><code>${sData.nis || '-'}</code></td>
+                        <td>${sData.noHp || '-'}</td>
+                        <td><span class="badge-status badge-blue" style="white-space:normal; text-align:center;">🏢 ${specificInd}</span></td>
+                    </tr>`;
+                });
+            });
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">BIMBINGAN AKADEMIK PKL</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">👥 Daftar Siswa Bimbingan</h3>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Daftar siswa resmi yang Anda bimbing selama masa praktik kerja lapangan.</p>
+                    </div>
+                    <span class="badge-status badge-green" style="font-size:11px; font-weight:900;">${counter - 1} Siswa Dibimbing</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px;">No</th>
+                                <th>Nama Siswa</th>
+                                <th>Kelas / Jurusan</th>
+                                <th>NIS</th>
+                                <th>No. HP</th>
+                                <th>Industri Magang</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada siswa bimbingan yang terdaftar untuk Anda</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.renderValidasiJurnalList = function() {
+            const role = window.cloudState.activeRole;
+            const profile = window.cloudState.userProfile || { nama: "User" };
+            let list = window.cloudState.jurnal || [];
+
+            if (role === 'industri') {
+                const sMap = window.getMyIndustriStudents(profile.nama);
+                list = list.filter(j => j.siswa && sMap.has(j.siswa.trim().toLowerCase()));
+            } else if (role === 'guru') {
+                const isMatchGuru = (guruName) => {
+                    if (!guruName || !profile.nama) return false;
+                    const a = guruName.toLowerCase().trim();
+                    const b = profile.nama.toLowerCase().trim();
+                    if (a === b) return true;
+                    const cleanA = a.replace(/[,.]/g, ' ').replace(/\s+/g, ' ').trim();
+                    const cleanB = b.replace(/[,.]/g, ' ').replace(/\s+/g, ' ').trim();
+                    return cleanA.includes(cleanB) || cleanB.includes(cleanA);
+                };
+                const myPlacements = (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru));
+                const gMap = new Set();
+                myPlacements.forEach(p => {
+                    const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                    sList.forEach(s => { if (s && s.trim()) gMap.add(s.trim().toLowerCase()); });
+                });
+                list = list.filter(j => j.siswa && gMap.has(j.siswa.trim().toLowerCase()));
+            }
+
+            let rows = "";
+            list.forEach((j) => {
+                const originalIdx = (window.cloudState.jurnal || []).indexOf(j);
                 rows += `<tr>
-                    <td>${counter++}</td>
-                    <td><b>${sData.nama}</b></td>
-                    <td>${sData.kelas || '-'}</td>
-                    <td><code>${sData.nis || '-'}</code></td>
-                    <td>${sData.noHp || '-'}</td>
-                    <td><span class="badge-status badge-blue" style="white-space:normal; text-align:center;">🏢 ${specificInd}</span></td>
+                    <td>${originalIdx + 1}</td>
+                    <td><b>${j.siswa}</b></td>
+                    <td>${j.tanggal}</td>
+                    <td style="white-space:normal; min-width:160px;">${j.kegiatan}</td>
+                    <td><span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span></td>
+                    <td>
+                        ${j.status !== 'Disetujui' ? `<button onclick="window.sahkanJurnalSiswa(${originalIdx})" class="btn-action btn-emerald" style="padding:4px 8px;">✓ Sahkan</button>` : '<span style="color:#15803d; font-weight:800;">Tervalidasi</span>'}
+                    </td>
+                </tr>`;
+            });
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:10.5px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">PENGESAHAN JURNAL</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📋 Validasi & Pengesahan Jurnal Siswa</h3>
+                    </div>
+                    <span class="badge-status badge-blue">${list.length} Jurnal</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>No</th>
+                                <th>Nama Siswa</th>
+                                <th>Tanggal</th>
+                                <th>Kegiatan</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada jurnal siswa yang masuk</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.sahkanJurnalSiswa = function(idx) {
+            window.cloudState.jurnal[idx].status = 'Disetujui';
+            window.simpanDatabasePersisten(true);
+            window.openFeature("validasi-jurnal", "Validasi Jurnal");
+        };
+
+        window.renderAgendaKunjungan = function() {
+            const profile = window.cloudState.userProfile || { nama: "Guru" };
+            const myMonitoring = (window.cloudState.penugasanMonitoring || []).filter(m => {
+                if (!m.guru) return false;
+                return m.guru.toLowerCase().trim() === profile.nama.toLowerCase().trim();
+            });
+
+            let cards = "";
+            myMonitoring.forEach(m => {
+                const listDudi = Array.isArray(m.industriList) ? m.industriList : (m.industriList ? [m.industriList] : []);
+                const dudiBadges = listDudi.length > 0 
+                    ? listDudi.map(d => `<span style="background:#e0f2fe; border:1px solid #7dd3fc; color:#0369a1; padding:3px 7px; border-radius:6px; font-size:10.5px; font-weight:800; display:inline-block; margin:2px;">🏢 ${d}</span>`).join(' ')
+                    : '<span style="color:#94a3b8; font-size:11px;">-</span>';
+
+                const listSiswa = Array.isArray(m.siswaList) ? m.siswaList : (m.siswaList ? [m.siswaList] : []);
+                const siswaBadges = listSiswa.length > 0
+                    ? listSiswa.map(s => `<span style="background:#f0fdf4; border:1px solid #86efac; color:#15803d; padding:3px 7px; border-radius:6px; font-size:10.5px; font-weight:800; display:inline-block; margin:2px;">👨‍🎓 ${s}</span>`).join(' ')
+                    : '<span style="font-size:10.5px; color:#64748b;">Semua Siswa Terkait</span>';
+
+                cards += `
+                <div style="background:#ffffff; border:1.5px solid #bfdbfe; border-radius:16px; padding:14px; margin-bottom:12px; box-shadow:0 2px 8px rgba(2,132,199,0.06);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-size:13.5px; font-weight:900; color:#0f172a;">🚗 ${m.judulTugas || 'Monitoring DUDI'}</span>
+                        <span class="badge-status badge-blue" style="font-size:10px;">${m.tanggalMulai || '-'} s/d ${m.tanggalSelesai || '-'}</span>
+                    </div>
+                    <div style="font-size:11.5px; color:#475569; margin:4px 0 8px;"><b>Catatan Panitia:</b> ${m.catatan || '-'}</div>
+                    <div style="margin-bottom:8px;">
+                        <div style="font-size:10px; font-weight:850; color:#0284c7; margin-bottom:3px; text-transform:uppercase;">DUDI Target Kunjungan:</div>
+                        ${dudiBadges}
+                    </div>
+                    <div>
+                        <div style="font-size:10px; font-weight:850; color:#15803d; margin-bottom:3px; text-transform:uppercase;">Siswa yang Dimonitoring:</div>
+                        ${siswaBadges}
+                    </div>
+                </div>`;
+            });
+
+            return `
+            <div class="card">
+                <div style="margin-bottom:12px;">
+                    <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">SURAT TUGAS & JADWAL MONITORING LAPANGAN</div>
+                    <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🚗 Agenda Kunjungan DUDI</h3>
+                    <p style="font-size:11px; color:#64748b; margin-top:2px;">Surat tugas dan daftar industri monitoring yang ditugaskan oleh Panitia PKL kepada Anda.</p>
+                </div>
+                ${cards || '<div class="empty-placeholder" style="padding:28px 12px;">Belum ada surat penugasan monitoring yang diterbitkan untuk Anda</div>'}
+            </div>`;
+        };
+
+        window.renderPenilaianIndustri = function() {
+            const role = window.cloudState.activeRole;
+            const profile = window.cloudState.userProfile || { nama: "User" };
+            let list = window.cloudState.nilai || [];
+
+            if (role === 'industri') {
+                const sMap = window.getMyIndustriStudents(profile.nama);
+                list = list.filter(n => n.siswa && sMap.has(n.siswa.trim().toLowerCase()));
+            }
+
+            let rows = "";
+            list.forEach((n, idx) => {
+                rows += `<tr>
+                    <td>${idx + 1}</td>
+                    <td><b>${n.siswa}</b></td>
+                    <td><b>${n.nilai_akhir || '0'}</b></td>
+                    <td><span class="badge-status badge-green">${n.predikat || 'Sangat Baik'}</span></td>
                 </tr>`;
             });
 
