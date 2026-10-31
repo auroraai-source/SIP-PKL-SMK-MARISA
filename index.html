@@ -7754,8 +7754,8 @@
                 const studentMap = window.getMyIndustriStudents(profile.nama);
                 studentMap.forEach(s => {
                     rows += `<tr>
-                        <td>${counter++}</td>
-                        <td><b>${s.nama}</b></td>
+                        <td style="text-align:center;">${counter++}</td>
+                        <td style="font-size:12.5px; font-weight:900; color:#0f172a; text-transform:uppercase;">${s.nama}</td>
                         <td>${s.kelas}</td>
                         <td><code>${s.nis}</code></td>
                         <td>${s.noHp}</td>
@@ -7778,7 +7778,7 @@
                         <table>
                             <thead>
                                 <tr>
-                                    <th style="width:36px;">No</th>
+                                    <th style="width:36px; text-align:center;">No</th>
                                     <th>Nama Siswa</th>
                                     <th>Kelas / Jurusan</th>
                                     <th>NIS</th>
@@ -7812,14 +7812,18 @@
             
             myStudents.forEach((sData) => {
                 // Mendeteksi spesifik: Nama, Kelas/Jurusan, dan Industri Penempatan Siswa
-                const specificInd = (sData.industri && sData.industri !== '-') ? sData.industri : 'Belum Ditentukan';
+                const specificInd = (sData.industri && sData.industri !== '-') ? sData.industri.trim() : 'Belum Ditentukan';
                 rows += `<tr>
-                    <td>${counter++}</td>
-                    <td><b>${sData.nama}</b></td>
-                    <td>${sData.kelas || '-'}</td>
+                    <td style="text-align:center;">${counter++}</td>
+                    <td style="font-size:12.5px; font-weight:950; color:#0f172a; text-transform:uppercase;">${sData.nama}</td>
+                    <td style="color:#334155; font-weight:600;">${sData.kelas || '-'}</td>
                     <td><code>${sData.nis || '-'}</code></td>
-                    <td>${sData.noHp || '-'}</td>
-                    <td><span class="badge-status badge-blue" style="white-space:normal; text-align:center;">🏢 ${specificInd}</span></td>
+                    <td style="color:#475569; font-weight:600;">${sData.noHp || '-'}</td>
+                    <td style="text-align:center;">
+                        <div style="background:#f0f9ff; border:1.5px solid #bae6fd; color:#0369a1; padding:6px 14px; border-radius:12px; font-size:11px; font-weight:900; display:inline-flex; align-items:center; justify-content:center; text-align:center; box-shadow:0 3px 8px rgba(2,132,199,0.08); text-transform:uppercase;">
+                            🏢 ${specificInd}
+                        </div>
+                    </td>
                 </tr>`;
             });
 
@@ -7828,7 +7832,7 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">EVALUASI PRAKTIK & BIMBINGAN</div>
-                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">👥 Daftar Siswa Bimbingan (${myStudents.length} Siswa)</h3>
+                        <h3 style="font-size:16px; font-weight:950; color:#0f172a; margin-top:2px;">👥 Daftar Siswa Bimbingan (${myStudents.length} Siswa)</h3>
                         <p style="font-size:11px; color:#64748b; margin-top:2px;">Data industri penempatan diambil secara presisi dari Data Master Siswa.</p>
                     </div>
                     <button onclick="window.bukaModalInputNilai()" class="btn-action btn-blue">+ Input Nilai</button>
@@ -7838,12 +7842,12 @@
                     <table>
                         <thead>
                             <tr>
-                                <th style="width:36px;">No</th>
+                                <th style="width:36px; text-align:center;">No</th>
                                 <th>Nama Siswa</th>
                                 <th>Kelas / Jurusan</th>
                                 <th>NIS</th>
                                 <th>No. HP</th>
-                                <th>Tempat Magang (Industri)</th>
+                                <th style="text-align:center; min-width:180px;">Tempat Magang (Industri)</th>
                             </tr>
                         </thead>
                         <tbody>
