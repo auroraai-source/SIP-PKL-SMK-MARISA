@@ -845,6 +845,11 @@
                 <button type="button" onclick="window.bukaModalLupaPassword()" style="background: none; border: none; color: #0284c7; font-size: 11px; font-weight: 800; cursor: pointer;">
                     Lupa Kata Sandi? Hubungi Panitia
                 </button>
+                <div style="margin-top: 12px;">
+                    <a href="#" onclick="window.location.reload(true); return false;" style="color: #64748b; font-size: 10px; text-decoration: underline;">
+                        ⟳ Segarkan / Hapus Cache Perangkat (Jika Error)
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -2228,6 +2233,14 @@
             }
 
             try {
+                // PAKSA SINKRONISASI CLOUD SETIAP KALI KLIK LOGIN UNTUK MENGHINDARI DATA KOSONG DI HP
+                if (btnSubmit) btnSubmit.innerText = "SINKRONISASI SERVER... ⏳";
+                await window.tarikDataDariCloud(true);
+                
+                if (typeof window.bersihkanDanDeduplikasiAkun === 'function') {
+                    window.bersihkanDanDeduplikasiAkun();
+                }
+
                 // FUNGSI PENCARI SUPER TOLERAN (Mengabaikan Spasi Gaib & Huruf Besar dari Keyboard HP)
                 const findMatchedUser = () => {
                     const cleanU = String(username).toLowerCase().replace(/\s+/g, '');
@@ -2291,28 +2304,14 @@
                     return window.showModalInfo("Kata Sandi Kosong", "Silakan masukkan kata sandi Anda!");
                 }
 
-                // 1. CEK CEPAT DI MEMORI LOKAL TERLEBIH DAHULU
+                // KEPUTUSAN FINAL SETELAH SINKRONISASI
                 let matchedUser = findMatchedUser();
-
-                // 2. JIKA GAGAL: Tarik Cloud Server (Mungkin data Excel baru diimpor di PC lain)
-                if (!matchedUser) {
-                    if (btnSubmit) btnSubmit.innerText = "SINKRONISASI SERVER... ⏳";
-                    await window.tarikDataDariCloud(true);
-                    
-                    if (typeof window.bersihkanDanDeduplikasiAkun === 'function') {
-                        window.bersihkanDanDeduplikasiAkun();
-                    }
-                    
-                    // Cek Ulang Setelah Sinkronisasi
-                    matchedUser = findMatchedUser();
-                }
 
                 if (btnSubmit) {
                     btnSubmit.innerText = origText;
                     btnSubmit.disabled = false;
                 }
 
-                // 3. KEPUTUSAN FINAL
                 if (matchedUser) {
                     window.suksesLogin({
                         nama: matchedUser.nama,
@@ -2454,9 +2453,9 @@
                 { id: "banner-jadwal", icon: "🖼️", title: "Banner Gambar Slider" }
             ];
 
-            let gridCardsHtml = "";
+            let menuHtml = "";
             adminItems.forEach(item => {
-                gridCardsHtml += `
+                menuHtml += `
                 <div class="admin-item-card" onclick="window.openFeature('${item.id}', '${item.title}')">
                     <div class="admin-item-icon">${item.icon}</div>
                     <div class="admin-item-title">${item.title}</div>
@@ -2466,46 +2465,80 @@
 
             return `
             ${bannerHtml}
-
             <div class="admin-welcome-card">
-                <div style="font-size: 11px; font-weight: 900; color: #0284c7; letter-spacing: 0.5px;">PANEL KONTROL ADMINISTRATOR / PANITIA PKL</div>
-                <h3 style="font-size: 18px; font-weight: 950; color: #0f172a; margin-top: 2px;">Selamat Bertugas, Tim Panitia PKL</h3>
-                <p style="font-size: 11px; color: #64748b; margin-top: 4px;">Kelola akun, alokasi pembimbing, rekap jurnal, observasi industri, dan sinkronisasi cloud.</p>
-
-                <!-- FITUR PINTASAN INPUT & PENANDAAN KONTAK HOTLINE RESMI SEKOLAH (COLLAPSIBLE) -->
-                <div style="margin-top:14px; padding-top:12px; border-top:1.5px dashed #bfdbfe;">
-                    <button type="button" onclick="window.toggleFormHotlineInline()" style="width:100%; background:linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color:#ffffff; border:none; border-radius:14px; padding:12px 16px; font-size:12px; font-weight:900; display:flex; justify-content:space-between; align-items:center; cursor:pointer; box-shadow:0 4px 12px rgba(2,132,199,0.25); letter-spacing:0.4px;">
-                        <span>📞 PINTASAN KONTAK HOTLINE SEKOLAH</span>
-                        <span id="iconToggleHotlineInline" style="font-size:12px; transition:transform 0.25s ease;">▼</span>
-                    </button>
-
-                    <div id="boxFormHotlineInline" style="display:none; margin-top:12px; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:16px; padding:14px;">
-                        ${window.renderHotlineInlineFormAdmin()}
-                    </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">RUANG ADMIN & PANITIA</div>
+                    <span class="badge-status badge-blue">Sistem Aktif</span>
                 </div>
+                <h3 style="font-size:17px; font-weight:950; color:#0f172a; margin-top:2px;">Selamat Datang, Admin</h3>
+                <p style="font-size:11.5px; color:#475569; margin-top:4px;">Pusat kendali database, akun pengguna, alokasi guru-siswa, dan rekapan aktivitas PKL.</p>
             </div>
-
             <div class="admin-menu-box-wrap">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div style="font-size: 14px; font-weight: 900; color: #0f172a;">MENU PENGELOLAAN SISTEM (16 FITUR)</div>
-                    <span class="badge-status badge-blue">PANEL ADMIN</span>
+                <div style="font-size:12px; font-weight:950; color:#0f172a; display:flex; justify-content:space-between; align-items:center; border-bottom:1.5px solid #e2e8f0; padding-bottom:8px;">
+                    <span>⚙️ DAFTAR MENU ADMINISTRATOR</span>
+                    <span style="font-size:10px; color:#0284c7;">${adminItems.length} Modul</span>
                 </div>
                 <div class="admin-grid-12">
-                    ${gridCardsHtml}
+                    ${menuHtml}
                 </div>
             </div>`;
         };
 
-        window.toggleFormHotlineInline = function() {
-            const box = document.getElementById("boxFormHotlineInline");
-            const icon = document.getElementById("iconToggleHotlineInline");
-            if (!box) return;
-            if (box.style.display === "none" || !box.style.display) {
-                box.style.display = "block";
-                if (icon) icon.innerText = "▲";
+        window.tarikDataDariCloud = async function(silent = true) {
+            let cloudPayload = null;
+            let errMsg = "";
+            const timestamp = Date.now(); // Cache buster
+
+            // 1. Coba via Supabase JS Client (Utama)
+            if (window.supabaseClient) {
+                try {
+                    const { data: dState } = await window.supabaseClient.from('app_state').select('payload').eq('id', 1).maybeSingle();
+                    if (dState && dState.payload) cloudPayload = dState.payload;
+                } catch(e) { errMsg = e.message; }
+            }
+
+            // 2. JALUR TOL: Fallback tangguh via Native REST API Fetch (Jaminan Download di HP dengan pemecah cache)
+            if (!cloudPayload) {
+                const creds = window.getSupabaseCredentials();
+                try {
+                    const res = await fetch(`${creds.url}/rest/v1/app_state?id=eq.1&select=payload&_cb=${timestamp}`, {
+                        headers: { 
+                            'apikey': creds.key, 
+                            'Authorization': `Bearer ${creds.key}`,
+                            'Cache-Control': 'no-cache, no-store, must-revalidate',
+                            'Pragma': 'no-cache',
+                            'Expires': '0'
+                        },
+                        cache: 'no-store'
+                    });
+                    if (res.ok) {
+                        const json = await res.json();
+                        if (json && json.length > 0) cloudPayload = json[0].payload;
+                    }
+                } catch(e) {
+                    if (!errMsg) errMsg = e.message;
+                }
+            }
+
+            if (cloudPayload) {
+                window.terapkanDataRealtime(cloudPayload);
+                window.isCloudConnected = true;
+                if (!silent) {
+                    const p = window.cloudState;
+                    window.showModalInfo("Data Cloud Berhasil Ditarik! 📥", `
+                        Database terbaru berhasil diambil dari Supabase Cloud dan digabungkan secara aman ke sistem.<br><br>
+                        <b>Ringkasan Database Saat Ini:</b><br>
+                        &bull; 👨‍🎓 Siswa: <b>${(p.siswa || []).length}</b> &bull; 👩‍🏫 Guru: <b>${(p.guru || []).length}</b><br>
+                        &bull; 🔑 Kredensial Login Aktif: <b>${(p.registeredUsers || []).length}</b> akun<br><br>
+                        <span style="color:#0284c7; font-weight:800;">✓ Data lokal telah diperbarui dengan sistem penggabungan aman.</span>
+                    `);
+                }
+                return true;
             } else {
-                box.style.display = "none";
-                if (icon) icon.innerText = "▼";
+                if (!silent) {
+                    window.showModalInfo("Data Cloud Belum Ada", "Tidak ditemukan payload data di tabel Supabase, atau koneksi terhalang.");
+                }
+                return false;
             }
         };
 
@@ -7760,7 +7793,6 @@
                         <td><code>${s.nis}</code></td>
                         <td>${s.noHp}</td>
                         <td><span class="badge-status badge-blue">🏢 ${profile.nama}</span></td>
-                        <td><b>${s.guru}</b></td>
                     </tr>`;
                 });
 
@@ -7784,11 +7816,10 @@
                                     <th>NIS</th>
                                     <th>No. HP</th>
                                     <th>Tempat Magang</th>
-                                    <th>Guru Pembimbing</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada siswa yang dialokasikan magang di industri Anda</td></tr>'}
+                                ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada siswa yang dialokasikan magang di industri Anda</td></tr>'}
                             </tbody>
                         </table>
                     </div>
