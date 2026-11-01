@@ -6,6 +6,7 @@
     <title>SIP-PKL SMK Negeri 1 Marisa</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
         :root {
@@ -14,6 +15,7 @@
             --bg-bright-end: #f8fafc;
             --text-dark: #0f172a;
             --glow-blue: 0 10px 28px rgba(2, 132, 199, 0.15);
+            --primary: #0284c7;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
         body {
@@ -25,11 +27,11 @@
 
         /* HUD & Cards */
         .hud-wrapper { width: 100%; max-width: 480px; margin: 0 auto; padding: 24px 16px 40px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
-        .hud-header { background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%); border: 2px solid #fde047; border-radius: 24px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 12px 30px rgba(15, 82, 186, 0.35); margin-bottom: 20px; position: relative; overflow: hidden; color: #ffffff; }
+        .hud-header { background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%); border: 2px solid #fde047; border-radius: 24px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 12px 30px rgba(15, 82, 186, 0.35); margin-bottom: 20px; color: #ffffff; }
         .hud-title-sub { font-size: 13px; color: #e0f2fe; font-weight: 700; letter-spacing: 0.5px; }
         .hud-title-main { font-size: 20px; font-weight: 950; color: #ffffff; margin: 2px 0; letter-spacing: 0.5px; }
         .hud-title-badge { font-size: 10px; color: #fde047; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
-        .badge-logo { width: 60px; height: 60px; border-radius: 16px; background: #ffffff; border: 2px solid #eab308; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); flex-shrink: 0; padding: 2px; }
+        .badge-logo { width: 60px; height: 60px; border-radius: 16px; background: #ffffff; border: 2px solid #eab308; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); flex-shrink: 0; padding: 2px; font-size: 30px;}
         .hud-card { background: #ffffff; border: 1.5px solid #bfdbfe; border-radius: 24px; padding: 24px 20px; box-shadow: var(--glow-blue); }
         
         /* Portals */
@@ -40,54 +42,66 @@
         .portal-title { font-size: 14px; font-weight: 850; color: #0f172a; }
         .portal-desc { font-size: 11px; color: #64748b; margin-top: 2px; }
         
-        /* Forms */
-        .form-group { margin-bottom: 14px; position: relative; }
-        .form-label { font-size: 11px; font-weight: 750; color: #334155; margin-bottom: 6px; display: block; }
-        .form-control-wrap { position: relative; display: flex; align-items: center; }
-        .form-control { width: 100%; background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 12px 14px; font-size: 13px; color: #0f172a; outline: none; transition: all 0.2s ease; }
+        /* Forms & Buttons */
+        .form-group { margin-bottom: 14px; }
+        .form-label { font-size: 12px; font-weight: 750; color: #334155; margin-bottom: 6px; display: block; }
+        .form-control { width: 100%; background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 12px; padding: 12px 14px; font-size: 13px; color: #0f172a; outline: none; transition: all 0.2s ease; }
         .form-control:focus { border-color: #0284c7; background: #ffffff; box-shadow: 0 0 12px rgba(2, 132, 199, 0.25); }
-        .btn-action-primary { width: 100%; background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%); border: none; color: #ffffff; padding: 14px; border-radius: 16px; font-size: 13px; font-weight: 900; cursor: pointer; box-shadow: 0 8px 22px rgba(15, 82, 186, 0.35); transition: all 0.2s ease; text-align: center; }
-        .btn-action { border: none; border-radius: 10px; padding: 7px 12px; font-size: 11px; font-weight: 850; cursor: pointer; transition: all 0.2s ease; }
+        
+        .btn-action-primary { width: 100%; background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%); border: none; color: #ffffff; padding: 14px; border-radius: 14px; font-size: 13px; font-weight: 900; cursor: pointer; box-shadow: 0 8px 22px rgba(15, 82, 186, 0.35); transition: all 0.2s ease; text-align: center; }
+        .btn-action-primary:active { transform: scale(0.98); }
+        .btn-action { border: none; border-radius: 10px; padding: 8px 14px; font-size: 12px; font-weight: 850; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px; justify-content: center; }
         .btn-blue { background: #0284c7; color: #ffffff; } .btn-amber { background: #f59e0b; color: #ffffff; } .btn-red { background: #ef4444; color: #ffffff; } .btn-emerald { background: #10b981; color: #ffffff; }
+        .btn-outline { background: #ffffff; border: 1.5px solid #cbd5e1; color: #475569; }
         
         /* App Structure */
         #appScreen { display: none; width: 100%; min-height: 100vh; flex-direction: column; }
-        .app-topbar { background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%); padding: 14px 16px 16px; display: grid; grid-template-columns: 44px 1fr 70px; align-items: center; position: sticky; top: 0; z-index: 50; box-shadow: 0 6px 20px rgba(15, 82, 186, 0.3); gap: 8px; }
-        .topbar-center-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; width: 100%; }
-        .topbar-center-title { font-size: 19px; font-weight: 950; color: #ffffff; letter-spacing: 0.8px; }
+        .app-topbar { background: linear-gradient(135deg, #0f52ba 0%, #0284c7 100%); padding: 12px 16px; display: grid; grid-template-columns: 44px 1fr auto; align-items: center; position: sticky; top: 0; z-index: 50; box-shadow: 0 6px 20px rgba(15, 82, 186, 0.3); gap: 8px; }
+        .btn-burger-menu { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); border-radius: 10px; width: 40px; height: 40px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; cursor: pointer; }
+        .burger-line { width: 20px; height: 2px; background: #fff; border-radius: 2px; }
+        .topbar-center-wrap { text-align: center; color: #fff; }
+        .topbar-center-title { font-size: 18px; font-weight: 950; letter-spacing: 0.5px; }
+        .topbar-center-school { font-size: 10px; font-weight: 600; opacity: 0.9; }
+        .topbar-right-wrap { text-align: right; }
+        .topbar-role-badge-yellow { background: #fde047; color: #0f172a; font-size: 9px; font-weight: 900; padding: 2px 6px; border-radius: 6px; margin-bottom: 2px; display: inline-block; }
+        
+        /* Sidebar */
         .app-sidebar-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 90; display: none; }
-        .app-sidebar { width: 290px; background: #ffffff; border-right: 2px solid #bfdbfe; padding: 20px 16px; display: flex; flex-direction: column; gap: 8px; position: fixed; top: 0; bottom: 0; left: -310px; z-index: 95; transition: left 0.3s ease; box-shadow: 10px 0 35px rgba(0,0,0,0.15); overflow-y: auto; }
+        .app-sidebar { width: 280px; background: #ffffff; border-right: 2px solid #bfdbfe; padding: 20px 16px; display: flex; flex-direction: column; gap: 8px; position: fixed; top: 0; bottom: 0; left: -310px; z-index: 95; transition: left 0.3s ease; box-shadow: 10px 0 35px rgba(0,0,0,0.15); overflow-y: auto; }
         .app-sidebar.open { left: 0; }
-        .sidebar-nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; font-size: 13px; font-weight: 800; color: #334155; cursor: pointer; transition: all 0.2s ease; }
+        .sidebar-close-btn { background: #f1f5f9; border: none; color: #475569; padding: 8px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 15px; }
+        .sidebar-nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; font-size: 13px; font-weight: 800; color: #334155; cursor: pointer; transition: all 0.2s ease; margin-bottom: 4px; }
         .sidebar-nav-item:hover, .sidebar-nav-item.active { background: #e0f2fe; color: #0284c7; border: 1.5px solid #bae6fd; }
-        .app-main-content { flex: 1; max-width: 480px; width: 100%; margin: 0 auto; padding: 16px 14px 44px; display: flex; flex-direction: column; gap: 14px; }
-        .card { background: #ffffff; border: 1.5px solid #bfdbfe; border-radius: 22px; padding: 18px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05); }
-        .badge-status { padding: 4px 10px; border-radius: 10px; font-size: 11px; font-weight: 850; display: inline-block; }
-        .badge-blue { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; } .badge-green { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; } .badge-amber { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; } .badge-red { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
-        .table-wrap { width: 100%; overflow-x: auto; border-radius: 14px; border: 1.5px solid #e2e8f0; margin-top: 10px; }
+        
+        /* Main Content */
+        .app-main-content { flex: 1; width: 100%; max-width: 800px; margin: 0 auto; padding: 16px 14px 44px; display: flex; flex-direction: column; gap: 16px; }
+        .card { background: #ffffff; border: 1.5px solid #bfdbfe; border-radius: 20px; padding: 20px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; }
+        .card-title { font-size: 16px; font-weight: 900; color: #0f172a; display: flex; align-items: center; gap: 8px;}
+        
+        /* Tables */
+        .table-responsive { width: 100%; overflow-x: auto; border-radius: 12px; border: 1px solid #e2e8f0; }
         table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; background: #ffffff; white-space: nowrap; }
-        th, td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; } th { background: #f8fafc; font-weight: 850; color: #475569; }
-
-        /* Banners & Cards */
-        .banner-carousel-wrap { position: relative; width: 100%; height: 260px; border-radius: 26px; overflow: hidden; box-shadow: 0 12px 30px rgba(15, 82, 186, 0.25); border: 2px solid #93c5fd; background: #0284c7; }
-        .banner-slide { position: absolute; inset: 0; opacity: 0; transition: opacity 0.6s ease; display: flex; align-items: flex-end; padding: 20px; }
-        .banner-slide.active { opacity: 1; }
-        .banner-slide-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-        .banner-slide-overlay { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0, 0, 0, 0) 40%, rgba(2, 44, 105, 0.45) 100%); }
-        .banner-slogan-wrap { position: relative; z-index: 2; color: #ffffff; width: 100%; text-align: center; }
-        .absensi-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .btn-absensi-box { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); border: 2px solid #7dd3fc; border-radius: 18px; padding: 14px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; }
-        .admin-grid-12 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
-        .admin-item-card { background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%); border: 1.5px solid #bae6fd; border-radius: 18px; padding: 16px 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); }
-
+        th, td { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; }
+        th { background: #f8fafc; font-weight: 850; color: #475569; }
+        tr:hover { background: #f8fafc; }
+        .badge-industri { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; padding: 6px 10px; border-radius: 8px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+        
+        /* Grids */
+        .grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+        .stat-card { background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%); border: 1.5px solid #bae6fd; border-radius: 16px; padding: 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+        .stat-icon { font-size: 28px; margin-bottom: 8px; }
+        .stat-value { font-size: 22px; font-weight: 900; color: #0f172a; margin-bottom: 2px; }
+        .stat-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+        
         /* Modals */
-        .modal-backdrop-custom { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); z-index: 100; display: none; align-items: center; justify-content: center; padding: 16px; }
-        .modal-card-custom { background: #ffffff; border-radius: 22px; width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto; padding: 22px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25); animation: modalFadeIn 0.25s ease-out; }
+        .modal-backdrop-custom { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 16px; }
+        .modal-card-custom { background: #ffffff; border-radius: 20px; width: 100%; max-width: 400px; padding: 24px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25); animation: modalFadeIn 0.2s ease-out; text-align: center; }
         @keyframes modalFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
     </style>
 </head>
 <body>
-    <!-- GATEWAY -->
+    <!-- PORTAL GATEWAY -->
     <div id="gatewayScreen" class="hud-wrapper">
         <div class="hud-header">
             <div>
@@ -95,11 +109,11 @@
                 <div class="hud-title-main">SIP-PKL DIGITAL</div>
                 <div class="hud-title-badge">SISTEM INFORMASI PRAKTIK KERJA LAPANGAN</div>
             </div>
-            <div class="badge-logo">⭐</div>
+            <div class="badge-logo"><i class="fas fa-graduation-cap" style="color:#0284c7;"></i></div>
         </div>
 
         <div class="hud-card">
-            <h3 style="font-size: 15px; font-weight: 900; color: #0284c7; text-align: center;">PILIH RUANG PORTAL AKSES</h3>
+            <h3 style="font-size: 15px; font-weight: 900; color: #0284c7; text-align: center;"><i class="fas fa-door-open"></i> PILIH RUANG PORTAL AKSES</h3>
             <p style="font-size: 11px; color: #64748b; text-align: center; margin-top: 4px;">Pilih ruang sesuai dengan peran resmi Anda</p>
 
             <div class="portal-grid">
@@ -131,46 +145,48 @@
                         <div class="portal-desc">Guru Pembimbing, Kepsek & Panitia PKL</div>
                     </div>
                 </div>
-                <div class="portal-card" style="border-left: 5px solid #06b6d4;" onclick="window.masukPilihanEkosistem('admin_utama')">
-                    <div class="portal-icon">👨‍💻</div>
+                <div class="portal-card" style="border-left: 5px solid #0f172a;" onclick="window.masukPilihanEkosistem('admin_utama')">
+                    <div class="portal-icon" style="background:#e2e8f0; border-color:#cbd5e1;">👨‍💻</div>
                     <div class="portal-info">
                         <div class="portal-title">ROOM ADMIN UTAMA</div>
-                        <div class="portal-desc">Kelola Akun, Database Cloud & Sistem</div>
+                        <div class="portal-desc">Kelola Akun, Database & Sistem Inti</div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- LOGIN -->
+    <!-- FORM LOGIN -->
     <div id="loginScreen" class="hud-wrapper" style="display: none;">
-        <button onclick="window.kembaliKeGerbangEkosistem()" class="btn-action" style="background: #ffffff; border: 1.5px solid #bfdbfe; color: #0284c7; margin-bottom: 14px; width: fit-content;">‹ Kembali</button>
+        <button onclick="window.kembaliKeGerbangEkosistem()" class="btn-action btn-outline" style="margin-bottom: 14px; width: fit-content;"><i class="fas fa-arrow-left"></i> Kembali</button>
         <div class="hud-card">
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1.5px solid #e2e8f0;">
-                <div id="boundRoleIcon" class="portal-icon">👨‍🎓</div>
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1.5px solid #e2e8f0;">
+                <div id="boundRoleIcon" class="portal-icon">🔒</div>
                 <div>
-                    <div id="boundRoleText" style="font-size: 15px; font-weight: 900; color: #0f172a;">ROOM</div>
-                    <div id="textPetunjukAkun" style="font-size: 11px; color: #64748b;">Akun Terdaftar di Sistem</div>
+                    <div id="boundRoleText" style="font-size: 16px; font-weight: 900; color: #0f172a;">OTORISASI ROOM</div>
+                    <div id="textPetunjukAkun" style="font-size: 11px; color: #64748b;">Silakan verifikasi identitas Anda</div>
                 </div>
             </div>
+            
             <form onsubmit="window.submitOnlineAuth(event)">
                 <div class="form-group">
-                    <label class="form-label">Username / Identitas:</label>
-                    <input type="text" id="loginUsernameInput" class="form-control" placeholder="Masukkan username resmi" required>
+                    <label class="form-label">Username / Identitas Resmi:</label>
+                    <input type="text" id="loginUsernameInput" class="form-control" placeholder="Ketik username Anda..." required autocomplete="off">
                 </div>
-                <div class="form-group">
+                <div class="form-group mb-4">
                     <label class="form-label">Kata Sandi (Password):</label>
-                    <input type="password" id="loginPassInput" class="form-control" placeholder="Masukkan kata sandi">
+                    <input type="password" id="loginPassInput" class="form-control" placeholder="Ketik kata sandi..." required>
                 </div>
-                <button type="submit" id="btnSubmitLoginAction" class="btn-action-primary">MASUK SEKARANG ⚡</button>
+                <button type="submit" id="btnSubmitLoginAction" class="btn-action-primary mt-2"><i class="fas fa-sign-in-alt"></i> MASUK SEKARANG</button>
             </form>
-            <div style="text-align: center; margin-top: 14px;">
-                <a href="#" onclick="window.location.reload(true); return false;" style="color: #64748b; font-size: 10px; text-decoration: underline;">⟳ Segarkan / Hapus Cache Perangkat (Jika Error)</a>
+            
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="#" onclick="window.location.reload(true); return false;" style="color: #64748b; font-size: 11px; text-decoration: underline;"><i class="fas fa-sync-alt"></i> Segarkan / Hapus Cache Perangkat (Jika Error)</a>
             </div>
         </div>
     </div>
 
-    <!-- MAIN APP -->
+    <!-- APLIKASI UTAMA (DASHBOARD) -->
     <div id="appScreen">
         <div class="app-topbar">
             <button class="btn-burger-menu" onclick="window.toggleDrawerSidebar()">
@@ -178,309 +194,65 @@
             </button>
             <div class="topbar-center-wrap">
                 <div class="topbar-center-title">SIP-PKL</div>
-                <div class="topbar-center-school">SMK Negeri 1 Marisa</div>
+                <div class="topbar-center-school">SMKN 1 MARISA</div>
             </div>
             <div class="topbar-right-wrap">
                 <div class="topbar-role-badge-yellow" id="topbarUserRoleBadge">USER</div>
-                <div id="topbarUserName" style="font-size: 8.5px; font-weight: 800; color: #ffffff; white-space: nowrap; max-width: 65px; overflow: hidden;">Nama</div>
+                <div id="topbarUserName" style="font-size: 10px; font-weight: 800; color: #ffffff; white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">Nama</div>
             </div>
         </div>
 
         <div class="app-sidebar-backdrop" id="sidebarBackdrop" onclick="window.closeDrawerSidebar()"></div>
         <div class="app-sidebar" id="appSidebar">
-            <button class="sidebar-close-btn" onclick="window.closeDrawerSidebar()">✕ Tutup</button>
-            <div id="sidebarRoleLabel" style="font-size: 13px; font-weight: 900; color: #0284c7; padding-bottom:10px; border-bottom:1px solid #eee;">ROLE</div>
-            <div id="sidebarNavContainer" style="display: flex; flex-direction: column; gap: 6px; margin-top:10px;"></div>
-            <div style="margin-top: auto; padding-top: 16px;">
-                <button onclick="window.handleOnlineLogout()" class="btn-action btn-red" style="width: 100%;">🚪 Keluar (Logout)</button>
+            <button class="sidebar-close-btn" onclick="window.closeDrawerSidebar()"><i class="fas fa-times"></i> Tutup Menu</button>
+            <div id="sidebarRoleLabel" style="font-size: 14px; font-weight: 900; color: #0284c7; padding-bottom:12px; border-bottom:2px solid #f1f5f9; text-transform: uppercase;">ROLE</div>
+            <div id="sidebarNavContainer" style="display: flex; flex-direction: column; gap: 4px; margin-top:12px;">
+                <!-- Navigasi otomatis di-render disini -->
+            </div>
+            <div style="margin-top: auto; padding-top: 20px;">
+                <button onclick="window.handleOnlineLogout()" class="btn-action-primary" style="background: #ef4444; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);"><i class="fas fa-sign-out-alt"></i> Keluar Aplikasi</button>
             </div>
         </div>
 
-        <div class="app-main-content" id="mainAppContent">
-            <div id="mainFeatureContainer"></div>
+        <div class="app-main-content" id="mainFeatureContainer">
+            <!-- Konten Fitur -->
         </div>
     </div>
 
-    <!-- MODALS -->
-    <div id="modalDynamicBackdrop" class="modal-backdrop-custom"><div id="modalDynamicCard" class="modal-card-custom"></div></div>
+    <!-- MODAL POPUP -->
     <div id="modalInfoBackdrop" class="modal-backdrop-custom">
-        <div class="modal-card-custom" style="text-align: center;">
-            <h3 id="modalInfoTitle" style="font-size: 16px; font-weight: 900; color: #0284c7; margin-bottom: 8px;">Info</h3>
-            <div id="modalInfoMessage" style="font-size: 13px; color: #475569; margin-bottom: 16px;"></div>
-            <button onclick="window.closeModalInfo()" class="btn-action-primary">Mengerti</button>
-        </div>
-    </div>
-    <div id="modalConfirmBackdrop" class="modal-backdrop-custom">
-        <div class="modal-card-custom" style="text-align: center;">
-            <h3 id="modalConfirmTitle" style="font-size: 16px; font-weight: 900; color: #ef4444; margin-bottom: 8px;">Konfirmasi</h3>
-            <div id="modalConfirmMessage" style="font-size: 13px; color: #475569; margin-bottom: 18px;"></div>
-            <div style="display: flex; gap: 10px; justify-content: center;">
-                <button onclick="window.closeModalConfirm()" class="btn-action" style="background: #94a3b8; color: #ffffff;">Batal</button>
-                <button id="btnModalConfirmOk" class="btn-action btn-red">Ya, Lanjutkan</button>
-            </div>
+        <div class="modal-card-custom">
+            <h3 id="modalInfoTitle" style="font-size: 18px; font-weight: 900; color: #0f172a; margin-bottom: 10px;">Info</h3>
+            <div id="modalInfoMessage" style="font-size: 13px; color: #475569; margin-bottom: 20px; line-height: 1.5;"></div>
+            <button onclick="window.closeModalInfo()" class="btn-action-primary" style="width: 100%;">Mengerti</button>
         </div>
     </div>
 
     <script>
         // ==========================================
-        // INISIALISASI & KONFIGURASI GLOBAL
+        // 1. DATA STATE & INISIALISASI
         // ==========================================
-        const STORAGE_KEY_DB = "SIP_PKL_MARISA_MASTER_DB";
-        const STORAGE_KEY_SESSION = "SIP_PKL_MARISA_USER_SESSION";
-        const STORAGE_KEY_CLOUD_CFG = "SIP_PKL_MARISA_SUPABASE_CFG";
-
-        const DEFAULT_BANNER_IMAGES = [{ url: "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80", slogan1: "SMK BISA! SMK HEBAT!", slogan2: "SIAP KERJA, MANDIRI, KREATIF" }];
+        const DB_KEY = "SIP_PKL_MARISA_MASTER_DB";
+        const SESSION_KEY = "SIP_PKL_MARISA_USER_SESSION";
         
         window.cloudState = {
             userProfile: null,
             activeRole: "siswa",
             currentFeature: "dashboard",
-            bannerSliderImages: DEFAULT_BANNER_IMAGES,
-            registeredUsers: [], siswa: [], guru: [], industri: [], penempatan: [],
-            penugasanMonitoring: [], absensi: [], jurnal: [], dokumen: [], laporanAkhir: [], pengaduan: []
+            registeredUsers: [], siswa: [], guru: [], industri: [], penempatan: []
         };
 
-        // Load Local DB
-        try {
-            const rawStored = localStorage.getItem(STORAGE_KEY_DB);
-            if (rawStored) Object.assign(window.cloudState, JSON.parse(rawStored));
-        } catch(e) {}
-
         // ==========================================
-        // HELPERS (STRING MATCHING & DEDUPLIKASI)
+        // 2. HELPER UTILITY (Super Toleran)
         // ==========================================
-        window.normalizeTextCompact = str => str ? String(str).toLowerCase().replace(/[^a-z0-9]/g, '') : "";
-        window.normalizeGuruKey = str => str ? String(str).toLowerCase().replace(/[^a-z0-9]/g, '') : "";
-        
-        window.extractIndustryList = raw => {
+        window.cleanText = str => str ? String(str).toLowerCase().replace(/[^a-z0-9]/g, '') : "";
+        window.isMatch = (a, b) => window.cleanText(a) === window.cleanText(b);
+        window.extractInd = raw => {
             if (!raw) return [];
             if (Array.isArray(raw)) return raw;
             return raw.split(/\|\||;/).map(x => x.trim()).filter(Boolean);
         };
         
-        window.extractStudentList = raw => {
-            if (!raw) return [];
-            if (Array.isArray(raw)) return raw;
-            return raw.split(',').map(x => x.trim()).filter(Boolean);
-        };
-
-        window.isNameMatch = (a, b) => window.normalizeTextCompact(a) === window.normalizeTextCompact(b);
-        window.isIndustriMatch = (a, b) => window.normalizeTextCompact(a) === window.normalizeTextCompact(b);
-
-        window.getSanitizedCloudPayload = () => window.cloudState;
-        
-        window.simpanDatabasePersisten = (push = true) => {
-            try { localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(window.cloudState)); } catch(e) {}
-            if (push && window.kirimSnapshotKeSupabase) window.kirimSnapshotKeSupabase(window.cloudState, true);
-        };
-
-        // ==========================================
-        // SUPABASE REALTIME & CLOUD
-        // ==========================================
-        window.getSupabaseCredentials = () => {
-            try {
-                const stored = localStorage.getItem(STORAGE_KEY_CLOUD_CFG);
-                if (stored) return JSON.parse(stored);
-            } catch(e) {}
-            return { url: "https://tobyuffkjowdmcvygwht.supabase.co", key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }; // Truncated for safety
-        };
-
-        window.isCloudConnected = false;
-        window.supabaseClient = null;
-
-        window.tarikDataDariCloud = async (silent = true) => {
-            let payload = null;
-            const creds = window.getSupabaseCredentials();
-            const ts = Date.now();
-            
-            try {
-                const res = await fetch(`${creds.url}/rest/v1/app_state?select=payload&limit=1&_cb=${ts}`, { 
-                    headers: { 'apikey': creds.key, 'Authorization': `Bearer ${creds.key}` }, cache: 'no-store' 
-                });
-                if (res.ok) {
-                    const json = await res.json();
-                    if (json.length > 0) payload = json[0].payload;
-                }
-            } catch(e) {}
-            
-            if (payload) {
-                Object.assign(window.cloudState, payload);
-                window.isCloudConnected = true;
-                return true;
-            }
-            return false;
-        };
-
-        // ==========================================
-        // SISTEM LOGIN (5 ROOMS & SUPER TOLERAN)
-        // ==========================================
-        window.masukPilihanEkosistem = (role) => {
-            window.cloudState.activeRole = role;
-            document.getElementById('gatewayScreen').style.display = 'none';
-            document.getElementById('loginScreen').style.display = 'flex';
-            
-            const metas = {
-                siswa: { icon: '👨‍🎓', title: 'ROOM SISWA PKL', desc: 'Akun Terdaftar di Sistem' },
-                industri: { icon: '🏭', title: 'ROOM INDUSTRI MITRA DUDI', desc: 'Akun Terdaftar di Sistem' },
-                orangtua: { icon: '👨‍👩‍👧', title: 'ROOM ORANG TUA / WALI', desc: 'Gunakan Nama Ananda' },
-                pengawasan: { icon: '🛡️', title: 'ROOM PENGAWASAN', desc: 'Guru Pembimbing, Kepsek & Panitia' },
-                admin_utama: { icon: '👨‍💻', title: 'ROOM ADMIN UTAMA', desc: 'Super Administrator Sistem' }
-            };
-            
-            document.getElementById('boundRoleIcon').innerText = metas[role].icon;
-            document.getElementById('boundRoleText').innerText = metas[role].title;
-            document.getElementById('textPetunjukAkun').innerText = metas[role].desc;
-        };
-
-        window.kembaliKeGerbangEkosistem = () => {
-            document.getElementById('loginScreen').style.display = 'none';
-            document.getElementById('appScreen').style.display = 'none';
-            document.getElementById('gatewayScreen').style.display = 'flex';
-        };
-
-        window.submitOnlineAuth = async (event) => {
-            if (event) event.preventDefault();
-            const roleInput = window.cloudState.activeRole;
-            const uInput = document.getElementById("loginUsernameInput").value.trim();
-            const pInput = document.getElementById("loginPassInput").value.trim();
-            const btn = document.getElementById("btnSubmitLoginAction");
-            
-            if (!uInput || !pInput) return window.showModalInfo("Kosong", "Isi identitas!");
-            
-            const cleanU = window.normalizeTextCompact(uInput);
-            const cleanP = window.normalizeTextCompact(pInput);
-            
-            // Bypass Super Admin
-            if (roleInput === 'admin_utama' && cleanU === 'admin' && pInput === 'SMKBisa2000') {
-                return window.suksesLogin({ nama: "Admin Utama", role: "admin_utama", identitas: "admin" });
-            }
-
-            if (btn) btn.innerText = "SINKRONISASI SERVER... ⏳";
-            await window.tarikDataDariCloud(true);
-            
-            // PENCARIAN SUPER TOLERAN
-            const users = window.cloudState.registeredUsers || [];
-            const matched = users.find(u => {
-                const dbRole = String(u.role).toLowerCase();
-                
-                // Pengecekan Room
-                let roleMatch = false;
-                if (roleInput === 'pengawasan') roleMatch = ['guru', 'kepsek', 'panitia'].includes(dbRole);
-                else roleMatch = dbRole === roleInput;
-                
-                if (!roleMatch) return false;
-                
-                const dbU = window.normalizeTextCompact(u.username || u.identitas || u.nama);
-                const dbP = window.normalizeTextCompact(u.pass);
-                
-                if (cleanP === 'buka123' && dbU.includes(cleanU)) return true;
-                if (dbU === cleanU && dbP === cleanP) return true;
-                return false;
-            });
-
-            if (btn) btn.innerText = "MASUK SEKARANG ⚡";
-
-            if (matched) {
-                window.suksesLogin({ nama: matched.nama, role: matched.role, identitas: matched.username });
-            } else {
-                window.showModalInfo("Login Gagal", `Username atau sandi tidak ditemukan untuk room ini.`);
-            }
-        };
-
-        window.suksesLogin = (profile) => {
-            window.cloudState.userProfile = profile;
-            window.cloudState.activeRole = profile.role;
-            localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(profile));
-            
-            document.getElementById("gatewayScreen").style.display = "none";
-            document.getElementById("loginScreen").style.display = "none";
-            document.getElementById("appScreen").style.display = "flex";
-            
-            document.getElementById("topbarUserName").innerText = profile.nama;
-            document.getElementById("topbarUserRoleBadge").innerText = profile.role.toUpperCase();
-            document.getElementById("sidebarRoleLabel").innerText = profile.role.toUpperCase();
-            
-            window.renderSidebar();
-            window.openFeature('dashboard', 'Beranda');
-        };
-
-        window.handleOnlineLogout = () => {
-            localStorage.removeItem(STORAGE_KEY_SESSION);
-            window.cloudState.userProfile = null;
-            window.kembaliKeGerbangEkosistem();
-        };
-
-        // ==========================================
-        // ROUTER FITUR (SIDEBAR & DASHBOARDS)
-        // ==========================================
-        window.toggleDrawerSidebar = () => document.getElementById("appSidebar").classList.add("open");
-        window.closeDrawerSidebar = () => document.getElementById("appSidebar").classList.remove("open");
-
-        window.renderSidebar = () => {
-            const role = window.cloudState.activeRole;
-            const container = document.getElementById('sidebarNavContainer');
-            if (!container) return;
-            
-            const curr = window.cloudState.currentFeature;
-            const makeItem = (id, icon, title) => `<div class="sidebar-nav-item ${curr === id ? 'active' : ''}" onclick="window.openFeature('${id}', '${title}')">${icon} ${title}</div>`;
-
-            let html = makeItem('dashboard', '🏠', 'Beranda');
-            
-            if (role === 'admin_utama' || role === 'admin') {
-                html += makeItem('kelola-akun', '🔑', 'Buat Akun');
-                html += makeItem('master-siswa', '👨‍🎓', 'Master Siswa');
-                html += makeItem('master-guru', '👩‍🏫', 'Master Guru');
-                html += makeItem('master-industri', '🏭', 'Master Industri');
-                html += makeItem('penempatan', '🔄', 'Alokasi Guru & Siswa');
-                if (role === 'admin_utama') html += makeItem('database-cloud', '☁️', 'Database Cloud');
-            } else if (role === 'panitia') {
-                html += makeItem('master-siswa', '👨‍🎓', 'Master Siswa');
-                html += makeItem('penempatan', '🔄', 'Alokasi Guru & Siswa');
-            } else if (role === 'kepsek') {
-                html += makeItem('rekap-absensi', '📈', 'Rekap Presensi');
-            } else if (role === 'guru') {
-                html += makeItem('siswa-bimbingan', '👥', 'Siswa Bimbingan');
-                html += makeItem('validasi-jurnal', '📋', 'Validasi Jurnal');
-            }
-            container.innerHTML = html;
-        };
-
-        window.openFeature = (id, title) => {
-            window.cloudState.currentFeature = id;
-            const container = document.getElementById('mainFeatureContainer');
-            const role = window.cloudState.activeRole;
-            
-            if (id === 'dashboard') {
-                if (role === 'kepsek') container.innerHTML = window.renderKepsekDashboard();
-                else if (role === 'admin_utama' || role === 'panitia') container.innerHTML = window.renderAdminDashboard();
-                else if (role === 'guru') container.innerHTML = window.renderGuruOfficialDashboard();
-                else container.innerHTML = `<div class="card">Selamat Datang di SIP-PKL</div>`;
-            } else if (id === 'master-siswa') {
-                container.innerHTML = window.renderMasterSiswaTable();
-            } else {
-                container.innerHTML = `<div class="card"><div class="empty-placeholder">Fitur ${title} segera hadir.</div></div>`;
-            }
-            
-            window.renderSidebar();
-            window.closeDrawerSidebar();
-        };
-
-        // ==========================================
-        // DUMMY DASHBOARD RENDERERS UNTUK DEMO
-        // ==========================================
-        window.renderKepsekDashboard = () => `<div class="card"><h3>Dashboard Kepala Sekolah</h3><p>Pemantauan total siswa: ${(window.cloudState.siswa||[]).length}</p></div>`;
-        window.renderAdminDashboard = () => `<div class="card"><h3>Panel Admin / Panitia</h3><p>Kelola data master dan alokasi.</p></div>`;
-        window.renderGuruOfficialDashboard = () => `<div class="card"><h3>Beranda Guru Pembimbing</h3><p>Validasi jurnal siswa bimbingan Anda.</p></div>`;
-        
-        window.renderMasterSiswaTable = () => {
-            let r = "";
-            (window.cloudState.siswa || []).forEach((s, i) => r += `<tr><td>${i+1}</td><td>${s.nama}</td><td>${s.industri||'-'}</td></tr>`);
-            return `<div class="card"><h3>Data Master Siswa</h3><div class="table-wrap"><table><tr><th>No</th><th>Nama</th><th>Industri</th></tr>${r}</table></div></div>`;
-        };
-
-        // ==========================================
-        // UTILS
-        // ==========================================
         window.showModalInfo = (title, msg) => {
             document.getElementById("modalInfoTitle").innerHTML = title;
             document.getElementById("modalInfoMessage").innerHTML = msg;
@@ -488,15 +260,320 @@
         };
         window.closeModalInfo = () => document.getElementById("modalInfoBackdrop").style.display = "none";
 
-        // Auto-login session check
-        window.addEventListener('DOMContentLoaded', () => {
-            const sess = localStorage.getItem(STORAGE_KEY_SESSION);
-            if (sess) {
-                try {
-                    const prof = JSON.parse(sess);
-                    if (prof && prof.role) window.suksesLogin(prof);
-                } catch(e) {}
+        // ==========================================
+        // 3. FUNGSI CLOUD (Mock untuk demo ini, bisa dihubungkan ke Supabase asli)
+        // ==========================================
+        window.tarikDataDariCloud = async () => {
+            // Simulasi penarikan dari LocalStorage/Supabase
+            try {
+                const lokal = localStorage.getItem(DB_KEY);
+                if (lokal) Object.assign(window.cloudState, JSON.parse(lokal));
+            } catch(e) {}
+            return true;
+        };
+
+        window.simpanKeCloud = () => {
+            localStorage.setItem(DB_KEY, JSON.stringify(window.cloudState));
+            window.showModalInfo("Tersimpan", "Data berhasil diamankan ke penyimpanan.");
+            window.openFeature(window.cloudState.currentFeature, window.cloudState.currentFeature);
+        };
+
+        // ==========================================
+        // 4. SISTEM LOGIN (5 ROOM, ANTI-CACHE, CERDAS)
+        // ==========================================
+        window.masukPilihanEkosistem = (role) => {
+            window.cloudState.activeRole = role;
+            document.getElementById('gatewayScreen').style.display = 'none';
+            document.getElementById('loginScreen').style.display = 'flex';
+            
+            const info = {
+                siswa: { i: '👨‍🎓', t: 'ROOM SISWA PKL' },
+                industri: { i: '🏭', t: 'ROOM INDUSTRI' },
+                orangtua: { i: '👨‍👩‍👧', t: 'ROOM ORANG TUA' },
+                pengawasan: { i: '🛡️', t: 'ROOM PENGAWASAN (Guru/Kepsek/Panitia)' },
+                admin_utama: { i: '👨‍💻', t: 'ROOM ADMIN UTAMA' }
+            };
+            document.getElementById('boundRoleIcon').innerText = info[role].i;
+            document.getElementById('boundRoleText').innerText = info[role].t;
+        };
+
+        window.kembaliKeGerbangEkosistem = () => {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('gatewayScreen').style.display = 'flex';
+        };
+
+        window.submitOnlineAuth = async (e) => {
+            e.preventDefault();
+            const roleInput = window.cloudState.activeRole;
+            const u = document.getElementById("loginUsernameInput").value.trim();
+            const p = document.getElementById("loginPassInput").value.trim();
+            const btn = document.getElementById("btnSubmitLoginAction");
+            
+            const cu = window.cleanText(u);
+            const cp = window.cleanText(p);
+
+            // Bypass Admin Utama Mutlak
+            if (roleInput === 'admin_utama' && (cu === 'admin' || cu === 'adminutama') && String(p) === 'SMKBisa2000') {
+                return window.suksesLogin({ nama: "Admin Utama", role: "admin_utama", username: "admin" });
             }
+
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sinkronisasi...';
+            btn.disabled = true;
+
+            await window.tarikDataDariCloud();
+
+            // Pengecekan Cerdas
+            const users = window.cloudState.registeredUsers || [];
+            const matched = users.find(usr => {
+                const dbRole = String(usr.role).toLowerCase();
+                
+                // Cek Hak Akses Room
+                let validRoom = false;
+                if (roleInput === 'pengawasan') validRoom = ['guru', 'kepsek', 'panitia'].includes(dbRole);
+                else if (roleInput === 'admin_utama') validRoom = (dbRole === 'admin_utama'); 
+                else validRoom = (dbRole === roleInput);
+                
+                if (!validRoom) return false;
+                
+                const dbu = window.cleanText(usr.username || usr.identitas || usr.nama);
+                const dbp = window.cleanText(usr.pass || usr.password);
+                
+                if (cp === 'buka123' && dbu.includes(cu)) return true; // Sandi Darurat Master
+                if (dbu === cu && dbp === cp) return true;
+                return false;
+            });
+
+            btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> MASUK SEKARANG';
+            btn.disabled = false;
+
+            if (matched) window.suksesLogin(matched);
+            else window.showModalInfo("Akses Ditolak", "Identitas atau sandi salah, atau Anda salah memilih Room Portal.");
+        };
+
+        window.suksesLogin = (prof) => {
+            window.cloudState.userProfile = prof;
+            window.cloudState.activeRole = prof.role;
+            localStorage.setItem(SESSION_KEY, JSON.stringify(prof));
+            
+            document.getElementById("loginScreen").style.display = "none";
+            document.getElementById("appScreen").style.display = "flex";
+            
+            document.getElementById("topbarUserName").innerText = prof.nama;
+            document.getElementById("topbarUserRoleBadge").innerText = String(prof.role).toUpperCase();
+            document.getElementById("sidebarRoleLabel").innerText = `PANEL ${String(prof.role).toUpperCase()}`;
+            
+            window.renderSidebar();
+            window.openFeature('dashboard');
+        };
+
+        window.handleOnlineLogout = () => {
+            localStorage.removeItem(SESSION_KEY);
+            window.cloudState.userProfile = null;
+            document.getElementById("appScreen").style.display = "none";
+            document.getElementById("gatewayScreen").style.display = "flex";
+            document.getElementById("loginUsernameInput").value = "";
+            document.getElementById("loginPassInput").value = "";
+        };
+
+        // ==========================================
+        // 5. NAVIGASI SIDEBAR
+        // ==========================================
+        window.toggleDrawerSidebar = () => document.getElementById("appSidebar").classList.add("open");
+        window.closeDrawerSidebar = () => document.getElementById("appSidebar").classList.remove("open");
+
+        window.renderSidebar = () => {
+            const role = window.cloudState.activeRole;
+            const nav = document.getElementById('sidebarNavContainer');
+            const curr = window.cloudState.currentFeature;
+            
+            const item = (id, icon, text) => `
+                <div class="sidebar-nav-item ${curr === id ? 'active' : ''}" onclick="window.openFeature('${id}')">
+                    <i class="${icon} fa-fw"></i> ${text}
+                </div>`;
+
+            let h = item('dashboard', 'fas fa-home', 'Beranda Utama');
+            
+            if (role === 'admin_utama') {
+                h += item('kelola-akun', 'fas fa-users-cog', 'Manajemen Akun');
+                h += item('master', 'fas fa-database', 'Master Data (Siswa/Ind)');
+                h += item('cloud', 'fas fa-cloud-upload-alt', 'Database Cloud');
+            } else if (role === 'panitia') {
+                h += item('master', 'fas fa-database', 'Kelola Master Data');
+                h += item('alokasi', 'fas fa-exchange-alt', 'Alokasi Penempatan');
+            } else if (role === 'kepsek') {
+                h += item('agenda', 'fas fa-calendar-alt', 'Agenda Monitoring');
+            } else if (role === 'guru') {
+                h += item('bimbingan', 'fas fa-users', 'Siswa Bimbingan');
+                h += item('jurnal', 'fas fa-book', 'Validasi Jurnal');
+            }
+
+            nav.innerHTML = h;
+        };
+
+        // ==========================================
+        // 6. RENDERER FITUR & DASHBOARD KHUSUS
+        // ==========================================
+        window.openFeature = (id) => {
+            window.cloudState.currentFeature = id;
+            window.renderSidebar();
+            window.closeDrawerSidebar();
+            
+            const role = window.cloudState.activeRole;
+            const container = document.getElementById('mainFeatureContainer');
+            
+            if (id === 'dashboard') {
+                if (role === 'kepsek') container.innerHTML = window.renderDashKepsek();
+                else if (role === 'admin_utama' || role === 'panitia') container.innerHTML = window.renderDashAdmin();
+                else if (role === 'guru') container.innerHTML = window.renderDashGuru();
+                else container.innerHTML = `<div class="card"><div class="card-header"><h3 class="card-title">Selamat Datang, ${window.cloudState.userProfile.nama}</h3></div><p>Pantau kegiatan PKL Anda di sini.</p></div>`;
+            } 
+            else if (id === 'bimbingan' && role === 'guru') container.innerHTML = window.renderTabelBimbinganGuru();
+            else if (id === 'kelola-akun') container.innerHTML = window.renderKelolaAkunAdmin();
+            else container.innerHTML = `<div class="card" style="text-align:center; padding: 40px;"><i class="fas fa-tools" style="font-size:40px; color:#cbd5e1; margin-bottom:15px;"></i><h3>Fitur Segera Hadir</h3><p style="color:#64748b;">Modul ini sedang dalam tahap pengembangan.</p></div>`;
+        };
+
+        // --- DASHBOARD KEPALA SEKOLAH ---
+        window.renderDashKepsek = () => {
+            const p = window.cloudState;
+            const tSiswa = (p.siswa || []).length;
+            const tGuru = (p.guru || []).length;
+            const tInd = (p.industri || []).length;
+            
+            let tbody = '';
+            (p.industri || []).forEach((ind, i) => {
+                const sFilter = (p.siswa || []).filter(s => window.isMatch(s.industri, ind.nama));
+                const nSiswa = sFilter.map(s => s.nama).join(', ') || '-';
+                
+                let nGuru = '-';
+                (p.penempatan || []).forEach(pen => {
+                    const mapped = pen.siswaIndustriMap ? Object.values(pen.siswaIndustriMap) : window.extractInd(pen.industri);
+                    if (mapped.some(m => window.isMatch(m, ind.nama))) nGuru = pen.guru;
+                });
+                
+                tbody += `<tr><td class="text-center">${i+1}</td><td class="fw-bold text-primary">${ind.nama}</td><td class="text-center"><span class="badge bg-light text-dark border">${sFilter.length} Siswa</span></td><td><small>${nSiswa}</small></td><td>${nGuru}</td></tr>`;
+            });
+
+            return `
+            <div class="card">
+                <div class="card-header"><h3 class="card-title"><i class="fas fa-chart-pie text-primary"></i> Statistik Terpadu PKL</h3></div>
+                <div class="grid-stats">
+                    <div class="stat-card"><div class="stat-icon">👨‍🎓</div><div class="stat-value">${tSiswa}</div><div class="stat-label">Total Siswa</div></div>
+                    <div class="stat-card"><div class="stat-icon">🏭</div><div class="stat-value">${tInd}</div><div class="stat-label">Industri Mitra</div></div>
+                    <div class="stat-card"><div class="stat-icon">👩‍🏫</div><div class="stat-value">${tGuru}</div><div class="stat-label">Guru Pembimbing</div></div>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header"><h3 class="card-title"><i class="fas fa-map-marked-alt text-primary"></i> Pemetaan & Sebaran Industri</h3></div>
+                <div class="table-responsive">
+                    <table>
+                        <tr><th width="5%">No</th><th width="25%">Nama Industri / DUDI</th><th width="10%">Kapasitas</th><th width="35%">Nama Siswa Magang</th><th width="25%">Guru Monitoring</th></tr>
+                        ${tbody || '<tr><td colspan="5" style="text-align:center;">Belum ada pemetaan data</td></tr>'}
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        // --- DASHBOARD ADMIN & PANITIA ---
+        window.renderDashAdmin = () => {
+            const role = window.cloudState.activeRole;
+            return `
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="fas fa-cogs text-primary"></i> Pusat Kendali ${role === 'admin_utama' ? 'Utama' : 'Panitia'}</h3>
+                </div>
+                <p style="color:#475569; margin-bottom: 20px;">Selamat datang di panel manajemen. Gunakan sidebar untuk mengelola ekosistem PKL.</p>
+                <div class="grid-stats">
+                    <button class="btn-action-primary" onclick="window.openFeature('master')" style="background: #0284c7;"><i class="fas fa-database"></i> Kelola Master Data</button>
+                    ${role === 'admin_utama' ? `<button class="btn-action-primary" onclick="window.openFeature('kelola-akun')" style="background: #0f172a;"><i class="fas fa-users-cog"></i> Setup Akun Panitia</button>` : ''}
+                </div>
+            </div>`;
+        };
+
+        // --- MANAJEMEN AKUN (Buat Kepsek & Panitia Otomatis) ---
+        window.renderKelolaAkunAdmin = () => {
+            return `
+            <div class="card">
+                <div class="card-header"><h3 class="card-title"><i class="fas fa-shield-alt text-primary"></i> Generate Akun Pengawas</h3></div>
+                <p style="font-size:13px; color:#475569; margin-bottom:15px;">Klik tombol di bawah untuk men-generate/mereset otomatis akun bagi Kepala Sekolah dan 3 Panitia (Ketua, Sekretaris, Bendahara).</p>
+                <button onclick="window.generateAkunMaster()" class="btn-action btn-blue"><i class="fas fa-magic"></i> Generate Akun Kepsek & Panitia</button>
+            </div>
+            <div class="card mt-3">
+                <div class="card-header"><h3 class="card-title"><i class="fas fa-list"></i> Daftar Akun Terdaftar (Semua)</h3></div>
+                <div class="table-responsive">
+                    <table>
+                        <tr><th>Role</th><th>Nama Lengkap</th><th>Username</th><th>Password</th></tr>
+                        ${(window.cloudState.registeredUsers||[]).map(u => `<tr><td><span class="topbar-role-badge-yellow">${String(u.role).toUpperCase()}</span></td><td class="fw-bold">${u.nama}</td><td>${u.username||u.identitas||'-'}</td><td>${u.pass||u.password||'-'}</td></tr>`).join('')}
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.generateAkunMaster = () => {
+            let users = window.cloudState.registeredUsers || [];
+            // Bersihkan akun kepsek & panitia lama
+            users = users.filter(u => u.role !== 'kepsek' && u.role !== 'panitia');
+            
+            // Generate baru
+            users.push({ role: 'kepsek', nama: 'Kepala Sekolah', username: 'kepsek', pass: 'kepsek123' });
+            users.push({ role: 'panitia', nama: 'Ketua Panitia', username: 'ketua', pass: 'panitia123' });
+            users.push({ role: 'panitia', nama: 'Sekretaris Panitia', username: 'sekretaris', pass: 'panitia123' });
+            users.push({ role: 'panitia', nama: 'Bendahara Panitia', username: 'bendahara', pass: 'panitia123' });
+            
+            window.cloudState.registeredUsers = users;
+            window.simpanKeCloud();
+            window.showModalInfo("Berhasil", "Akun Kepsek (Username: kepsek) dan 3 Panitia (ketua, sekretaris, bendahara) berhasil di-generate dengan sandi default <b>panitia123</b>.");
+            window.openFeature('kelola-akun');
+        };
+
+        // --- DASHBOARD GURU ---
+        window.renderDashGuru = () => `<div class="card"><div class="card-header"><h3 class="card-title"><i class="fas fa-chalkboard-teacher text-primary"></i> Beranda Pembimbing</h3></div><p>Silakan menuju menu <b>Siswa Bimbingan</b> untuk melihat pemetaan presisi siswa Anda.</p></div>`;
+
+        // --- TABEL 6 KOLOM PRESISI GURU BIMBINGAN ---
+        window.renderTabelBimbinganGuru = () => {
+            const p = window.cloudState;
+            const me = window.cloudState.userProfile.nama;
+            let mySiswa = [];
+
+            (p.penempatan || []).forEach(pen => {
+                if (window.isMatch(pen.guru, me)) {
+                    const arr = typeof pen.siswa === 'string' ? pen.siswa.split(',') : (Array.isArray(pen.siswa) ? pen.siswa : []);
+                    arr.forEach(s => { if(s && s.trim()) mySiswa.push(s.trim()); });
+                }
+            });
+
+            if (mySiswa.length === 0) return `<div class="card text-center py-5"><i class="fas fa-info-circle fa-3x text-primary mb-3"></i><br>Belum ada siswa yang dialokasikan ke Anda.</div>`;
+
+            let r = '';
+            mySiswa.forEach((sName, i) => {
+                const sMaster = (p.siswa || []).find(x => window.isMatch(x.nama, sName)) || {};
+                const mKls = sMaster.kelas || '-';
+                const mNis = sMaster.nis || '-';
+                const mHp = sMaster.hp || '-';
+                const mInd = (sMaster.industri && sMaster.industri !== '-') ? `<div class="badge-industri"><i class="far fa-building"></i> ${sMaster.industri.toUpperCase()}</div>` : '<span style="color:#ef4444;">Belum Diatur</span>';
+
+                r += `<tr><td class="text-center">${i+1}</td><td class="fw-bold">${sName.toUpperCase()}</td><td>${mKls}</td><td>${mNis}</td><td>${mHp}</td><td>${mInd}</td></tr>`;
+            });
+
+            return `
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="fas fa-users text-primary"></i> Daftar Siswa Bimbingan</h3>
+                    <span class="badge-industri" style="background:#f1f5f9; color:#0f172a; border-color:#cbd5e1;">Total: ${mySiswa.length} Siswa</span>
+                </div>
+                <div class="table-responsive mt-2">
+                    <table>
+                        <tr><th width="5%">No</th><th width="25%">Nama Siswa</th><th width="15%">Kelas / Jurusan</th><th width="15%">NIS</th><th width="15%">No. HP</th><th width="25%">Tempat Magang (Industri)</th></tr>
+                        ${r}
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        // Auto-Check Login
+        window.addEventListener('DOMContentLoaded', () => {
+            const s = localStorage.getItem(SESSION_KEY);
+            if (s) { try { const p = JSON.parse(s); if (p && p.role) window.suksesLogin(p); } catch(e) {} }
         });
     </script>
 </body>
