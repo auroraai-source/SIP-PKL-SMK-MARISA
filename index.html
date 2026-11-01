@@ -786,7 +786,7 @@
                     <div class="portal-arrow">➔</div>
                 </div>
 
-                <div class="portal-card role-guru" onclick="window.masukPilihanEkosistem('pengawasan')">
+                <div class="portal-card role-guru" onclick="window.bukaPilihanSubPengawasan()">
                     <div class="portal-icon">🛡️</div>
                     <div class="portal-info">
                         <div class="portal-title">ROOM PENGAWASAN KEGIATAN PKL</div>
@@ -799,7 +799,52 @@
                     <div class="portal-icon">👨‍💻</div>
                     <div class="portal-info">
                         <div class="portal-title">ADMIN UTAMA</div>
-                        <div class="portal-desc">Kelola Akun Semua Ekosistem, Master Data & Cloud</div>
+                        <div class="portal-desc">Khusus Pembuat Akun Panitia PKL & Kepala Sekolah</div>
+                    </div>
+                    <div class="portal-arrow">➔</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="pengawasanSubScreen" class="hud-wrapper" style="display: none;">
+        <button onclick="window.kembaliKeGerbangEkosistem()" style="align-self: flex-start; background: #ffffff; border: 1.5px solid #bfdbfe; border-radius: 12px; padding: 8px 14px; font-size: 11px; font-weight: 800; color: #0284c7; cursor: pointer; margin-bottom: 14px;">
+            ‹ Kembali ke Gerbang Utama
+        </button>
+
+        <div class="hud-card">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1.5px solid #e2e8f0;">
+                <div style="width: 46px; height: 46px; border-radius: 14px; background: #dcfce7; border: 1px solid #86efac; display: flex; align-items: center; justify-content: center; font-size: 24px;">🛡️</div>
+                <div>
+                    <div style="font-size: 15px; font-weight: 900; color: #0f172a;">ROOM PENGAWASAN KEGIATAN PKL</div>
+                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Pilih ruang pengawasan sesuai jabatan resmi Anda</div>
+                </div>
+            </div>
+
+            <div class="portal-grid">
+                <div class="portal-card role-guru" onclick="window.masukPilihanEkosistem('guru')">
+                    <div class="portal-icon" style="background:#dcfce7; border-color:#86efac;">👩‍🏫</div>
+                    <div class="portal-info">
+                        <div class="portal-title">ROOM GURU PEMBIMBING</div>
+                        <div class="portal-desc">Siswa Bimbingan, Validasi Jurnal & Monitoring DUDI</div>
+                    </div>
+                    <div class="portal-arrow">➔</div>
+                </div>
+
+                <div class="portal-card role-industri" onclick="window.masukPilihanEkosistem('kepsek')">
+                    <div class="portal-icon" style="background:#fef3c7; border-color:#fde68a;">🎓</div>
+                    <div class="portal-info">
+                        <div class="portal-title">ROOM KEPALA SEKOLAH</div>
+                        <div class="portal-desc">Pantau Sebaran Siswa, Industri, Pembimbing & Monitoring</div>
+                    </div>
+                    <div class="portal-arrow">➔</div>
+                </div>
+
+                <div class="portal-card role-siswa" onclick="window.masukPilihanEkosistem('panitia')">
+                    <div class="portal-icon" style="background:#e0f2fe; border-color:#bae6fd;">📋</div>
+                    <div class="portal-info">
+                        <div class="portal-title">ROOM PANITIA PKL</div>
+                        <div class="portal-desc">Kelola Master Data, Akun Siswa/Guru/DUDI & Alokasi PKL</div>
                     </div>
                     <div class="portal-arrow">➔</div>
                 </div>
@@ -808,7 +853,7 @@
     </div>
 
     <div id="loginScreen" class="hud-wrapper" style="display: none;">
-        <button onclick="window.kembaliKeGerbangEkosistem()" style="align-self: flex-start; background: #ffffff; border: 1.5px solid #bfdbfe; border-radius: 12px; padding: 8px 14px; font-size: 11px; font-weight: 800; color: #0284c7; cursor: pointer; margin-bottom: 14px;">
+        <button id="btnBackFromLogin" onclick="window.kembaliDariLayarLogin()" style="align-self: flex-start; background: #ffffff; border: 1.5px solid #bfdbfe; border-radius: 12px; padding: 8px 14px; font-size: 11px; font-weight: 800; color: #0284c7; cursor: pointer; margin-bottom: 14px;">
             ‹ Kembali ke Pilihan Ruang
         </button>
 
@@ -1639,9 +1684,9 @@
             industri: { label: "ROOM INDUSTRI MITRA DUDI", icon: "🏭", usernameLabel: "Username Mitra DUDI:", placeholder: "Masukkan ID / Username Mitra DUDI", needPass: true },
             orangtua: { label: "ROOM ORANG TUA / WALI", icon: "👨‍👩‍👧", usernameLabel: "Nama Lengkap Ananda (Siswa):", placeholder: "Ketik Nama Lengkap Siswa / Ananda", needPass: false },
             pengawasan: { label: "ROOM PENGAWASAN KEGIATAN PKL", icon: "🛡️", usernameLabel: "Username (Guru Pembimbing / Kepsek / Panitia PKL):", placeholder: "Masukkan Username / NIP Resmi Anda", needPass: true },
-            guru: { label: "ROOM GURU PEMBIMBING", icon: "👩‍🏫", usernameLabel: "Username / NIP Guru:", placeholder: "Masukkan NIP Guru Terdaftar", needPass: true },
-            kepsek: { label: "DASHBOARD KEPALA SEKOLAH", icon: "🎓", usernameLabel: "Username Kepala Sekolah:", placeholder: "Masukkan Username Kepala Sekolah", needPass: true },
-            panitia: { label: "DASHBOARD PANITIA PKL", icon: "📋", usernameLabel: "Username Panitia PKL:", placeholder: "Masukkan Username Panitia PKL", needPass: true },
+            guru: { label: "ROOM GURU PEMBIMBING", icon: "👩‍🏫", usernameLabel: "Username / NIP Guru Pembimbing:", placeholder: "Masukkan NIP / Username Guru Terdaftar", needPass: true },
+            kepsek: { label: "ROOM KEPALA SEKOLAH", icon: "🎓", usernameLabel: "Username Kepala Sekolah:", placeholder: "Masukkan Username Kepala Sekolah", needPass: true },
+            panitia: { label: "ROOM PANITIA PKL", icon: "📋", usernameLabel: "Username Panitia PKL (Ketua / Sekretaris / Bendahara):", placeholder: "Masukkan Username Resmi Panitia PKL", needPass: true },
             admin: { label: "PANEL ADMIN UTAMA", icon: "👨‍💻", usernameLabel: "Username Admin Utama:", placeholder: "Masukkan Username Admin Utama", needPass: true }
         };
         window.roleDefaults = roleDefaults;
@@ -1680,7 +1725,7 @@
             ],
             panitia: [
                 { id: "dashboard", label: "Beranda Panitia PKL", icon: "📊" },
-                { id: "kelola-akun", label: "Buat Akun & Kredensial", icon: "🔑" },
+                { id: "kelola-akun", label: "Buat Akun (Siswa/Guru/DUDI)", icon: "🔑" },
                 { id: "master-siswa", label: "Data Master Siswa", icon: "👨‍🎓" },
                 { id: "master-guru", label: "Data Master Guru", icon: "👩‍🏫" },
                 { id: "master-industri", label: "Mitra Industri DUDI", icon: "🏭" },
@@ -1698,22 +1743,8 @@
             ],
             admin: [
                 { id: "dashboard", label: "Beranda Admin Utama", icon: "📊" },
-                { id: "kelola-akun", label: "Buat Akun & Kredensial", icon: "🔑" },
-                { id: "master-siswa", label: "Data Master Siswa", icon: "👨‍🎓" },
-                { id: "master-guru", label: "Data Master Guru", icon: "👩‍🏫" },
-                { id: "master-industri", label: "Mitra Industri DUDI", icon: "🏭" },
-                { id: "lembar-observasi", label: "Lembar Observasi PKL", icon: "📋" },
-                { id: "penempatan", label: "Alokasi Guru & Siswa", icon: "🔄" },
-                { id: "rekap-absensi", label: "Rekap Presensi Global", icon: "📈" },
-                { id: "rekap-masuk-pulang", label: "Rekap Presensi Masuk & Pulang", icon: "⏱️" },
-                { id: "rekap-jurnal", label: "Rekap Jurnal Siswa", icon: "📖" },
-                { id: "jam-geofence", label: "Jam & Geofence GPS", icon: "📍" },
-                { id: "periode-pkl", label: "Periode Pelaksanaan PKL", icon: "📅" },
-                { id: "dokumen", label: "Manajemen Dokumen", icon: "📁" },
-                { id: "laporan", label: "Pantau Laporan Akhir", icon: "📄" },
-                { id: "aduan", label: "Laporan Pengaduan", icon: "⚠️" },
-                { id: "database-cloud", label: "Database Cloud [Supabase]", icon: "☁️" },
-                { id: "banner-jadwal", label: "Banner Gambar Slider", icon: "🖼️" }
+                { id: "kelola-akun", label: "Buat User & Password (Panitia/Kepsek)", icon: "🔑" },
+                { id: "database-cloud", label: "Database Cloud [Supabase]", icon: "☁️" }
             ],
             industri: [
                 { id: "dashboard", label: "Beranda Industri", icon: "📊" },
@@ -1915,12 +1946,44 @@
             }
         };
 
+        window.bukaPilihanSubPengawasan = function() {
+            document.getElementById("gatewayScreen").style.display = "none";
+            document.getElementById("loginScreen").style.display = "none";
+            document.getElementById("appScreen").style.display = "none";
+            const subScreen = document.getElementById("pengawasanSubScreen");
+            if (subScreen) subScreen.style.display = "flex";
+        };
+
+        window.kembaliDariLayarLogin = function() {
+            const role = window.cloudState.activeRole;
+            if (role === 'guru' || role === 'kepsek' || role === 'panitia') {
+                window.bukaPilihanSubPengawasan();
+            } else {
+                window.kembaliKeGerbangEkosistem();
+            }
+        };
+
         window.masukPilihanEkosistem = function(role) {
+            if (role === 'pengawasan') {
+                window.bukaPilihanSubPengawasan();
+                return;
+            }
             window.cloudState.activeRole = role;
             const def = roleDefaults[role] || roleDefaults.siswa;
 
             document.getElementById("gatewayScreen").style.display = "none";
+            const subScreen = document.getElementById("pengawasanSubScreen");
+            if (subScreen) subScreen.style.display = "none";
             document.getElementById("loginScreen").style.display = "flex";
+
+            const btnBack = document.getElementById("btnBackFromLogin");
+            if (btnBack) {
+                if (role === 'guru' || role === 'kepsek' || role === 'panitia') {
+                    btnBack.innerText = "‹ Kembali ke Room Pengawasan";
+                } else {
+                    btnBack.innerText = "‹ Kembali ke Pilihan Ruang";
+                }
+            }
 
             document.getElementById("boundRoleIcon").innerText = def.icon;
             document.getElementById("boundRoleText").innerText = def.label;
@@ -1939,7 +2002,6 @@
                 linkLupa.style.display = "none";
                 document.getElementById("textPetunjukAkun").innerText = "Masuk cukup dengan mengetik Nama Lengkap Siswa";
 
-                // Isi datalist saran nama siswa agar orang tua mudah memilih nama ananda
                 if (dataListEl) {
                     let opts = "";
                     (window.cloudState.siswa || []).forEach(s => {
@@ -1947,26 +2009,38 @@
                     });
                     dataListEl.innerHTML = opts;
                 }
-            } else if (role === 'pengawasan') {
+            } else if (role === 'guru') {
                 groupPass.style.display = "block";
                 linkLupa.style.display = "block";
-                document.getElementById("textPetunjukAkun").innerText = "Akses Terpadu: Guru Pembimbing, Kepala Sekolah & 3 Panitia PKL";
+                document.getElementById("textPetunjukAkun").innerText = "Ruang Pengawasan: Khusus Guru Pembimbing PKL";
+                if (dataListEl) dataListEl.innerHTML = "";
+            } else if (role === 'kepsek') {
+                groupPass.style.display = "block";
+                linkLupa.style.display = "block";
+                document.getElementById("textPetunjukAkun").innerText = "Ruang Pengawasan: Khusus Kepala Sekolah (Dibuat oleh Admin Utama)";
+                if (dataListEl) dataListEl.innerHTML = "";
+            } else if (role === 'panitia') {
+                groupPass.style.display = "block";
+                linkLupa.style.display = "block";
+                document.getElementById("textPetunjukAkun").innerText = "Ruang Pengawasan: Ketua, Sekretaris & Bendahara Panitia (Dibuat oleh Admin Utama)";
                 if (dataListEl) dataListEl.innerHTML = "";
             } else if (role === 'admin') {
                 groupPass.style.display = "block";
                 linkLupa.style.display = "block";
-                document.getElementById("textPetunjukAkun").innerText = "Otorisasi Penuh Sistem & Pembuat Akun Semua Ekosistem";
+                document.getElementById("textPetunjukAkun").innerText = "Khusus Pembuat Username & Password Panitia PKL dan Kepala Sekolah";
                 if (dataListEl) dataListEl.innerHTML = "";
             } else {
                 groupPass.style.display = "block";
                 linkLupa.style.display = "block";
-                document.getElementById("textPetunjukAkun").innerText = "Akun Resmi dari Panitia / Admin Utama PKL";
+                document.getElementById("textPetunjukAkun").innerText = "Akun Resmi dari Panitia PKL";
                 if (dataListEl) dataListEl.innerHTML = "";
             }
         };
 
         window.kembaliKeGerbangEkosistem = function() {
             document.getElementById("gatewayScreen").style.display = "flex";
+            const subScreen = document.getElementById("pengawasanSubScreen");
+            if (subScreen) subScreen.style.display = "none";
             document.getElementById("loginScreen").style.display = "none";
             document.getElementById("appScreen").style.display = "none";
         };
@@ -2077,7 +2151,7 @@
             });
 
             // 3. Fallback Cerdas dari Master Guru / Master Siswa / Master Industri jika belum tersinkron di Kredensial
-            if (!user && role === 'pengawasan') {
+            if (!user && (role === 'pengawasan' || role === 'guru')) {
                 const foundGuru = (window.cloudState.guru || []).find(g => {
                     const gNip = String(g.nip || "").toLowerCase().replace(/[^a-z0-9]/g, "");
                     const gNama = String(g.nama || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -2116,6 +2190,8 @@
             try { localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(profile)); } catch(e) {}
 
             document.getElementById("gatewayScreen").style.display = "none";
+            const subScreen = document.getElementById("pengawasanSubScreen");
+            if (subScreen) subScreen.style.display = "none";
             document.getElementById("loginScreen").style.display = "none";
             document.getElementById("appScreen").style.display = "flex";
 
@@ -2223,9 +2299,32 @@
             const role = window.cloudState.activeRole || "admin";
             const isPanitia = (role === "panitia");
             const profile = window.cloudState.userProfile || { nama: isPanitia ? "Panitia PKL" : "Admin Utama" };
-            const bannerHtml = window.renderBannerCarouselHtml(isPanitia ? "DASHBOARD PANITIA PELAKSANA PKL" : "PANEL KONTROL ADMIN UTAMA EKOSISTEM PKL");
 
-            const allAdminItems = [
+            // JIKA YANG LOGIN ADALAH ADMIN UTAMA -> TAMPILKAN PANEL KHUSUS PEMBUAT AKUN PANITIA PKL & KEPALA SEKOLAH
+            if (!isPanitia) {
+                const bannerAdminHtml = window.renderBannerCarouselHtml("PANEL OTORISASI ADMIN UTAMA");
+                return `
+                ${bannerAdminHtml}
+                <div class="admin-welcome-card" style="border: 2px solid #38bdf8; background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                        <div style="font-size: 11px; font-weight: 900; color: #0284c7; letter-spacing: 0.5px;">
+                            PANEL KHUSUS ADMIN UTAMA
+                        </div>
+                        <span class="badge-status badge-blue">👨‍💻 ADMIN UTAMA</span>
+                    </div>
+                    <h3 style="font-size: 18px; font-weight: 950; color: #0f172a; margin-top: 2px;">Selamat Bertugas, ${profile.nama}</h3>
+                    <p style="font-size: 11.5px; color:#475569; margin-top: 4px; line-height:1.45;">
+                        Panel ini dikhususkan untuk membuat dan mengelola <b>Username & Password Panitia PKL (3 Orang: Ketua Panitia, Sekretaris, dan Bendahara)</b>, <b>Kepala Sekolah</b>, serta <b>Admin Utama</b>.
+                    </p>
+                </div>
+                ${window.renderKelolaAkunPengguna()}
+                `;
+            }
+
+            // JIKA YANG LOGIN ADALAH PANITIA PKL -> TAMPILKAN DASHBOARD OPERASIONAL PANITIA PKL (TANPA DATABASE CLOUD)
+            const bannerHtml = window.renderBannerCarouselHtml("DASHBOARD PANITIA PELAKSANA PKL");
+
+            const panitiaItems = [
                 { id: "kelola-akun", icon: "🔑", title: "Buat Akun & Kredensial" },
                 { id: "master-siswa", icon: "👨‍🎓", title: "Data Master Siswa" },
                 { id: "master-guru", icon: "👩‍🏫", title: "Data Master Guru" },
@@ -2240,14 +2339,11 @@
                 { id: "dokumen", icon: "📁", title: "Manajemen Dokumen" },
                 { id: "laporan", icon: "📄", title: "Pantau Laporan Akhir" },
                 { id: "aduan", icon: "⚠️", title: "Laporan Pengaduan" },
-                { id: "database-cloud", icon: "☁️", title: "Database Cloud [Supabase]", adminOnly: true },
                 { id: "banner-jadwal", icon: "🖼️", title: "Banner Gambar Slider" }
             ];
 
-            const adminItems = isPanitia ? allAdminItems.filter(it => !it.adminOnly) : allAdminItems;
-
             let gridCardsHtml = "";
-            adminItems.forEach(item => {
+            panitiaItems.forEach(item => {
                 gridCardsHtml += `
                 <div class="admin-item-card" onclick="window.openFeature('${item.id}', '${item.title}')">
                     <div class="admin-item-icon">${item.icon}</div>
@@ -2262,15 +2358,13 @@
             <div class="admin-welcome-card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
                     <div style="font-size: 11px; font-weight: 900; color: #0284c7; letter-spacing: 0.5px;">
-                        ${isPanitia ? 'DASHBOARD PANITIA PKL (KETUA / SEKRETARIS / BENDAHARA)' : 'PANEL KONTROL ADMIN UTAMA (FULL ACCESS)'}
+                        DASHBOARD PANITIA PKL (KETUA / SEKRETARIS / BENDAHARA)
                     </div>
-                    <span class="badge-status ${isPanitia ? 'badge-green' : 'badge-blue'}">${profile.jabatan || (isPanitia ? 'PANITIA RESMI' : 'SUPER ADMIN')}</span>
+                    <span class="badge-status badge-green">${profile.jabatan || 'PANITIA RESMI'}</span>
                 </div>
                 <h3 style="font-size: 18px; font-weight: 950; color: #0f172a; margin-top: 2px;">Selamat Bertugas, ${profile.nama}</h3>
                 <p style="font-size: 11px; color: #64748b; margin-top: 4px;">
-                    ${isPanitia 
-                        ? 'Kelola data master siswa, guru, industri, alokasi penempatan, observasi DUDI, serta rekap presensi dan jurnal PKL.' 
-                        : 'Kendali penuh seluruh ekosistem: kelola user & password semua room (termasuk 3 Panitia PKL & Kepala Sekolah), data master, alokasi, dan Database Cloud Supabase.'}
+                    Kelola kredensial Siswa/Guru/Industri, data master siswa, guru, industri, alokasi penempatan, observasi DUDI, serta rekap presensi dan jurnal PKL.
                 </p>
 
                 <!-- FITUR PINTASAN INPUT & PENANDAAN KONTAK HOTLINE RESMI SEKOLAH (COLLAPSIBLE) -->
@@ -2288,8 +2382,8 @@
 
             <div class="admin-menu-box-wrap">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div style="font-size: 14px; font-weight: 900; color: #0f172a;">MENU PENGELOLAAN SISTEM (${adminItems.length} FITUR)</div>
-                    <span class="badge-status badge-blue">${isPanitia ? 'PANEL PANITIA' : 'ADMIN UTAMA'}</span>
+                    <div style="font-size: 14px; font-weight: 900; color: #0f172a;">MENU PENGELOLAAN SISTEM (${panitiaItems.length} FITUR)</div>
+                    <span class="badge-status badge-blue">PANEL PANITIA</span>
                 </div>
                 <div class="admin-grid-12">
                     ${gridCardsHtml}
@@ -5069,10 +5163,23 @@
             const currentRole = window.cloudState.activeRole || "admin";
             const isSuperAdmin = (currentRole === "admin");
 
-            let tab = window.activeCredentialTab || "siswa";
-            if (!isSuperAdmin && (tab === 'panitia' || tab === 'kepsek' || tab === 'admin')) {
-                tab = 'siswa';
-                window.activeCredentialTab = 'siswa';
+            // Pisahkan tab kredensial secara tegas:
+            // - Admin Utama HANYA mengelola: Panitia PKL (3 orang), Kepala Sekolah, dan Admin Utama
+            // - Panitia PKL HANYA mengelola: Siswa PKL, Guru Pembimbing, dan Mitra Industri DUDI
+            const allowedTabsForAdmin = ['panitia', 'kepsek', 'admin'];
+            const allowedTabsForPanitia = ['siswa', 'guru', 'industri'];
+
+            let tab = window.activeCredentialTab;
+            if (isSuperAdmin) {
+                if (!allowedTabsForAdmin.includes(tab)) {
+                    tab = 'panitia';
+                    window.activeCredentialTab = 'panitia';
+                }
+            } else {
+                if (!allowedTabsForPanitia.includes(tab)) {
+                    tab = 'siswa';
+                    window.activeCredentialTab = 'siswa';
+                }
             }
 
             const meta = roleConfigMeta[tab] || roleConfigMeta.siswa;
@@ -5099,12 +5206,15 @@
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
-                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">KREDENSIAL LOGIN SELURUH EKOSISTEM</div>
-                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🔑 Akun & Kredensial: ${meta.label}</h3>
-                        ${tab === 'panitia' ? `<p style="font-size:11px; color:#15803d; font-weight:800; margin-top:2px;">✓ Jatah khusus 3 orang Panitia PKL: Ketua Panitia, Sekretaris, dan Bendahara (Login melalui Room Pengawasan Kegiatan PKL).</p>` : ''}
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">
+                            ${isSuperAdmin ? 'OTORISASI AKUN MANAJEMEN INTI (KHUSUS ADMIN UTAMA)' : 'KREDENSIAL LOGIN PESERTA & PEMBIMBING (PANEL PANITIA PKL)'}
+                        </div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🔑 ${meta.label}</h3>
+                        ${tab === 'panitia' ? `<p style="font-size:11px; color:#15803d; font-weight:800; margin-top:2px;">✓ Jatah khusus 3 orang Panitia PKL: Ketua Panitia, Sekretaris, dan Bendahara (Login melalui Room Pengawasan Kegiatan PKL ➔ Room Panitia PKL).</p>` : ''}
+                        ${tab === 'kepsek' ? `<p style="font-size:11px; color:#b45309; font-weight:800; margin-top:2px;">✓ Akun Kepala Sekolah dibuat oleh Admin Utama (Login melalui Room Pengawasan Kegiatan PKL ➔ Room Kepala Sekolah).</p>` : ''}
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                        ${(tab !== 'panitia' && tab !== 'kepsek' && tab !== 'admin') ? `
+                        ${(!isSuperAdmin) ? `
                             <button onclick="window.unduhTemplateExcelAkunPeran('${tab}')" class="btn-action btn-emerald">📄 Template</button>
                             <button onclick="window.bukaModalUploadExcelAkunPeran('${tab}')" class="btn-action btn-blue">📥 Impor Excel</button>
                         ` : ''}
@@ -5115,14 +5225,15 @@
                 </div>
 
                 <div style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1.5px solid #bfdbfe; padding-bottom:8px; overflow-x:auto;">
-                    <button onclick="window.setTabKredensial('siswa')" class="btn-action ${tab === 'siswa' ? 'btn-blue' : ''}" style="background:${tab === 'siswa' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'siswa' ? '#fff' : '#0369a1'};">👨‍🎓 Siswa PKL</button>
-                    <button onclick="window.setTabKredensial('guru')" class="btn-action ${tab === 'guru' ? 'btn-blue' : ''}" style="background:${tab === 'guru' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'guru' ? '#fff' : '#0369a1'};">👩‍🏫 Guru Pembimbing</button>
-                    <button onclick="window.setTabKredensial('industri')" class="btn-action ${tab === 'industri' ? 'btn-blue' : ''}" style="background:${tab === 'industri' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'industri' ? '#fff' : '#0369a1'};">🏭 Mitra Industri DUDI</button>
                     ${isSuperAdmin ? `
                         <button onclick="window.setTabKredensial('panitia')" class="btn-action ${tab === 'panitia' ? 'btn-blue' : ''}" style="background:${tab === 'panitia' ? '#0284c7' : '#dcfce7'}; color:${tab === 'panitia' ? '#fff' : '#15803d'};">📋 Panitia PKL (3 Orang)</button>
                         <button onclick="window.setTabKredensial('kepsek')" class="btn-action ${tab === 'kepsek' ? 'btn-blue' : ''}" style="background:${tab === 'kepsek' ? '#0284c7' : '#fef3c7'}; color:${tab === 'kepsek' ? '#fff' : '#b45309'};">🎓 Kepala Sekolah</button>
                         <button onclick="window.setTabKredensial('admin')" class="btn-action ${tab === 'admin' ? 'btn-blue' : ''}" style="background:${tab === 'admin' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'admin' ? '#fff' : '#0369a1'};">👨‍💻 Admin Utama</button>
-                    ` : ''}
+                    ` : `
+                        <button onclick="window.setTabKredensial('siswa')" class="btn-action ${tab === 'siswa' ? 'btn-blue' : ''}" style="background:${tab === 'siswa' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'siswa' ? '#fff' : '#0369a1'};">👨‍🎓 Siswa PKL</button>
+                        <button onclick="window.setTabKredensial('guru')" class="btn-action ${tab === 'guru' ? 'btn-blue' : ''}" style="background:${tab === 'guru' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'guru' ? '#fff' : '#0369a1'};">👩‍🏫 Guru Pembimbing</button>
+                        <button onclick="window.setTabKredensial('industri')" class="btn-action ${tab === 'industri' ? 'btn-blue' : ''}" style="background:${tab === 'industri' ? '#0284c7' : '#e0f2fe'}; color:${tab === 'industri' ? '#fff' : '#0369a1'};">🏭 Mitra Industri DUDI</button>
+                    `}
                 </div>
 
                 <div class="table-wrap">
@@ -5146,6 +5257,10 @@
         };
 
         window.bukaModalTambahKredensial = function(role) {
+            const currentRole = window.cloudState.activeRole || "admin";
+            if (currentRole !== 'admin' && (role === 'panitia' || role === 'kepsek' || role === 'admin')) {
+                return window.showModalInfo("Akses Ditolak 🔒", "Hanya <b>Admin Utama</b> yang dapat membuat akun Panitia PKL, Kepala Sekolah, dan Admin Utama.");
+            }
             const meta = roleConfigMeta[role] || roleConfigMeta.siswa;
             if (role === 'panitia') {
                 const countPanitia = (window.cloudState.registeredUsers || []).filter(u => u.role === 'panitia').length;
@@ -5216,6 +5331,10 @@
         window.bukaModalEditKredensial = function(idx) {
             const user = window.cloudState.registeredUsers[idx];
             if (!user) return;
+            const currentRole = window.cloudState.activeRole || "admin";
+            if (currentRole !== 'admin' && (user.role === 'panitia' || user.role === 'kepsek' || user.role === 'admin')) {
+                return window.showModalInfo("Akses Ditolak 🔒", "Panitia PKL tidak diizinkan mengedit username dan password Panitia PKL, Kepala Sekolah, maupun Admin Utama. Silakan hubungi <b>Admin Utama</b>.");
+            }
             window.openDynamicModal(`
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">✏️ Edit Akun Kredensial</h3>
                 ${user.role === 'panitia' ? `
@@ -5267,6 +5386,11 @@
 
         window.konfirmasiHapusKredensial = function(idx) {
             const user = window.cloudState.registeredUsers[idx];
+            if (!user) return;
+            const currentRole = window.cloudState.activeRole || "admin";
+            if (currentRole !== 'admin' && (user.role === 'panitia' || user.role === 'kepsek' || user.role === 'admin')) {
+                return window.showModalInfo("Akses Ditolak 🔒", "Hanya <b>Admin Utama</b> yang dapat menghapus akun ini.");
+            }
             window.showConfirmDialog("Hapus Akun", `Hapus akun <b>${user.nama}</b> (${user.username})?`, () => {
                 window.cloudState.registeredUsers.splice(idx, 1);
                 window.simpanDatabasePersisten(true);
