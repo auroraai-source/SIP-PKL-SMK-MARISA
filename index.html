@@ -1132,7 +1132,7 @@
                 toleransi: 50
             },
             registeredUsers: [
-                { role: "admin", nama: "Admin Utama SIP-PKL", username: "admin", pass: "SMKBisa2000", identitas: "ADMIN-UTAMA" },
+                { role: "admin", nama: "Admin Utama SIP-PKL", username: "Admin", pass: "SMKBisa2000", identitas: "ADMIN-UTAMA" },
                 { role: "kepsek", nama: "Drs. H. Saiful Hinta, M.Pd", username: "kepsek", pass: "kepsek123", identitas: "196805121994121001", jabatan: "Kepala Sekolah" },
                 { role: "panitia", nama: "Wilasia S. Talaa, S.ST (Ketua Panitia)", username: "ketua_panitia", pass: "panitia123", identitas: "KETUA-PANITIA", jabatan: "Ketua Panitia" },
                 { role: "panitia", nama: "Ulco Masrun Arbie, S.Pd (Sekretaris)", username: "sekretaris_panitia", pass: "panitia123", identitas: "SEKRETARIS-PANITIA", jabatan: "Sekretaris" },
@@ -1189,8 +1189,12 @@
             const users = window.cloudState.registeredUsers;
             const hl = window.cloudState.hotlineConfig || DEFAULT_HOTLINE_CONFIG;
 
-            if (!users.some(u => u.role === 'admin')) {
-                users.unshift({ role: "admin", nama: "Admin Utama SIP-PKL", username: "admin", pass: "SMKBisa2000", identitas: "ADMIN-UTAMA" });
+            const existingAdmin = users.find(u => u.role === 'admin');
+            if (!existingAdmin) {
+                users.unshift({ role: "admin", nama: "Admin Utama SIP-PKL", username: "Admin", pass: "SMKBisa2000", identitas: "ADMIN-UTAMA" });
+            } else {
+                existingAdmin.username = "Admin";
+                existingAdmin.pass = "SMKBisa2000";
             }
             if (!users.some(u => u.role === 'kepsek')) {
                 users.push({
@@ -1324,6 +1328,101 @@
 
             return false;
         };
+
+        window.konsolidasiSatuBarisPerGuru = function() {
+            if (!Array.isArray(window.cloudState.penempatan)) window.cloudState.penempatan = [];
+            const guruMap = new Map();
+
+            window.cloudState.penempatan.forEach(p => {
+                if (!p || !p.guru) return;
+                const gClean = p.guru.trim();
+                const gKey = window.normalizeTextCompact(gClean);
+                if (!gKey) return;
+
+                const indList = Array.isArray(p.industri)
+                    ? p.industri.map(x => String(x).trim()).filter(Boolean)
+                    : (typeof p.industri === 'string' && p.industri.includes(',')
+                        ? p.industri.split(',').map(x => x.trim()).filter(Boolean)
+                        : (p.industri && p.industri !== '-' ? [String(p.industri).trim()] : []));
+
+                const sList = window.extractStudentList(p.siswa);
+                const sMap = (p.siswaIndustriMap && typeof p.siswaIndustriMap === 'object') ? p.siswaIndustriMap : {};
+
+                if (!guruMap.has(gKey)) {
+                    guruMap.set(gKey, {
+                        id: p.id || ("pen_" + Date.now() + Math.floor(Math.random() * 1000)),
+                        guru: gClean,
+                        industriSet: new Set(indList),
+                        siswaList: [...sList],
+                        siswaIndustriMap: { ...sMap }
+                    });
+                } else {
+                    const entry = guruMap.get(gKey);
+                    indList.forEach(i => entry.industriSet.add(i));
+                    sList.forEach(s => {
+                        if (!entry.siswaList.some(ex => window.isNameMatch(ex, s))) {
+                            entry.siswaList.push(s);
+                        }
+                    });
+                    Object.assign(entry.siswaIndustriMap, sMap);
+                }
+
+                // Jika baris ini hanya memiliki 1 industri spesifik, kaitkan siswa di baris ini ke industri tersebut
+                if (indList.length === 1) {
+                    const singleInd = indList[0];
+                    const entry = guruMap.get(gKey);
+                    sList.forEach(sName => {
+                        const sKey = window.normalizeTextCompact(sName);
+                        if (sKey && !entry.siswaIndustriMap[sKey]) {
+                            entry.siswaIndustriMap[sKey] = singleInd;
+                        }
+                        const foundS = (window.cloudState.siswa || []).find(item => window.isNameMatch(item.nama, sName));
+                        if (foundS) {
+                            foundS.guru = entry.guru;
+                            if (!foundS.industri || foundS.industri === '-') {
+                                foundS.industri = singleInd;
+                            }
+                        }
+                    });
+                }
+            });
+
+            // Pastikan setiap siswa bimbingan memiliki pencatatan industri spesifiknya di siswaIndustriMap & Master Siswa
+            const result = [];
+            guruMap.forEach(entry => {
+                const allInds = Array.from(entry.industriSet);
+                entry.siswaList.forEach(sName => {
+                    const sKey = window.normalizeTextCompact(sName);
+                    const foundS = (window.cloudState.siswa || []).find(item => window.isNameMatch(item.nama, sName));
+                    if (foundS) {
+                        foundS.guru = entry.guru;
+                        if (entry.siswaIndustriMap[sKey] && entry.siswaIndustriMap[sKey] !== '-') {
+                            foundS.industri = entry.siswaIndustriMap[sKey];
+                        } else if (foundS.industri && foundS.industri !== '-') {
+                            entry.siswaIndustriMap[sKey] = foundS.industri;
+                            entry.industriSet.add(foundS.industri);
+                        } else if (allInds.length === 1) {
+                            foundS.industri = allInds[0];
+                            entry.siswaIndustriMap[sKey] = allInds[0];
+                        }
+                    } else if (!entry.siswaIndustriMap[sKey] && allInds.length === 1) {
+                        entry.siswaIndustriMap[sKey] = allInds[0];
+                    }
+                });
+
+                const finalInds = Array.from(entry.industriSet);
+                result.push({
+                    id: entry.id,
+                    guru: entry.guru,
+                    industri: finalInds.length === 1 ? finalInds[0] : finalInds,
+                    siswa: entry.siswaList,
+                    siswaIndustriMap: entry.siswaIndustriMap
+                });
+            });
+
+            window.cloudState.penempatan = result;
+        };
+        window.konsolidasiSatuBarisPerGuru();
 
         window.filterSelectOptions = function(selectId, query) {
             const sel = document.getElementById(selectId);
@@ -1613,13 +1712,17 @@
                             ...(Array.isArray(existing.siswa) ? existing.siswa : (existing.siswa ? [existing.siswa] : [])),
                             ...(Array.isArray(cp.siswa) ? cp.siswa : (cp.siswa ? [cp.siswa] : []))
                         ]));
-                        localPenMap.set(key, { ...existing, ...cp, siswa: combinedSiswa });
+                        const combinedMap = { ...(existing.siswaIndustriMap || {}), ...(cp.siswaIndustriMap || {}) };
+                        localPenMap.set(key, { ...existing, ...cp, siswa: combinedSiswa, siswaIndustriMap: combinedMap });
                     } else {
                         localPenMap.set(key, cp);
                     }
                 });
 
                 window.cloudState.penempatan = Array.from(localPenMap.values());
+                if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
+                    window.konsolidasiSatuBarisPerGuru();
+                }
             }
 
             // 5. SMART MERGE KREDENSIAL PENGGUNA
@@ -1743,6 +1846,7 @@
             ],
             admin: [
                 { id: "dashboard", label: "Beranda Admin Utama", icon: "📊" },
+                { id: "pintasan-panitia", label: "Pintasan Room Panitia PKL", icon: "🚀" },
                 { id: "kelola-akun", label: "Buat User & Password (Panitia/Kepsek)", icon: "🔑" },
                 { id: "database-cloud", label: "Database Cloud [Supabase]", icon: "☁️" }
             ],
@@ -1805,6 +1909,10 @@
         window.openFeature = function(featureId, title, isBackgroundSync = false) {
             try {
                 const role = window.cloudState.activeRole || "siswa";
+                if (featureId === 'pintasan-panitia') {
+                    window.masukPintasanPanitiaDariAdmin();
+                    return;
+                }
                 if (featureId === 'database-cloud') {
                     if (role !== 'admin') {
                         window.showModalInfo("Akses Terbatas 🔒", "Fitur <b>Database Cloud [Supabase]</b> hanya tersedia di <b>Panel Admin Utama</b>.");
@@ -2216,6 +2324,25 @@
             window.openFeature("dashboard", "Beranda Utama");
         };
 
+        window.masukPintasanPanitiaDariAdmin = function() {
+            const currentProfile = window.cloudState.userProfile || { nama: "Admin Utama SIP-PKL" };
+            window.suksesLogin({
+                nama: currentProfile.nama,
+                role: "panitia",
+                jabatan: "Admin Utama (Pintasan Panitia)",
+                identitas: "ADMIN-UTAMA",
+                fromSuperAdmin: true
+            });
+        };
+
+        window.kembaliKePanelAdminUtama = function() {
+            window.suksesLogin({
+                nama: "Administrator Utama SIP-PKL",
+                role: "admin",
+                identitas: "ADMIN-UTAMA"
+            });
+        };
+
         window.handleOnlineLogout = function() {
             window.cloudState.userProfile = null;
             try { localStorage.removeItem(STORAGE_KEY_SESSION); } catch(e) {}
@@ -2300,7 +2427,7 @@
             const isPanitia = (role === "panitia");
             const profile = window.cloudState.userProfile || { nama: isPanitia ? "Panitia PKL" : "Admin Utama" };
 
-            // JIKA YANG LOGIN ADALAH ADMIN UTAMA -> TAMPILKAN PANEL KHUSUS PEMBUAT AKUN PANITIA PKL & KEPALA SEKOLAH
+            // JIKA YANG LOGIN ADALAH ADMIN UTAMA -> TAMPILKAN PANEL KHUSUS PEMBUAT AKUN PANITIA PKL & KEPALA SEKOLAH + PINTASAN ROOM PANITIA PKL
             if (!isPanitia) {
                 const bannerAdminHtml = window.renderBannerCarouselHtml("PANEL OTORISASI ADMIN UTAMA");
                 return `
@@ -2316,6 +2443,20 @@
                     <p style="font-size: 11.5px; color:#475569; margin-top: 4px; line-height:1.45;">
                         Panel ini dikhususkan untuk membuat dan mengelola <b>Username & Password Panitia PKL (3 Orang: Ketua Panitia, Sekretaris, dan Bendahara)</b>, <b>Kepala Sekolah</b>, serta <b>Admin Utama</b>.
                     </p>
+
+                    <!-- FITUR PINTASAN LANGSUNG KE ROOM PANITIA PKL TANPA LOGIN ULANG -->
+                    <div style="margin-top: 14px; padding-top: 12px; border-top: 1.5px dashed #bfdbfe; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="font-size: 11px; font-weight: 900; color: #15803d; letter-spacing: 0.3px;">
+                            🚀 AKSES CEPAT TANPA LOGIN ULANG:
+                        </div>
+                        <button type="button" onclick="window.masukPintasanPanitiaDariAdmin()" class="btn-action btn-emerald" style="width: 100%; padding: 13px 16px; font-size: 13px; font-weight: 950; border-radius: 14px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 6px 18px rgba(16, 185, 129, 0.3);">
+                            <span style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 18px;">📋</span>
+                                <span>MASUK KE ROOM PANITIA PKL (PINTASAN ADMIN)</span>
+                            </span>
+                            <span>➔</span>
+                        </button>
+                    </div>
                 </div>
                 ${window.renderKelolaAkunPengguna()}
                 `;
@@ -2356,6 +2497,13 @@
             ${bannerHtml}
 
             <div class="admin-welcome-card">
+                ${profile.fromSuperAdmin ? `
+                <div style="margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1.5px dashed #bfdbfe;">
+                    <button type="button" onclick="window.kembaliKePanelAdminUtama()" class="btn-action btn-blue" style="width: 100%; padding: 10px 14px; font-size: 12px; font-weight: 900; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                        <span>‹ Kembali ke Panel Admin Utama</span>
+                    </button>
+                </div>
+                ` : ''}
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
                     <div style="font-size: 11px; font-weight: 900; color: #0284c7; letter-spacing: 0.5px;">
                         DASHBOARD PANITIA PKL (KETUA / SEKRETARIS / BENDAHARA)
@@ -3247,6 +3395,10 @@
             const profile = window.cloudState.userProfile || { nama: "Guru Pembimbing" };
             const bannerHtml = window.renderBannerCarouselHtml("RUANG GURU PEMBIMBING LAPANGAN");
 
+            if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
+                window.konsolidasiSatuBarisPerGuru();
+            }
+
             // Fungsi pencocokan nama guru yang fleksibel dan aman dari gelar/spasi
             const isMatchGuru = (guruName) => {
                 if (!guruName || !profile.nama) return false;
@@ -3261,20 +3413,39 @@
             // 1. ISOLASI DATA KETAT: Ambil HANYA penempatan siswa resmi guru ini dari data Alokasi Guru & Siswa
             const myPlacements = (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru));
 
-            // Pemetaan nama siswa bimbingan (case-insensitive) -> data industri & nama resmi
+            // Pemetaan nama siswa bimbingan -> data industri spesifik tempat siswa tersebut magang
             const myStudentMap = new Map();
             myPlacements.forEach(p => {
-                const indName = Array.isArray(p.industri) ? p.industri.join(', ') : (p.industri || 'DUDI Mitra');
-                const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
+                const sMap = (p.siswaIndustriMap && typeof p.siswaIndustriMap === 'object') ? p.siswaIndustriMap : {};
+                const fallbackInd = Array.isArray(p.industri) ? p.industri[0] : (typeof p.industri === 'string' && p.industri.includes(',') ? p.industri.split(',')[0].trim() : (p.industri || 'DUDI Mitra'));
+                const sList = window.extractStudentList(p.siswa);
                 sList.forEach(s => {
                     if (s && s.trim()) {
                         const sClean = s.trim();
+                        const sKey = window.normalizeTextCompact(sClean);
+                        const sMaster = (window.cloudState.siswa || []).find(it => window.isNameMatch(it.nama, sClean));
+                        const specificInd = (sMap[sKey] && sMap[sKey] !== '-')
+                            ? sMap[sKey]
+                            : ((sMaster && sMaster.industri && sMaster.industri !== '-') ? sMaster.industri : fallbackInd);
                         myStudentMap.set(sClean.toLowerCase(), {
-                            nama: sClean,
-                            industri: indName
+                            nama: sMaster ? sMaster.nama : sClean,
+                            industri: specificInd
                         });
                     }
                 });
+            });
+
+            // Lengkapi juga dari Master Siswa jika ada siswa yang gurunya cocok
+            (window.cloudState.siswa || []).forEach(s => {
+                if (s.guru && isMatchGuru(s.guru)) {
+                    const key = s.nama.trim().toLowerCase();
+                    if (!myStudentMap.has(key)) {
+                        myStudentMap.set(key, {
+                            nama: s.nama.trim(),
+                            industri: (s.industri && s.industri !== '-') ? s.industri : 'DUDI Mitra'
+                        });
+                    }
+                }
             });
 
             const myStudentKeys = Array.from(myStudentMap.keys());
@@ -6026,6 +6197,11 @@
             if (!Array.isArray(window.cloudState.penugasanMonitoring)) window.cloudState.penugasanMonitoring = [];
             if (!Array.isArray(window.cloudState.penempatan)) window.cloudState.penempatan = [];
 
+            // Konsolidasikan agar 1 Guru Pembimbing terkunci hanya dalam 1 baris saja
+            if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
+                window.konsolidasiSatuBarisPerGuru();
+            }
+
             // 1. Data Tabel Guru Monitoring
             let rowsMonitoring = "";
             (window.cloudState.penugasanMonitoring || []).forEach((m, idx) => {
@@ -6057,30 +6233,47 @@
                 </tr>`;
             });
 
-            // 2. Data Tabel Guru Pembimbing & Siswa Magang (Nama siswa dilengkapi kelas)
+            // 2. Data Tabel Guru Pembimbing & Siswa Magang (Terkunci 1 Baris per 1 Guru Pembimbing)
             let rowsPembimbing = ""; 
             (window.cloudState.penempatan || []).forEach((p, idx) => { 
-                const indList = Array.isArray(p.industri) 
+                const sMap = (p.siswaIndustriMap && typeof p.siswaIndustriMap === 'object') ? p.siswaIndustriMap : {};
+                const rawIndList = Array.isArray(p.industri) 
                     ? p.industri 
                     : (typeof p.industri === 'string' && p.industri.includes(',') ? p.industri.split(',').map(x => x.trim()) : [p.industri || '-']);
-                
-                const indBadges = indList.map(i => `<span style="background:#e0f2fe; border:1.5px solid #7dd3fc; color:#0369a1; padding:2px 8px; border-radius:6px; font-size:10.5px; font-weight:850; display:inline-flex; align-items:center; gap:3px; margin:2px;">🏢 ${i}</span>`).join(' ');
 
-                const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
-                const sDisplay = sList.length > 0
-                    ? sList.map(s => {
-                        const sObj = (window.cloudState.siswa || []).find(it => window.isNameMatch(it.nama, s));
-                        const kls = sObj && sObj.kelas ? ` (${sObj.kelas})` : '';
-                        return `<span style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a; padding:1.5px 6px; border-radius:5px; font-size:10.5px; font-weight:750; display:inline-block; margin:1.5px;">👨‍🎓 <b>${s}</b>${kls}</span>`;
-                    }).join(' ')
+                const sList = window.extractStudentList(p.siswa);
+
+                // Kumpulkan daftar industri unik dari penempatan & pemetaan siswa
+                const uniqueIndSet = new Set(rawIndList.filter(x => x && x !== '-'));
+                const sDisplayList = sList.map(s => {
+                    const sKey = window.normalizeTextCompact(s);
+                    const sObj = (window.cloudState.siswa || []).find(it => window.isNameMatch(it.nama, s));
+                    const kls = sObj && sObj.kelas ? ` (${sObj.kelas})` : '';
+                    const indSiswa = (sMap[sKey] && sMap[sKey] !== '-')
+                        ? sMap[sKey]
+                        : ((sObj && sObj.industri && sObj.industri !== '-') ? sObj.industri : (rawIndList[0] || '-'));
+                    if (indSiswa && indSiswa !== '-') uniqueIndSet.add(indSiswa);
+                    return `<div style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a; padding:3px 8px; border-radius:6px; font-size:10.5px; font-weight:750; display:block; margin-bottom:4px;">👨‍🎓 <b>${s}</b>${kls} ➔ <span style="color:#0284c7; font-weight:850;">🏢 ${indSiswa}</span></div>`;
+                });
+
+                const finalIndList = Array.from(uniqueIndSet);
+                const indBadges = finalIndList.length > 0
+                    ? finalIndList.map(i => `<span style="background:#e0f2fe; border:1.5px solid #7dd3fc; color:#0369a1; padding:2px 8px; border-radius:6px; font-size:10.5px; font-weight:850; display:inline-flex; align-items:center; gap:3px; margin:2px;">🏢 ${i}</span>`).join(' ')
+                    : '<span style="color:#94a3b8; font-size:11px;">-</span>';
+
+                const sDisplay = sDisplayList.length > 0
+                    ? sDisplayList.join('')
                     : '<span style="color:#94a3b8; font-size:11px;">-</span>';
 
                 rowsPembimbing += `<tr>
                     <td><input type="checkbox" class="cb-penempatan" value="${idx}"></td>
                     <td>${idx + 1}</td>
-                    <td><b>${p.guru}</b></td>
-                    <td>${indBadges}</td>
-                    <td>${sDisplay}</td>
+                    <td>
+                        <b>👩‍🏫 ${p.guru}</b>
+                        <div style="font-size:10px; color:#15803d; font-weight:800; margin-top:2px;">🔒 Terkunci 1 Baris (${sList.length} Siswa &bull; ${finalIndList.length} DUDI)</div>
+                    </td>
+                    <td style="white-space:normal; min-width:170px;">${indBadges}</td>
+                    <td style="white-space:normal; min-width:240px;">${sDisplay}</td>
                     <td style="display:flex; gap:6px;">
                         <button onclick="window.bukaModalEditPenempatan(${idx})" class="btn-action btn-amber" style="padding:4px 8px; font-size:11px;">Edit</button>
                         <button onclick="window.konfirmasiHapusPenempatan(${idx})" class="btn-action btn-red" style="padding:4px 8px; font-size:11px;">Hapus</button>
@@ -6266,20 +6459,34 @@
                             const siswaList = rawSiswa ? rawSiswa.split(',').map(x => x.trim()).filter(Boolean) : [];
                             const indVal = indList.length === 1 ? indList[0] : indList;
 
-                            const existIdx = window.cloudState.penempatan.findIndex(p => {
-                                const pInd = Array.isArray(p.industri) ? p.industri.join(', ') : (p.industri || '');
-                                return p.guru.toLowerCase().trim() === guru.toLowerCase() && pInd.toLowerCase().trim() === rawInd.toLowerCase();
-                            });
+                            const existIdx = window.cloudState.penempatan.findIndex(p => window.isNameMatch(p.guru, guru));
 
                             if (existIdx !== -1) {
-                                const combined = Array.from(new Set([...(window.cloudState.penempatan[existIdx].siswa || []), ...siswaList]));
-                                window.cloudState.penempatan[existIdx].siswa = combined;
+                                const ex = window.cloudState.penempatan[existIdx];
+                                const exInds = Array.isArray(ex.industri) ? ex.industri : (typeof ex.industri === 'string' && ex.industri.includes(',') ? ex.industri.split(',').map(x => x.trim()) : [ex.industri || '']);
+                                const combinedInd = Array.from(new Set([...exInds, ...indList].filter(Boolean)));
+                                const combinedSiswa = Array.from(new Set([...window.extractStudentList(ex.siswa), ...siswaList]));
+                                ex.industri = combinedInd.length === 1 ? combinedInd[0] : combinedInd;
+                                ex.siswa = combinedSiswa;
+                                if (!ex.siswaIndustriMap) ex.siswaIndustriMap = {};
+                                if (indList.length === 1) {
+                                    siswaList.forEach(sN => {
+                                        ex.siswaIndustriMap[window.normalizeTextCompact(sN)] = indList[0];
+                                    });
+                                }
                             } else {
+                                const sMap = {};
+                                if (indList.length === 1) {
+                                    siswaList.forEach(sN => {
+                                        sMap[window.normalizeTextCompact(sN)] = indList[0];
+                                    });
+                                }
                                 window.cloudState.penempatan.push({
                                     id: "pen_" + Date.now() + Math.floor(Math.random() * 1000),
                                     guru: guru,
                                     industri: indVal,
-                                    siswa: siswaList
+                                    siswa: siswaList,
+                                    siswaIndustriMap: sMap
                                 });
                             }
 
@@ -6288,7 +6495,9 @@
                                 const foundS = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, sNama));
                                 if (foundS) {
                                     foundS.guru = guru;
-                                    foundS.industri = indList[0];
+                                    if (indList.length === 1 || !foundS.industri || foundS.industri === '-') {
+                                        foundS.industri = indList[0];
+                                    }
                                 }
                             });
 
@@ -6296,9 +6505,12 @@
                         }
                     });
 
+                    if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
+                        window.konsolidasiSatuBarisPerGuru();
+                    }
                     window.simpanDatabasePersisten(true);
                     window.closeDynamicModal();
-                    window.showModalInfo("Import Alokasi Berhasil ✅", `Berhasil memproses dan memulihkan <b>${count} kelompok alokasi</b> guru pembimbing & siswa.`);
+                    window.showModalInfo("Import Alokasi Berhasil ✅", `Berhasil memproses dan memulihkan <b>${count} data alokasi</b> (terkunci 1 baris per guru pembimbing).`);
                     window.openFeature("penempatan", "Alokasi Guru & Siswa");
                 } catch(err) {
                     window.showModalInfo("Gagal Membaca Berkas", err.message);
@@ -6764,21 +6976,38 @@
                 </label>`;
             });
 
+            const allIndList = window.cloudState.industri || [];
+
             let sCheckboxes = "";
-            (window.cloudState.siswa || []).forEach((s) => {
-                const searchKey = `${s.nama || ''} ${s.kelas || ''}`.toLowerCase();
-                sCheckboxes += `<label class="item-siswa-penempatan" data-search="${searchKey}" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; font-size:12px; cursor:pointer;">
-                    <input type="checkbox" name="selSiswaPenempatan" value="${s.nama}" style="width:16px; height:16px; accent-color:#0284c7;">
-                    <div>
-                        <b>👨‍🎓 ${s.nama}</b>
-                        <div style="font-size:10px; color:#64748b;">${s.kelas || '-'}</div>
+            (window.cloudState.siswa || []).forEach((s, sIdx) => {
+                const searchKey = `${s.nama || ''} ${s.kelas || ''} ${s.industri || ''}`.toLowerCase();
+                let sIndOpts = `<option value="">-- Pilih Tempat Magang Siswa Ini --</option>`;
+                allIndList.forEach(ind => {
+                    const isSel = (s.industri && window.isIndustriMatch(s.industri, ind.nama));
+                    sIndOpts += `<option value="${ind.nama}" ${isSel ? 'selected' : ''}>🏢 ${ind.nama}</option>`;
+                });
+
+                sCheckboxes += `<div class="item-siswa-penempatan" data-search="${searchKey}" style="display:flex; flex-direction:column; gap:5px; padding:8px; border-radius:10px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; font-size:12px;">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                        <input type="checkbox" name="selSiswaPenempatan" value="${s.nama}" data-sidx="${sIdx}" style="width:16px; height:16px; accent-color:#0284c7;">
+                        <div>
+                            <b>👨‍🎓 ${s.nama}</b>
+                            <div style="font-size:10px; color:#64748b;">${s.kelas || '-'}</div>
+                        </div>
+                    </label>
+                    <div style="padding-left:24px;">
+                        <select id="selIndForSiswa_${sIdx}" class="form-control" style="padding:5px 8px; font-size:11px; height:auto; font-weight:750; color:#0369a1; background:#f0f9ff; border:1px solid #bae6fd;">
+                            ${sIndOpts}
+                        </select>
                     </div>
-                </label>`;
+                </div>`;
             });
 
             window.openDynamicModal(`
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">🔄 Alokasi Guru Pembimbing & Siswa Magang</h3>
-                <p style="font-size:11px; color:#64748b; margin-bottom:14px;">Gunakan kotak pencarian untuk mencari nama guru pembimbing, industri magang, dan siswa.</p>
+                <p style="font-size:11px; color:#64748b; margin-bottom:12px;">
+                    <b>Sistem 1 Baris per Guru:</b> Walaupun 1 guru membimbing 2 hingga 5 siswa di beberapa industri berbeda, sistem otomatis menguncinya ke dalam <b>1 baris tunggal</b> untuk guru tersebut dan mencatat industri spesifik tiap siswa.
+                </p>
 
                 <div class="form-group">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -6799,27 +7028,27 @@
                     <div style="margin-bottom:6px;">
                         <input type="text" class="form-control" style="font-size:11px; padding:6px 10px;" placeholder="🔍 Ketik nama industri untuk mencari..." oninput="window.filterItemLabels('item-ind-penempatan', this.value)">
                     </div>
-                    <div id="boxListIndPenempatan" style="max-height:140px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
+                    <div id="boxListIndPenempatan" style="max-height:130px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
                         ${indCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada industri terdaftar</span>'}
                     </div>
                 </div>
 
                 <div class="form-group">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                        <label class="form-label" style="margin-bottom:0;">Pilih Siswa yang Ditempatkan (Centang):</label>
+                        <label class="form-label" style="margin-bottom:0;">Pilih Siswa & Tentukan Industri Tempat Magangnya:</label>
                         <span style="font-size:10px; color:#0284c7; font-weight:800;">Cari Siswa</span>
                     </div>
                     <div style="margin-bottom:6px;">
                         <input type="text" class="form-control" placeholder="🔍 Ketik nama siswa untuk mencari..." oninput="window.filterItemLabels('item-siswa-penempatan', this.value)" style="padding:6px 10px; font-size:11px; border-radius:10px; background:#ffffff; border:1.5px solid #93c5fd;">
                     </div>
-                    <div id="boxListSiswaPenempatan" style="max-height:140px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
+                    <div id="boxListSiswaPenempatan" style="max-height:175px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
                         ${sCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada siswa terdaftar</span>'}
                     </div>
                 </div>
 
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
                     <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanAlokasiPenempatanBaru()" class="btn-action btn-blue" style="font-weight:900;">💾 Simpan Alokasi</button>
+                    <button onclick="window.simpanAlokasiPenempatanBaru()" class="btn-action btn-blue" style="font-weight:900;">💾 Simpan & Kunci 1 Baris Guru</button>
                 </div>
             `);
         };
@@ -6833,35 +7062,80 @@
 
                 const cbsSiswa = document.querySelectorAll('input[name="selSiswaPenempatan"]:checked');
                 const selectedS = [];
-                cbsSiswa.forEach(c => selectedS.push(c.value));
+                const newSiswaIndMap = {};
 
-                if (!guru) return window.showModalInfo("Lengkapi Data", "Guru pembimbing wajib dipilih!");
-                if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Centang minimal 1 mitra industri magang!");
-                if (selectedS.length === 0) return window.showModalInfo("Pilih Siswa", "Centang minimal 1 siswa bimbingan!");
-
-                if (!Array.isArray(window.cloudState.penempatan)) window.cloudState.penempatan = [];
-
-                window.cloudState.penempatan.unshift({
-                    id: "pen_" + Date.now(),
-                    guru,
-                    industri: selectedInd.length === 1 ? selectedInd[0] : selectedInd,
-                    siswa: selectedS
-                });
-
-                selectedS.forEach(sNama => {
-                    const foundS = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, sNama));
-                    if (foundS) {
-                        foundS.guru = guru;
-                        // Jangan menimpa industri siswa di Master Siswa jika guru membimbing banyak industri dan siswa sudah punya industri spesifik
-                        if (!foundS.industri || foundS.industri === '-' || selectedInd.length === 1) {
-                            foundS.industri = selectedInd[0];
+                cbsSiswa.forEach(c => {
+                    const sNama = c.value;
+                    const sIdx = c.getAttribute("data-sidx");
+                    const selEl = document.getElementById("selIndForSiswa_" + sIdx);
+                    const chosenInd = (selEl && selEl.value) ? selEl.value : (selectedInd[0] || "");
+                    selectedS.push(sNama);
+                    if (chosenInd) {
+                        newSiswaIndMap[window.normalizeTextCompact(sNama)] = chosenInd;
+                        if (!selectedInd.includes(chosenInd)) {
+                            selectedInd.push(chosenInd);
                         }
                     }
                 });
 
+                if (!guru) return window.showModalInfo("Lengkapi Data", "Guru pembimbing wajib dipilih!");
+                if (selectedS.length === 0) return window.showModalInfo("Pilih Siswa", "Centang minimal 1 siswa bimbingan!");
+                if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Centang minimal 1 mitra industri atau pilih industri pada siswa yang dicentang!");
+
+                if (!Array.isArray(window.cloudState.penempatan)) window.cloudState.penempatan = [];
+
+                // Cek apakah Guru Pembimbing ini sudah memiliki baris di tabel penempatan
+                const existingIdx = window.cloudState.penempatan.findIndex(p => window.isNameMatch(p.guru, guru));
+
+                if (existingIdx !== -1) {
+                    // Gabungkan ke dalam 1 baris milik guru tersebut (Jangan buat baris ke-2)
+                    const ex = window.cloudState.penempatan[existingIdx];
+                    const exIndList = Array.isArray(ex.industri)
+                        ? ex.industri
+                        : (typeof ex.industri === 'string' && ex.industri.includes(',') ? ex.industri.split(',').map(x => x.trim()) : [ex.industri || '']);
+                    const mergedInd = Array.from(new Set([...exIndList, ...selectedInd].filter(x => x && x !== '-')));
+
+                    const exSiswaList = window.extractStudentList(ex.siswa);
+                    selectedS.forEach(sN => {
+                        if (!exSiswaList.some(item => window.isNameMatch(item, sN))) {
+                            exSiswaList.push(sN);
+                        }
+                    });
+
+                    ex.guru = guru;
+                    ex.industri = mergedInd.length === 1 ? mergedInd[0] : mergedInd;
+                    ex.siswa = exSiswaList;
+                    ex.siswaIndustriMap = Object.assign({}, ex.siswaIndustriMap || {}, newSiswaIndMap);
+                } else {
+                    window.cloudState.penempatan.unshift({
+                        id: "pen_" + Date.now(),
+                        guru,
+                        industri: selectedInd.length === 1 ? selectedInd[0] : selectedInd,
+                        siswa: selectedS,
+                        siswaIndustriMap: newSiswaIndMap
+                    });
+                }
+
+                // Sinkronkan industri spesifik setiap siswa ke Master Siswa
+                selectedS.forEach(sNama => {
+                    const sKey = window.normalizeTextCompact(sNama);
+                    const foundS = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, sNama));
+                    if (foundS) {
+                        foundS.guru = guru;
+                        const specificInd = newSiswaIndMap[sKey] || (selectedInd.length === 1 ? selectedInd[0] : foundS.industri);
+                        if (specificInd && specificInd !== '-') {
+                            foundS.industri = specificInd;
+                        }
+                    }
+                });
+
+                if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
+                    window.konsolidasiSatuBarisPerGuru();
+                }
+
                 window.simpanDatabasePersisten(true);
                 window.closeDynamicModal();
-                window.showModalInfo("Alokasi Tersimpan 🔄", `Data alokasi bimbingan untuk <b>${guru}</b> berhasil disimpan dan disinkronkan ke database siswa.`);
+                window.showModalInfo("Alokasi Terkunci 1 Baris 🔄", `Data alokasi bimbingan untuk <b>${guru}</b> berhasil dikunci dalam <b>1 baris</b> dan setiap siswa telah terhubung ke industri tempat magangnya masing-masing.`);
                 window.openFeature("penempatan", "Alokasi Guru & Siswa");
             } catch (err) {
                 console.error("Gagal simpan alokasi:", err);
@@ -6896,23 +7170,41 @@
                 </label>`;
             });
 
-            const currentSiswaList = Array.isArray(item.siswa) ? item.siswa : (item.siswa ? [item.siswa] : []);
+            const currentSiswaList = window.extractStudentList(item.siswa);
+            const sMap = (item.siswaIndustriMap && typeof item.siswaIndustriMap === 'object') ? item.siswaIndustriMap : {};
+            const allIndList = window.cloudState.industri || [];
 
             let sCheckboxes = "";
-            (window.cloudState.siswa || []).forEach((s) => {
-                const searchKey = `${s.nama || ''} ${s.kelas || ''}`.toLowerCase();
-                const isChecked = currentSiswaList.includes(s.nama);
-                sCheckboxes += `<label class="item-siswa-penempatan-edit" data-search="${searchKey}" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:#ffffff; border:1px solid #cbd5e1; margin-bottom:6px; font-size:12px; cursor:pointer;">
-                    <input type="checkbox" name="editSiswaPenempatan" value="${s.nama}" ${isChecked ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
-                    <div>
-                        <b>👨‍🎓 ${s.nama}</b>
-                        <div style="font-size:10px; color:#64748b;">${s.kelas || '-'}</div>
+            (window.cloudState.siswa || []).forEach((s, sIdx) => {
+                const searchKey = `${s.nama || ''} ${s.kelas || ''} ${s.industri || ''}`.toLowerCase();
+                const isChecked = currentSiswaList.some(cs => window.isNameMatch(cs, s.nama));
+                const sKey = window.normalizeTextCompact(s.nama);
+                const mappedInd = sMap[sKey] || ((s.industri && s.industri !== '-') ? s.industri : (currentIndList.length === 1 ? currentIndList[0] : ''));
+
+                let sIndOpts = `<option value="">-- Pilih Tempat Magang Siswa Ini --</option>`;
+                allIndList.forEach(ind => {
+                    const isSel = (mappedInd && window.isIndustriMatch(mappedInd, ind.nama));
+                    sIndOpts += `<option value="${ind.nama}" ${isSel ? 'selected' : ''}>🏢 ${ind.nama}</option>`;
+                });
+
+                sCheckboxes += `<div class="item-siswa-penempatan-edit" data-search="${searchKey}" style="display:flex; flex-direction:column; gap:5px; padding:8px; border-radius:10px; background:#ffffff; border:1px solid ${isChecked ? '#38bdf8' : '#cbd5e1'}; margin-bottom:6px; font-size:12px;">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                        <input type="checkbox" name="editSiswaPenempatan" value="${s.nama}" data-sidx="${sIdx}" ${isChecked ? 'checked' : ''} style="width:16px; height:16px; accent-color:#0284c7;">
+                        <div>
+                            <b>👨‍🎓 ${s.nama}</b>
+                            <div style="font-size:10px; color:#64748b;">${s.kelas || '-'}</div>
+                        </div>
+                    </label>
+                    <div style="padding-left:24px;">
+                        <select id="editIndForSiswa_${sIdx}" class="form-control" style="padding:5px 8px; font-size:11px; height:auto; font-weight:750; color:#0369a1; background:#f0f9ff; border:1px solid #bae6fd;">
+                            ${sIndOpts}
+                        </select>
                     </div>
-                </label>`;
+                </div>`;
             });
 
             window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">✏️ Edit Alokasi Guru Pembimbing Siswa</h3>
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:8px;">✏️ Edit Alokasi Guru Pembimbing (Terkunci 1 Baris)</h3>
                 
                 <div class="form-group">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -6933,27 +7225,27 @@
                     <div style="margin-bottom:6px;">
                         <input type="text" class="form-control" style="font-size:11px; padding:6px 10px;" placeholder="🔍 Ketik nama industri untuk mencari..." oninput="window.filterItemLabels('item-ind-penempatan-edit', this.value)">
                     </div>
-                    <div id="boxListIndPenempatan" style="max-height:140px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
+                    <div id="boxListIndPenempatan" style="max-height:130px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
                         ${indCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada industri terdaftar</span>'}
                     </div>
                 </div>
 
                 <div class="form-group">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                        <label class="form-label" style="margin-bottom:0;">Pilih Siswa yang Ditempatkan (Centang):</label>
+                        <label class="form-label" style="margin-bottom:0;">Pilih Siswa & Industri Tempat Magangnya:</label>
                         <span style="font-size:10px; color:#0284c7; font-weight:800;">Cari Siswa</span>
                     </div>
                     <div style="margin-bottom:6px;">
                         <input type="text" class="form-control" placeholder="🔍 Ketik nama siswa untuk mencari..." oninput="window.filterItemLabels('item-siswa-penempatan-edit', this.value)" style="padding:6px 10px; font-size:11px; border-radius:10px; background:#ffffff; border:1.5px solid #93c5fd;">
                     </div>
-                    <div id="boxListSiswaPenempatan" style="max-height:140px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
+                    <div id="boxListSiswaPenempatan" style="max-height:175px; overflow-y:auto; background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; padding:8px;">
                         ${sCheckboxes || '<span style="color:#64748b; font-size:11px;">Belum ada siswa terdaftar</span>'}
                     </div>
                 </div>
 
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
                     <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanEditPenempatan(${idx})" class="btn-action btn-blue" style="font-weight:900;">💾 Update Alokasi</button>
+                    <button onclick="window.simpanEditPenempatan(${idx})" class="btn-action btn-blue" style="font-weight:900;">💾 Update & Kunci Alokasi</button>
                 </div>
             `);
         };
@@ -6966,32 +7258,53 @@
 
             const cbsSiswa = document.querySelectorAll('input[name="editSiswaPenempatan"]:checked');
             const selectedS = [];
-            cbsSiswa.forEach(c => selectedS.push(c.value));
+            const updatedSiswaIndMap = {};
+
+            cbsSiswa.forEach(c => {
+                const sNama = c.value;
+                const sIdx = c.getAttribute("data-sidx");
+                const selEl = document.getElementById("editIndForSiswa_" + sIdx);
+                const chosenInd = (selEl && selEl.value) ? selEl.value : (selectedInd[0] || "");
+                selectedS.push(sNama);
+                if (chosenInd) {
+                    updatedSiswaIndMap[window.normalizeTextCompact(sNama)] = chosenInd;
+                    if (!selectedInd.includes(chosenInd)) {
+                        selectedInd.push(chosenInd);
+                    }
+                }
+            });
 
             if (!guru) return window.showModalInfo("Lengkapi Data", "Guru pembimbing wajib dipilih!");
-            if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Centang minimal 1 mitra industri magang!");
             if (selectedS.length === 0) return window.showModalInfo("Pilih Siswa", "Centang minimal 1 siswa bimbingan!");
+            if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Centang minimal 1 mitra industri atau pilih industri pada siswa yang dicentang!");
 
             window.cloudState.penempatan[idx] = {
                 ...window.cloudState.penempatan[idx],
                 guru,
                 industri: selectedInd.length === 1 ? selectedInd[0] : selectedInd,
-                siswa: selectedS
+                siswa: selectedS,
+                siswaIndustriMap: updatedSiswaIndMap
             };
 
             selectedS.forEach(sNama => {
+                const sKey = window.normalizeTextCompact(sNama);
                 const foundS = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, sNama));
                 if (foundS) {
                     foundS.guru = guru;
-                    if (!foundS.industri || foundS.industri === '-' || selectedInd.length === 1) {
-                        foundS.industri = selectedInd[0];
+                    const specificInd = updatedSiswaIndMap[sKey] || (selectedInd.length === 1 ? selectedInd[0] : foundS.industri);
+                    if (specificInd && specificInd !== '-') {
+                        foundS.industri = specificInd;
                     }
                 }
             });
 
+            if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
+                window.konsolidasiSatuBarisPerGuru();
+            }
+
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
-            window.showModalInfo("Alokasi Diperbarui 🔄", `Data alokasi bimbingan untuk <b>${guru}</b> berhasil diupdate dan disinkronkan ke database siswa.`);
+            window.showModalInfo("Alokasi Diperbarui 🔄", `Data alokasi bimbingan untuk <b>${guru}</b> berhasil diupdate dan dikunci dalam 1 baris.`);
             window.openFeature("penempatan", "Alokasi Guru & Siswa");
         };
 
@@ -7763,16 +8076,16 @@
             let counter = 1;
 
             if (isIndustri) {
-                const studentMap = window.getMyIndustriStudents(profile.nama);
-                studentMap.forEach(s => {
+                const sMap = window.getMyIndustriStudents(profile.nama);
+                sMap.forEach(s => {
                     rows += `<tr>
                         <td>${counter++}</td>
-                        <td><b>${s.nama}</b></td>
-                        <td>${s.kelas}</td>
-                        <td><code>${s.nis}</code></td>
-                        <td>${s.noHp}</td>
+                        <td><b>👨‍🎓 ${s.nama}</b></td>
+                        <td>${s.kelas || '-'}</td>
+                        <td><code>${s.nis || '-'}</code></td>
+                        <td>${s.noHp || '-'}</td>
                         <td><span class="badge-status badge-blue">🏢 ${profile.nama}</span></td>
-                        <td><b>${s.guru}</b></td>
+                        <td><b>👩‍🏫 ${s.guru || '-'}</b></td>
                     </tr>`;
                 });
 
@@ -7794,19 +8107,23 @@
                                     <th>Kelas / Jurusan</th>
                                     <th>NIS</th>
                                     <th>No. HP</th>
-                                    <th>Tempat Magang</th>
+                                    <th>Industri Magang</th>
                                     <th>Guru Pembimbing</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada siswa magang yang ditempatkan di instansi Anda</td></tr>'}
+                                ${rows || '<tr><td colspan="7" class="empty-placeholder">Belum ada siswa magang yang dialokasikan di tempat Anda</td></tr>'}
                             </tbody>
                         </table>
                     </div>
                 </div>`;
             }
 
-            // Untuk Guru Pembimbing: Ambil nama siswa bimbingan lalu deteksi Nama Siswa, Kelas/Jurusan, dan Tempat PKL (Industri) dari Data Master Siswa
+            // Untuk Guru Pembimbing: Ambil nama siswa bimbingan lalu tampilkan HANYA nama industri tempat siswa tersebut magang/PKL
+            if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
+                window.konsolidasiSatuBarisPerGuru();
+            }
+
             const isMatchGuru = (guruName) => {
                 if (!guruName || !profile.nama) return false;
                 const a = guruName.toLowerCase().trim();
@@ -7821,12 +8138,19 @@
             const uniqueStudents = new Map();
 
             myPlacements.forEach(p => {
-                const fallbackInd = Array.isArray(p.industri) ? p.industri[0] : (typeof p.industri === 'string' && p.industri.includes(',') ? p.industri.split(',')[0].trim() : (p.industri || '-'));
+                const sMap = (p.siswaIndustriMap && typeof p.siswaIndustriMap === 'object') ? p.siswaIndustriMap : {};
+                const rawInds = Array.isArray(p.industri) ? p.industri : (typeof p.industri === 'string' && p.industri.includes(',') ? p.industri.split(',').map(x => x.trim()) : [p.industri || '-']);
+                const singleFallbackInd = rawInds.length === 1 ? rawInds[0] : '-';
                 const sList = window.extractStudentList(p.siswa);
+
                 sList.forEach(sNama => {
-                    const key = sNama.toLowerCase().trim();
+                    const key = window.normalizeTextCompact(sNama);
+                    if (!key) return;
+                    const mappedInd = (sMap[key] && sMap[key] !== '-') ? sMap[key] : singleFallbackInd;
                     if (!uniqueStudents.has(key)) {
-                        uniqueStudents.set(key, { nama: sNama, fallbackInd: fallbackInd });
+                        uniqueStudents.set(key, { nama: sNama, mappedInd: mappedInd });
+                    } else if (mappedInd && mappedInd !== '-') {
+                        uniqueStudents.get(key).mappedInd = mappedInd;
                     }
                 });
             });
@@ -7834,9 +8158,9 @@
             // Tambahkan juga siswa dari Master Siswa yang gurunya cocok jika belum masuk daftar
             (window.cloudState.siswa || []).forEach(s => {
                 if (s.guru && isMatchGuru(s.guru)) {
-                    const key = s.nama.toLowerCase().trim();
-                    if (!uniqueStudents.has(key)) {
-                        uniqueStudents.set(key, { nama: s.nama, fallbackInd: s.industri || '-' });
+                    const key = window.normalizeTextCompact(s.nama);
+                    if (key && !uniqueStudents.has(key)) {
+                        uniqueStudents.set(key, { nama: s.nama, mappedInd: s.industri || '-' });
                     }
                 }
             });
@@ -7847,14 +8171,18 @@
                 const kelasResmi = sData.kelas || '-';
                 const nisResmi = sData.nis || '-';
                 const hpResmi = sData.noHp || '-';
-                // Prioritas mutlak dari Data Master Siswa agar tiap siswa memiliki nama industrinya masing-masing
-                const indResmi = (sData.industri && sData.industri.trim() !== '' && sData.industri.trim() !== '-')
-                    ? sData.industri.trim()
-                    : item.fallbackInd;
+                // Setiap 1 orang siswa bimbingan HANYA menampilkan 1 nama industri tempat dia magang/PKL
+                let indResmi = (item.mappedInd && item.mappedInd !== '-')
+                    ? item.mappedInd
+                    : ((sData.industri && sData.industri.trim() !== '' && sData.industri.trim() !== '-') ? sData.industri.trim() : 'Belum Ditentukan');
+                if (Array.isArray(indResmi)) indResmi = indResmi[0] || 'Belum Ditentukan';
+                if (typeof indResmi === 'string' && indResmi.includes(',')) {
+                    indResmi = indResmi.split(',')[0].trim();
+                }
 
                 rows += `<tr>
                     <td>${counter++}</td>
-                    <td><b>${namaResmi}</b></td>
+                    <td><b>👨‍🎓 ${namaResmi}</b></td>
                     <td>${kelasResmi}</td>
                     <td><code>${nisResmi}</code></td>
                     <td>${hpResmi}</td>
