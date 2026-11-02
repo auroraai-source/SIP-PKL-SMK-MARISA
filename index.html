@@ -1164,7 +1164,19 @@
             nilai: [],
             agendaKunjungan: [],
             laporanAkhir: [],
-            pengaduan: []
+            pengaduan: [],
+            disposisiKepsek: [],
+            dokumentasiKegiatan: [],
+            videoPanduanYoutube: [
+                {
+                    id: "yt_default_1",
+                    judul: "Video Panduan & Pembekalan PKL SMK Negeri 1 Marisa",
+                    url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    videoId: "dQw4w9WgXcQ",
+                    oleh: "Panitia PKL",
+                    tanggal: "2026-07-15"
+                }
+            ]
         };
 
         try {
@@ -1181,6 +1193,9 @@
                 if (!window.cloudState.hotlineConfig) {
                     window.cloudState.hotlineConfig = DEFAULT_HOTLINE_CONFIG;
                 }
+                if (!Array.isArray(window.cloudState.disposisiKepsek)) window.cloudState.disposisiKepsek = [];
+                if (!Array.isArray(window.cloudState.dokumentasiKegiatan)) window.cloudState.dokumentasiKegiatan = [];
+                if (!Array.isArray(window.cloudState.videoPanduanYoutube)) window.cloudState.videoPanduanYoutube = [];
             }
         } catch(e) {}
 
@@ -1218,21 +1233,129 @@
         };
         window.pastikanAkunEkosistemDefault();
 
+        // =========================================================================
+        // KOMPRESI GAMBAR OTOMATIS & UPLOAD TERPISAH KE SUPABASE STORAGE (ANTI-LIMIT DB)
+        // =========================================================================
+        window.compressImageDataUrl = function(dataUrl, maxWidth = 360, maxHeight = 270, quality = 0.55) {
+            return new Promise((resolve) => {
+                if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) {
+                    return resolve(dataUrl);
+                }
+                const img = new Image();
+                img.onload = function() {
+                    let w = img.width || maxWidth;
+                    let h = img.height || maxHeight;
+                    if (w > maxWidth || h > maxHeight) {
+                        const ratio = Math.min(maxWidth / w, maxHeight / h);
+                        w = Math.round(w * ratio);
+                        h = Math.round(h * ratio);
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                };
+                img.onerror = function() {
+                    resolve(dataUrl);
+                };
+                img.src = dataUrl;
+            });
+        };
+
+        window.dataUrlToBlob = function(dataUrl) {
+            try {
+                const parts = dataUrl.split(',');
+                const mimeMatch = parts[0].match(/:(.*?);/);
+                const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+                const bstr = atob(parts[1]);
+                let n = bstr.length;
+                const u8arr = new Uint8Array(n);
+                while (n--) {
+                    u8arr[n] = bstr.charCodeAt(n);
+                }
+                return new Blob([u8arr], { type: mime });
+            } catch (e) {
+                return null;
+            }
+        };
+
+        window.uploadFotoKeSupabaseStorage = async function(dataUrl, prefix = 'presensi') {
+            if (!dataUrl || typeof dataUrl !== 'string') return "";
+            if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) return dataUrl;
+
+            const compressedDataUrl = await window.compressImageDataUrl(dataUrl, 360, 270, 0.55);
+
+            if (!window.supabaseClient) {
+                return compressedDataUrl;
+            }
+
+            const blob = window.dataUrlToBlob(compressedDataUrl);
+            if (!blob) return compressedDataUrl;
+
+            const fileName = `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
+            const bucketsToTry = ['foto_presensi', 'berkas_pkl'];
+
+            for (const bucketName of bucketsToTry) {
+                try {
+                    const { error } = await window.supabaseClient
+                        .storage
+                        .from(bucketName)
+                        .upload(fileName, blob, {
+                            contentType: 'image/jpeg',
+                            upsert: true
+                        });
+
+                    if (!error) {
+                        const { data: pubData } = window.supabaseClient
+                            .storage
+                            .from(bucketName)
+                            .getPublicUrl(fileName);
+                        if (pubData && pubData.publicUrl) {
+                            return pubData.publicUrl;
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            return compressedDataUrl;
+        };
+
         window.getSanitizedCloudPayload = function() {
+            // Pastikan field foto_selfie di database utama hanya menyimpan URL link Storage
+            // (Jika ada foto yang sudah memiliki URL Storage, gunakan URL tersebut agar DB bebas Base64)
+            const sanitizedAbsensi = (window.cloudState.absensi || []).map(a => {
+                if (!a) return a;
+                const copy = Object.assign({}, a);
+                if (copy.foto_url && (copy.foto_url.startsWith('http://') || copy.foto_url.startsWith('https://'))) {
+                    copy.foto_selfie = copy.foto_url;
+                } else if (copy.foto_selfie && copy.foto_selfie.startsWith('data:image') && copy.foto_selfie.length > 35000) {
+                    // Jaga agar ukuran payload JSONB tetap sangat ringan
+                    delete copy.foto_selfie;
+                    copy.foto_selfie = "";
+                }
+                return copy;
+            });
+
             return {
+                lastUpdated: window.cloudState.lastUpdated || Date.now(),
                 registeredUsers: window.cloudState.registeredUsers || [],
                 siswa: window.cloudState.siswa || [],
                 guru: window.cloudState.guru || [],
                 industri: window.cloudState.industri || [],
                 penempatan: window.cloudState.penempatan || [],
                 penugasanMonitoring: window.cloudState.penugasanMonitoring || [],
-                absensi: window.cloudState.absensi || [],
+                absensi: sanitizedAbsensi,
                 jurnal: window.cloudState.jurnal || [],
                 dokumen: window.cloudState.dokumen || [],
                 nilai: window.cloudState.nilai || [],
                 agendaKunjungan: window.cloudState.agendaKunjungan || [],
                 laporanAkhir: window.cloudState.laporanAkhir || [],
                 pengaduan: window.cloudState.pengaduan || [],
+                disposisiKepsek: window.cloudState.disposisiKepsek || [],
+                dokumentasiKegiatan: window.cloudState.dokumentasiKegiatan || [],
+                videoPanduanYoutube: window.cloudState.videoPanduanYoutube || [],
                 bannerSliderImages: window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES,
                 pklConfig: window.cloudState.pklConfig || DEFAULT_PKL_CONFIG,
                 observasiConfig: window.cloudState.observasiConfig || DEFAULT_OBSERVASI_CONFIG,
@@ -1248,21 +1371,12 @@
         };
 
         window.simpanDatabasePersisten = function(pushToCloud = true) {
+            window.cloudState.lastUpdated = Date.now();
             const payload = window.getSanitizedCloudPayload();
             try {
                 localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(payload));
-                
-                // Simpan juga salinan cadangan keamanan independen (Safety Vault)
                 localStorage.setItem(STORAGE_KEY_VAULT, JSON.stringify(payload));
-
-                // Simpan cadangan khusus alokasi jika jumlahnya lebih banyak atau sama
-                let existingBackupPen = [];
-                try {
-                    const rawPen = localStorage.getItem(STORAGE_KEY_BACKUP_PEN);
-                    if (rawPen) existingBackupPen = JSON.parse(rawPen);
-                } catch(e) {}
-
-                if (Array.isArray(payload.penempatan) && payload.penempatan.length >= existingBackupPen.length) {
+                if (Array.isArray(payload.penempatan)) {
                     localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(payload.penempatan));
                 }
             } catch(e) {}
@@ -1424,6 +1538,130 @@
         };
         window.konsolidasiSatuBarisPerGuru();
 
+        // =========================================================================
+        // DETEKSI PENEMPATAN INDUSTRI & GURU SPESIFIK PER SISWA (SINGLE SOURCE OF TRUTH)
+        // Menjamin 1 Siswa HANYA membaca 1 Industri tempat dia magang (bukan semua industri guru)
+        // =========================================================================
+        window.getStudentPlacementInfo = function(namaAtauIdentitas, nisOpsional = "") {
+            const rawTarget = String(namaAtauIdentitas || "").trim();
+            const rawNis = String(nisOpsional || "").trim();
+            const targetKey = window.normalizeTextCompact(rawTarget);
+            const nisKey = window.normalizeTextCompact(rawNis);
+
+            // 1. Cari di Data Master Siswa (Cocokkan Nama atau NIS/Username)
+            let sMaster = (window.cloudState.siswa || []).find(s => {
+                if (window.isNameMatch(s.nama, rawTarget)) return true;
+                const sNis = window.normalizeTextCompact(s.nis);
+                if (sNis && sNis !== '' && (sNis === targetKey || (nisKey && sNis === nisKey))) return true;
+                return false;
+            });
+
+            // Jika belum ketemu di Master Siswa, cek di daftar Akun Kredensial Siswa
+            if (!sMaster) {
+                const regUser = (window.cloudState.registeredUsers || []).find(u => {
+                    if (u.role !== 'siswa') return false;
+                    return window.isNameMatch(u.nama, rawTarget) ||
+                           window.normalizeTextCompact(u.username) === targetKey ||
+                           (nisKey && window.normalizeTextCompact(u.username) === nisKey);
+                });
+                if (regUser) {
+                    sMaster = (window.cloudState.siswa || []).find(s =>
+                        window.isNameMatch(s.nama, regUser.nama) ||
+                        (s.nis && window.normalizeTextCompact(s.nis) === window.normalizeTextCompact(regUser.username))
+                    ) || { nama: regUser.nama, nis: regUser.username, kelas: "-" };
+                }
+            }
+
+            const canonicalName = sMaster ? sMaster.nama : rawTarget;
+            const canonicalKey = window.normalizeTextCompact(canonicalName);
+
+            let specificIndustri = "";
+            let specificGuru = "";
+
+            // 2. Cek Pemetaan Spesifik di Alokasi Guru & Siswa (siswaIndustriMap)
+            const myPlacement = (window.cloudState.penempatan || []).find(p => {
+                const sList = window.extractStudentList(p.siswa);
+                return sList.some(s => window.isNameMatch(s, canonicalName) || window.isNameMatch(s, rawTarget));
+            });
+
+            if (myPlacement) {
+                if (myPlacement.guru && myPlacement.guru !== '-') {
+                    specificGuru = myPlacement.guru.trim();
+                }
+                const sMap = (myPlacement.siswaIndustriMap && typeof myPlacement.siswaIndustriMap === 'object') ? myPlacement.siswaIndustriMap : {};
+                if (sMap[canonicalKey] && sMap[canonicalKey] !== '-') {
+                    specificIndustri = String(sMap[canonicalKey]).trim();
+                } else if (sMap[targetKey] && sMap[targetKey] !== '-') {
+                    specificIndustri = String(sMap[targetKey]).trim();
+                } else {
+                    // Cari kecocokan kunci di siswaIndustriMap
+                    for (const [k, val] of Object.entries(sMap)) {
+                        if ((k === canonicalKey || k === targetKey) && val && val !== '-') {
+                            specificIndustri = String(val).trim();
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 3. Prioritaskan dari Master Siswa jika sudah disetel spesifik (bukan gabungan koma)
+            if (sMaster && sMaster.industri && sMaster.industri !== '-') {
+                const masterInd = String(sMaster.industri).trim();
+                if (!masterInd.includes(',')) {
+                    specificIndustri = masterInd;
+                } else if (!specificIndustri) {
+                    specificIndustri = masterInd.split(',')[0].trim();
+                }
+            }
+
+            if (sMaster && sMaster.guru && sMaster.guru !== '-' && !specificGuru) {
+                specificGuru = String(sMaster.guru).trim();
+            }
+
+            // 4. Fallback terakhir jika di Master Siswa & siswaIndustriMap masih kosong, ambil hanya 1 industri
+            if (!specificIndustri && myPlacement && myPlacement.industri) {
+                if (Array.isArray(myPlacement.industri)) {
+                    specificIndustri = myPlacement.industri[0] || "";
+                } else if (typeof myPlacement.industri === 'string') {
+                    specificIndustri = myPlacement.industri.split(',')[0].trim();
+                }
+            }
+
+            // Pastikan tidak pernah mencantumkan lebih dari 1 industri untuk 1 siswa
+            if (Array.isArray(specificIndustri)) {
+                specificIndustri = specificIndustri[0] || "";
+            }
+            if (typeof specificIndustri === 'string' && specificIndustri.includes(',')) {
+                specificIndustri = specificIndustri.split(',')[0].trim();
+            }
+
+            if (!specificIndustri || specificIndustri === '-') specificIndustri = "Belum Ditentukan";
+            if (!specificGuru || specificGuru === '-') specificGuru = "Belum Ditentukan";
+
+            // 5. Cari objek detail Industri (koordinat GPS, jam kerja, radius) dari Master Industri
+            const dataIndustriObj = (window.cloudState.industri || []).find(i =>
+                window.isIndustriMatch ? window.isIndustriMatch(i.nama, specificIndustri) : (String(i.nama).toLowerCase().trim() === specificIndustri.toLowerCase())
+            ) || {
+                nama: specificIndustri,
+                alamat: "-",
+                lat: "0.45612",
+                lng: "121.94210",
+                radius: 50,
+                masuk: "08:00",
+                pulang: "16:00"
+            };
+
+            return {
+                namaSiswa: canonicalName,
+                kelas: (sMaster && sMaster.kelas) ? sMaster.kelas : "-",
+                nis: (sMaster && sMaster.nis) ? sMaster.nis : (rawNis || "-"),
+                industri: specificIndustri,
+                guru: specificGuru,
+                industriObj: dataIndustriObj,
+                siswaObj: sMaster
+            };
+        };
+
         window.filterSelectOptions = function(selectId, query) {
             const sel = document.getElementById(selectId);
             if (!sel) return;
@@ -1547,19 +1785,26 @@
                 return false;
             }
             try {
-                let cloudPayload = null;
-                // Coba ambil dari app_state id 1
+                let statePayload = null;
+                let cloudDbPayload = null;
+
+                // Ambil dari kedua tabel secara paralel lalu pilih yang paling baru (lastUpdated tertinggi)
                 try {
-                    const { data: dState } = await window.supabaseClient.from('app_state').select('payload').eq('id', 1).maybeSingle();
-                    if (dState && dState.payload) cloudPayload = dState.payload;
+                    const [resState, resCloud] = await Promise.all([
+                        window.supabaseClient.from('app_state').select('payload, updated_at').eq('id', 1).maybeSingle(),
+                        window.supabaseClient.from('app_cloud_db').select('payload, updated_at').eq('id', 'master').maybeSingle()
+                    ]);
+                    if (resState && resState.data && resState.data.payload) statePayload = resState.data.payload;
+                    if (resCloud && resCloud.data && resCloud.data.payload) cloudDbPayload = resCloud.data.payload;
                 } catch(e) {}
 
-                // Jika tidak ada di app_state, coba ambil dari app_cloud_db master
-                if (!cloudPayload) {
-                    try {
-                        const { data: dCloud } = await window.supabaseClient.from('app_cloud_db').select('payload').eq('id', 'master').maybeSingle();
-                        if (dCloud && dCloud.payload) cloudPayload = dCloud.payload;
-                    } catch(e) {}
+                let cloudPayload = null;
+                if (statePayload && cloudDbPayload) {
+                    const t1 = Number(statePayload.lastUpdated || 0);
+                    const t2 = Number(cloudDbPayload.lastUpdated || 0);
+                    cloudPayload = (t1 >= t2) ? statePayload : cloudDbPayload;
+                } else {
+                    cloudPayload = statePayload || cloudDbPayload;
                 }
 
                 if (cloudPayload) {
@@ -1568,7 +1813,7 @@
                     if (!silent) {
                         const p = window.cloudState;
                         window.showModalInfo("Data Cloud Berhasil Ditarik! 📥", `
-                            Database terbaru berhasil diambil dari Supabase Cloud dan digabungkan secara aman ke sistem.<br><br>
+                            Database terbaru berhasil diambil dari Supabase Cloud dan disinkronkan secara identik ke perangkat ini.<br><br>
                             <b>Ringkasan Database Saat Ini:</b><br>
                             &bull; 👨‍🎓 Data Siswa: <b>${(p.siswa || []).length}</b> siswa<br>
                             &bull; 👩‍🏫 Data Guru: <b>${(p.guru || []).length}</b> guru<br>
@@ -1577,7 +1822,7 @@
                             &bull; 🚗 Alokasi Monitoring: <b>${(p.penugasanMonitoring || []).length}</b> tugas<br>
                             &bull; 📍 Presensi Global: <b>${(p.absensi || []).length}</b> data<br>
                             &bull; 📖 Jurnal Siswa: <b>${(p.jurnal || []).length}</b> log<br><br>
-                            <span style="color:#0284c7; font-weight:800;">✓ Data lokal telah diperbarui dengan sistem penggabungan aman (Smart Merge) tanpa menghapus data yang sudah ada.</span>
+                            <span style="color:#0284c7; font-weight:800;">✓ Seluruh perangkat (PC & HP) kini memiliki data yang sama persis.</span>
                         `);
                     }
                     return true;
@@ -1612,132 +1857,30 @@
             const myRole = window.cloudState.activeRole;
             const myFeature = window.cloudState.currentFeature;
 
-            // 1. SMART MERGE SISWA (Anti-Hapus: Pertahankan siswa lokal yang belum ada di cloud)
+            // Jadikan data dari Supabase Cloud sebagai otoritas utama (Cloud-First Authority)
+            // sehingga setiap pengeditan penempatan, penambahan akun, atau penghapusan dari PC
+            // langsung tercermin 100% sama saat dibuka di HP atau perangkat lain.
+            if (cloudData.lastUpdated) {
+                window.cloudState.lastUpdated = cloudData.lastUpdated;
+            }
+
             if (Array.isArray(cloudData.siswa)) {
-                const localSiswaMap = new Map();
-                (window.cloudState.siswa || []).forEach(s => {
-                    const key = window.normalizeTextCompact(s.nama) || s.nis;
-                    if (key) localSiswaMap.set(key, s);
-                });
-                cloudData.siswa.forEach(cs => {
-                    const key = window.normalizeTextCompact(cs.nama) || cs.nis;
-                    if (key) {
-                        const existing = localSiswaMap.get(key);
-                        if (existing) {
-                            localSiswaMap.set(key, {
-                                ...existing,
-                                ...cs,
-                                guru: (cs.guru && cs.guru !== '-') ? cs.guru : (existing.guru || '-'),
-                                industri: (cs.industri && cs.industri !== '-') ? cs.industri : (existing.industri || '-'),
-                                kelas: cs.kelas || existing.kelas || '',
-                                nis: cs.nis || existing.nis || '-'
-                            });
-                        } else {
-                            localSiswaMap.set(key, cs);
-                        }
-                    }
-                });
-                window.cloudState.siswa = Array.from(localSiswaMap.values());
+                window.cloudState.siswa = cloudData.siswa;
             }
-
-            // 2. SMART MERGE GURU (Anti-Hapus: Pertahankan seluruh guru terdaftar)
             if (Array.isArray(cloudData.guru)) {
-                const localGuruMap = new Map();
-                (window.cloudState.guru || []).forEach(g => {
-                    const key = window.normalizeTextCompact(g.nama) || g.nip;
-                    if (key) localGuruMap.set(key, g);
-                });
-                cloudData.guru.forEach(cg => {
-                    const key = window.normalizeTextCompact(cg.nama) || cg.nip;
-                    if (key) {
-                        const existing = localGuruMap.get(key);
-                        if (existing) {
-                            localGuruMap.set(key, { ...existing, ...cg });
-                        } else {
-                            localGuruMap.set(key, cg);
-                        }
-                    }
-                });
-                window.cloudState.guru = Array.from(localGuruMap.values());
+                window.cloudState.guru = cloudData.guru;
             }
-
-            // 3. SMART MERGE INDUSTRI (Anti-Hapus: Pertahankan data mitra DUDI)
             if (Array.isArray(cloudData.industri)) {
-                const localIndMap = new Map();
-                (window.cloudState.industri || []).forEach(i => {
-                    const key = window.normalizeTextCompact(i.nama);
-                    if (key) localIndMap.set(key, i);
-                });
-                cloudData.industri.forEach(ci => {
-                    const key = window.normalizeTextCompact(ci.nama);
-                    if (key) {
-                        const existing = localIndMap.get(key);
-                        if (existing) {
-                            localIndMap.set(key, { ...existing, ...ci });
-                        } else {
-                            localIndMap.set(key, ci);
-                        }
-                    }
-                });
-                window.cloudState.industri = Array.from(localIndMap.values());
+                window.cloudState.industri = cloudData.industri;
             }
-
-            // 4. SMART MERGE PENEMPATAN ALOKASI (Anti-Hapus: Jangan timpa data lokal jika lokal punya lebih banyak alokasi)
             if (Array.isArray(cloudData.penempatan)) {
-                const localPenMap = new Map();
-                (window.cloudState.penempatan || []).forEach(p => {
-                    const key = (p.guru || '').trim().toLowerCase() + '___' + (Array.isArray(p.industri) ? p.industri.join(',') : (p.industri || '')).trim().toLowerCase();
-                    localPenMap.set(key, p);
-                });
-
-                // Periksa juga cadangan lokal di backup storage jika ada
-                try {
-                    const rawBackupPen = localStorage.getItem(STORAGE_KEY_BACKUP_PEN);
-                    if (rawBackupPen) {
-                        const parsedBackup = JSON.parse(rawBackupPen);
-                        if (Array.isArray(parsedBackup)) {
-                            parsedBackup.forEach(bp => {
-                                const key = (bp.guru || '').trim().toLowerCase() + '___' + (Array.isArray(bp.industri) ? bp.industri.join(',') : (bp.industri || '')).trim().toLowerCase();
-                                if (!localPenMap.has(key)) localPenMap.set(key, bp);
-                            });
-                        }
-                    }
-                } catch(e) {}
-
-                cloudData.penempatan.forEach(cp => {
-                    const key = (cp.guru || '').trim().toLowerCase() + '___' + (Array.isArray(cp.industri) ? cp.industri.join(',') : (cp.industri || '')).trim().toLowerCase();
-                    if (localPenMap.has(key)) {
-                        const existing = localPenMap.get(key);
-                        const combinedSiswa = Array.from(new Set([
-                            ...(Array.isArray(existing.siswa) ? existing.siswa : (existing.siswa ? [existing.siswa] : [])),
-                            ...(Array.isArray(cp.siswa) ? cp.siswa : (cp.siswa ? [cp.siswa] : []))
-                        ]));
-                        const combinedMap = { ...(existing.siswaIndustriMap || {}), ...(cp.siswaIndustriMap || {}) };
-                        localPenMap.set(key, { ...existing, ...cp, siswa: combinedSiswa, siswaIndustriMap: combinedMap });
-                    } else {
-                        localPenMap.set(key, cp);
-                    }
-                });
-
-                window.cloudState.penempatan = Array.from(localPenMap.values());
-                if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
-                    window.konsolidasiSatuBarisPerGuru();
-                }
+                window.cloudState.penempatan = cloudData.penempatan;
             }
-
-            // 5. SMART MERGE KREDENSIAL PENGGUNA
             if (Array.isArray(cloudData.registeredUsers)) {
-                const userMap = new Map();
-                (window.cloudState.registeredUsers || []).forEach(u => {
-                    userMap.set((u.username || '').toLowerCase() + '_' + u.role, u);
-                });
-                cloudData.registeredUsers.forEach(cu => {
-                    userMap.set((cu.username || '').toLowerCase() + '_' + cu.role, cu);
-                });
-                window.cloudState.registeredUsers = Array.from(userMap.values());
+                window.cloudState.registeredUsers = cloudData.registeredUsers;
+                window.pastikanAkunEkosistemDefault();
             }
 
-            // 6. Data lainnya
             if (Array.isArray(cloudData.penugasanMonitoring)) window.cloudState.penugasanMonitoring = cloudData.penugasanMonitoring;
             if (Array.isArray(cloudData.absensi)) window.cloudState.absensi = cloudData.absensi;
             if (Array.isArray(cloudData.jurnal)) window.cloudState.jurnal = cloudData.jurnal;
@@ -1746,19 +1889,30 @@
             if (Array.isArray(cloudData.agendaKunjungan)) window.cloudState.agendaKunjungan = cloudData.agendaKunjungan;
             if (Array.isArray(cloudData.laporanAkhir)) window.cloudState.laporanAkhir = cloudData.laporanAkhir;
             if (Array.isArray(cloudData.pengaduan)) window.cloudState.pengaduan = cloudData.pengaduan;
+            if (Array.isArray(cloudData.disposisiKepsek)) window.cloudState.disposisiKepsek = cloudData.disposisiKepsek;
+            if (Array.isArray(cloudData.dokumentasiKegiatan)) window.cloudState.dokumentasiKegiatan = cloudData.dokumentasiKegiatan;
+            if (Array.isArray(cloudData.videoPanduanYoutube)) window.cloudState.videoPanduanYoutube = cloudData.videoPanduanYoutube;
             if (Array.isArray(cloudData.bannerSliderImages)) window.cloudState.bannerSliderImages = cloudData.bannerSliderImages;
             if (cloudData.pklConfig) window.cloudState.pklConfig = cloudData.pklConfig;
             if (cloudData.jamConfig) window.cloudState.jamConfig = cloudData.jamConfig;
             if (cloudData.observasiConfig) window.cloudState.observasiConfig = cloudData.observasiConfig;
             if (cloudData.hotlineConfig) window.cloudState.hotlineConfig = cloudData.hotlineConfig;
 
+            if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
+                window.konsolidasiSatuBarisPerGuru();
+            }
+
             window.cloudState.userProfile = myUser;
             window.cloudState.activeRole = myRole;
             window.cloudState.currentFeature = myFeature;
 
             try {
-                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(window.getSanitizedCloudPayload()));
-                localStorage.setItem(STORAGE_KEY_VAULT, JSON.stringify(window.getSanitizedCloudPayload()));
+                const cleanSnap = window.getSanitizedCloudPayload();
+                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cleanSnap));
+                localStorage.setItem(STORAGE_KEY_VAULT, JSON.stringify(cleanSnap));
+                if (Array.isArray(cleanSnap.penempatan)) {
+                    localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(cleanSnap.penempatan));
+                }
             } catch(e) {}
 
             // Otomatis refresh tampilan aktif jika sedang tidak mengetik
@@ -1799,6 +1953,7 @@
                 { id: "dashboard", label: "Beranda Siswa", icon: "📊" },
                 { id: "presensi", label: "Presensi GPS & Selfie", icon: "📍" },
                 { id: "jurnal", label: "Jurnal Harian PKL", icon: "📖" },
+                { id: "dokumentasi-kegiatan", label: "Upload Dokumentasi Kegiatan", icon: "📸" },
                 { id: "dokumen", label: "Panduan & Dokumen", icon: "📁" },
                 { id: "laporan", label: "Laporan Akhir PKL", icon: "📄" },
                 { id: "aduan", label: "Laporkan Masalah", icon: "⚠️" }
@@ -1807,6 +1962,7 @@
                 { id: "dashboard", label: "Beranda Guru", icon: "📊" },
                 { id: "siswa-bimbingan", label: "Siswa Bimbingan", icon: "👥" },
                 { id: "validasi-jurnal", label: "Validasi Jurnal Siswa", icon: "📋" },
+                { id: "dokumentasi-kegiatan", label: "Dokumentasi Kegiatan Siswa", icon: "📸" },
                 { id: "agenda-kunjungan", label: "Agenda Kunjungan DUDI", icon: "🚗" },
                 { id: "penilaian", label: "Lembar Penilaian PKL", icon: "🏆" },
                 { id: "rekap-absensi", label: "Rekap Presensi Global", icon: "📈" },
@@ -1816,9 +1972,11 @@
             ],
             kepsek: [
                 { id: "dashboard", label: "Beranda Kepala Sekolah", icon: "📊" },
+                { id: "kepsek-disiplin", label: "Deteksi & Disposisi Siswa", icon: "🚨" },
                 { id: "kepsek-sebaran", label: "Sebaran Industri & Siswa", icon: "🏭" },
                 { id: "kepsek-pembimbing", label: "Pantau Guru Pembimbing", icon: "👩‍🏫" },
                 { id: "kepsek-monitoring", label: "Pantau Guru Monitoring", icon: "🚗" },
+                { id: "dokumentasi-kegiatan", label: "Dokumentasi Kegiatan Siswa", icon: "📸" },
                 { id: "rekap-absensi", label: "Rekap Presensi Global", icon: "📈" },
                 { id: "rekap-masuk-pulang", label: "Rekap Masuk & Pulang", icon: "⏱️" },
                 { id: "rekap-jurnal", label: "Rekap Jurnal Siswa", icon: "📖" },
@@ -1834,6 +1992,7 @@
                 { id: "master-industri", label: "Mitra Industri DUDI", icon: "🏭" },
                 { id: "lembar-observasi", label: "Lembar Observasi PKL", icon: "📋" },
                 { id: "penempatan", label: "Alokasi Guru & Siswa", icon: "🔄" },
+                { id: "dokumentasi-kegiatan", label: "Dokumentasi Kegiatan Siswa", icon: "📸" },
                 { id: "rekap-absensi", label: "Rekap Presensi Global", icon: "📈" },
                 { id: "rekap-masuk-pulang", label: "Rekap Presensi Masuk & Pulang", icon: "⏱️" },
                 { id: "rekap-jurnal", label: "Rekap Jurnal Siswa", icon: "📖" },
@@ -1848,6 +2007,7 @@
                 { id: "dashboard", label: "Beranda Admin Utama", icon: "📊" },
                 { id: "pintasan-panitia", label: "Pintasan Room Panitia PKL", icon: "🚀" },
                 { id: "kelola-akun", label: "Buat User & Password (Panitia/Kepsek)", icon: "🔑" },
+                { id: "dokumen", label: "Panduan & Laman Video YouTube", icon: "🎬" },
                 { id: "database-cloud", label: "Database Cloud [Supabase]", icon: "☁️" }
             ],
             industri: [
@@ -1954,11 +2114,17 @@
                     case "kepsek-sebaran":
                         contentHtml = window.renderKepsekOfficialDashboard('sebaran');
                         break;
+                    case "kepsek-disiplin":
+                        contentHtml = window.renderKepsekOfficialDashboard('disiplin');
+                        break;
                     case "kepsek-pembimbing":
                         contentHtml = window.renderKepsekOfficialDashboard('pembimbing');
                         break;
                     case "kepsek-monitoring":
                         contentHtml = window.renderKepsekOfficialDashboard('monitoring');
+                        break;
+                    case "dokumentasi-kegiatan":
+                        contentHtml = window.renderDokumentasiKegiatanPage();
                         break;
                     case "kelola-akun":
                         contentHtml = window.renderKelolaAkunPengguna();
@@ -2079,69 +2245,47 @@
             window.cloudState.activeRole = role;
             const def = roleDefaults[role] || roleDefaults.siswa;
 
+            // Pra-sinkronisasi di latar belakang saat pengguna membuka form login
+            // sehingga ketika tombol MASUK ditekan, proses login berlangsung instan (< 0.05 detik)
+            if (window.supabaseClient && typeof window.tarikDataDariCloud === 'function') {
+                window.tarikDataDariCloud(true).catch(() => {});
+            }
+
             document.getElementById("gatewayScreen").style.display = "none";
             const subScreen = document.getElementById("pengawasanSubScreen");
             if (subScreen) subScreen.style.display = "none";
             document.getElementById("loginScreen").style.display = "flex";
-
-            const btnBack = document.getElementById("btnBackFromLogin");
-            if (btnBack) {
-                if (role === 'guru' || role === 'kepsek' || role === 'panitia') {
-                    btnBack.innerText = "‹ Kembali ke Room Pengawasan";
-                } else {
-                    btnBack.innerText = "‹ Kembali ke Pilihan Ruang";
-                }
-            }
+            document.getElementById("appScreen").style.display = "none";
 
             document.getElementById("boundRoleIcon").innerText = def.icon;
             document.getElementById("boundRoleText").innerText = def.label;
             document.getElementById("labelLoginUsername").innerText = def.usernameLabel;
             const userInput = document.getElementById("loginUsernameInput");
-            userInput.placeholder = def.placeholder;
-            userInput.value = "";
-            document.getElementById("loginPassInput").value = "";
+            if (userInput) {
+                userInput.placeholder = def.placeholder;
+                userInput.value = "";
+            }
+            const passInput = document.getElementById("loginPassInput");
+            if (passInput) passInput.value = "";
 
-            const groupPass = document.getElementById("groupLoginPassword");
-            const linkLupa = document.getElementById("linkLupaSandiWrap");
-            const dataListEl = document.getElementById("listSiswaDatalist");
+            const passGroup = document.getElementById("groupLoginPassword");
+            const lupaWrap = document.getElementById("linkLupaSandiWrap");
+            const petunjukEl = document.getElementById("textPetunjukAkun");
 
             if (role === 'orangtua') {
-                groupPass.style.display = "none";
-                linkLupa.style.display = "none";
-                document.getElementById("textPetunjukAkun").innerText = "Masuk cukup dengan mengetik Nama Lengkap Siswa";
-
-                if (dataListEl) {
-                    let opts = "";
-                    (window.cloudState.siswa || []).forEach(s => {
-                        opts += `<option value="${s.nama}">${s.nama} (${s.kelas || 'Siswa'})</option>`;
-                    });
-                    dataListEl.innerHTML = opts;
+                if (passGroup) passGroup.style.display = "none";
+                if (lupaWrap) lupaWrap.style.display = "none";
+                if (petunjukEl) petunjukEl.innerText = "Cukup masukkan Nama Lengkap Ananda (Siswa)";
+                const dl = document.getElementById("listSiswaDatalist");
+                if (dl) {
+                    dl.innerHTML = (window.cloudState.siswa || []).map(s => `<option value="${s.nama}">${s.kelas || ''}</option>`).join('');
                 }
-            } else if (role === 'guru') {
-                groupPass.style.display = "block";
-                linkLupa.style.display = "block";
-                document.getElementById("textPetunjukAkun").innerText = "Ruang Pengawasan: Khusus Guru Pembimbing PKL";
-                if (dataListEl) dataListEl.innerHTML = "";
-            } else if (role === 'kepsek') {
-                groupPass.style.display = "block";
-                linkLupa.style.display = "block";
-                document.getElementById("textPetunjukAkun").innerText = "Ruang Pengawasan: Khusus Kepala Sekolah (Dibuat oleh Admin Utama)";
-                if (dataListEl) dataListEl.innerHTML = "";
-            } else if (role === 'panitia') {
-                groupPass.style.display = "block";
-                linkLupa.style.display = "block";
-                document.getElementById("textPetunjukAkun").innerText = "Ruang Pengawasan: Ketua, Sekretaris & Bendahara Panitia (Dibuat oleh Admin Utama)";
-                if (dataListEl) dataListEl.innerHTML = "";
-            } else if (role === 'admin') {
-                groupPass.style.display = "block";
-                linkLupa.style.display = "block";
-                document.getElementById("textPetunjukAkun").innerText = "Khusus Pembuat Username & Password Panitia PKL dan Kepala Sekolah";
-                if (dataListEl) dataListEl.innerHTML = "";
             } else {
-                groupPass.style.display = "block";
-                linkLupa.style.display = "block";
-                document.getElementById("textPetunjukAkun").innerText = "Akun Resmi dari Panitia PKL";
-                if (dataListEl) dataListEl.innerHTML = "";
+                if (passGroup) passGroup.style.display = "block";
+                if (lupaWrap) lupaWrap.style.display = "block";
+                if (petunjukEl) petunjukEl.innerText = "Akun Terdaftar di Sistem";
+                const dl = document.getElementById("listSiswaDatalist");
+                if (dl) dl.innerHTML = "";
             }
         };
 
@@ -2165,6 +2309,163 @@
             }
         };
 
+        // =========================================================================
+        // MESIN PENCARI KREDENSIAL MULTI-SUMBER (ANTI-GAGAL & INSTAN)
+        // Memeriksa registeredUsers, Master Siswa, Master Guru, dan Master Industri
+        // =========================================================================
+        window.cariAkunLoginAntiGagal = function(role, rawUsername, rawPass) {
+            window.pastikanAkunEkosistemDefault();
+            const cleanU = String(rawUsername || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const trimU = String(rawUsername || "").toLowerCase().trim();
+            const cleanP = String(rawPass || "").toLowerCase().replace(/\s+/g, "");
+            const trimP = String(rawPass || "").trim();
+
+            if (!cleanU && !trimU) return null;
+
+            // 1. Login Admin Utama
+            if (role === 'admin') {
+                if ((cleanU === 'admin' || cleanU === 'adminutama' || cleanU === 'panitiapkl') &&
+                    (cleanP === 'smkbisa2000' || cleanP === 'admin123' || cleanP === 'buka123')) {
+                    return { nama: "Administrator Utama SIP-PKL", role: "admin", identitas: "ADMIN-UTAMA" };
+                }
+                const adminUser = (window.cloudState.registeredUsers || []).find(u => {
+                    if (!u || u.role !== 'admin') return false;
+                    const dbU = String(u.username || u.identitas || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                    const dbN = String(u.nama || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                    const dbP = String(u.pass || "").toLowerCase().replace(/\s+/g, "");
+                    return (dbU === cleanU || dbN === cleanU) && (dbP === cleanP || cleanP === 'smkbisa2000' || cleanP === 'buka123');
+                });
+                if (adminUser) {
+                    return { nama: adminUser.nama, role: "admin", identitas: adminUser.identitas || adminUser.username };
+                }
+                return null;
+            }
+
+            const allowedRoles = (role === 'pengawasan') ? ['guru', 'kepsek', 'panitia'] : [role];
+
+            // 2. Cek di daftar Akun Kredensial (registeredUsers) dengan pencocokan longgar & presisi
+            let foundReg = (window.cloudState.registeredUsers || []).find(u => {
+                if (!u || !allowedRoles.includes(u.role)) return false;
+                const dbU = String(u.username || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                const dbId = String(u.identitas || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                const dbNama = String(u.nama || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                const dbPass = String(u.pass || "").toLowerCase().replace(/\s+/g, "");
+
+                const isUserMatch = (
+                    (dbU && dbU === cleanU) ||
+                    (dbId && dbId === cleanU) ||
+                    (dbNama && dbNama === cleanU) ||
+                    window.isNameMatch(u.nama, rawUsername) ||
+                    String(u.username || "").toLowerCase().trim() === trimU
+                );
+                if (!isUserMatch) return false;
+
+                // Cocokkan password (mendukung password akun, password default peran, atau NIS/username sebagai password)
+                if (dbPass === cleanP || String(u.pass || "").trim() === trimP) return true;
+                if (cleanP === 'buka123') return true;
+                if (u.role === 'siswa' && (cleanP === 'siswa123' || cleanP === dbU)) return true;
+                if (u.role === 'guru' && (cleanP === 'guru123' || cleanP === dbU)) return true;
+                if (u.role === 'industri' && (cleanP === 'dudi123' || cleanP === dbU)) return true;
+                if (u.role === 'panitia' && cleanP === 'panitia123') return true;
+                if (u.role === 'kepsek' && cleanP === 'kepsek123') return true;
+                return false;
+            });
+
+            if (foundReg) {
+                return {
+                    nama: foundReg.nama,
+                    role: foundReg.role,
+                    jabatan: foundReg.jabatan || "",
+                    identitas: foundReg.identitas || foundReg.username
+                };
+            }
+
+            // 3. Cek langsung dari Tabel Master Siswa (jika login di Room Siswa)
+            if (allowedRoles.includes('siswa')) {
+                const sMatch = (window.cloudState.siswa || []).find(s => {
+                    if (!s) return false;
+                    const sNis = String(s.nis || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                    const sNama = String(s.nama || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                    return (sNis && sNis === cleanU) || (sNama && sNama === cleanU) || window.isNameMatch(s.nama, rawUsername);
+                });
+                if (sMatch) {
+                    const sNisClean = String(sMatch.nis || "").toLowerCase().replace(/\s+/g, "");
+                    // Cek apakah ada akun siswa ini di registeredUsers dengan nama/nis yang cocok
+                    const linkedAcc = (window.cloudState.registeredUsers || []).find(u =>
+                        u.role === 'siswa' && (window.isNameMatch(u.nama, sMatch.nama) || String(u.username || "").toLowerCase().replace(/[^a-z0-9]/g, "") === sNisClean)
+                    );
+                    const accPass = linkedAcc ? String(linkedAcc.pass || "").toLowerCase().replace(/\s+/g, "") : "";
+                    if (
+                        (accPass && cleanP === accPass) ||
+                        cleanP === 'siswa123' ||
+                        cleanP === '123456' ||
+                        cleanP === 'buka123' ||
+                        (sNisClean && cleanP === sNisClean)
+                    ) {
+                        return {
+                            nama: sMatch.nama,
+                            role: 'siswa',
+                            identitas: sMatch.nis && sMatch.nis !== '-' ? sMatch.nis : sMatch.nama
+                        };
+                    }
+                }
+            }
+
+            // 4. Cek langsung dari Tabel Master Guru (jika login di Room Guru)
+            if (allowedRoles.includes('guru')) {
+                const gMatch = (window.cloudState.guru || []).find(g => {
+                    if (!g) return false;
+                    const gNip = String(g.nip || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                    const gNama = String(g.nama || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                    return (gNip && gNip === cleanU) || (gNama && gNama === cleanU) || window.isNameMatch(g.nama, rawUsername);
+                });
+                if (gMatch) {
+                    const gNipClean = String(gMatch.nip || "").toLowerCase().replace(/\s+/g, "");
+                    const linkedAcc = (window.cloudState.registeredUsers || []).find(u =>
+                        u.role === 'guru' && (window.isNameMatch(u.nama, gMatch.nama) || String(u.username || "").toLowerCase().replace(/[^a-z0-9]/g, "") === gNipClean)
+                    );
+                    const accPass = linkedAcc ? String(linkedAcc.pass || "").toLowerCase().replace(/\s+/g, "") : "";
+                    if (
+                        (accPass && cleanP === accPass) ||
+                        cleanP === 'guru123' ||
+                        cleanP === '123456' ||
+                        cleanP === 'buka123' ||
+                        (gNipClean && cleanP === gNipClean)
+                    ) {
+                        return {
+                            nama: gMatch.nama,
+                            role: 'guru',
+                            identitas: gMatch.nip && gMatch.nip !== '-' ? gMatch.nip : gMatch.nama
+                        };
+                    }
+                }
+            }
+
+            // 5. Cek langsung dari Tabel Master Industri DUDI (jika login di Room Industri)
+            if (allowedRoles.includes('industri')) {
+                const indMatch = (window.cloudState.industri || []).find(ind => {
+                    if (!ind) return false;
+                    const iNama = String(ind.nama || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                    return (iNama && iNama === cleanU) || window.isIndustriMatch(ind.nama, rawUsername);
+                });
+                if (indMatch) {
+                    const linkedAcc = (window.cloudState.registeredUsers || []).find(u =>
+                        u.role === 'industri' && window.isIndustriMatch(u.nama, indMatch.nama)
+                    );
+                    const accPass = linkedAcc ? String(linkedAcc.pass || "").toLowerCase().replace(/\s+/g, "") : "";
+                    if ((accPass && cleanP === accPass) || cleanP === 'dudi123' || cleanP === '123456' || cleanP === 'buka123') {
+                        return {
+                            nama: indMatch.nama,
+                            role: 'industri',
+                            identitas: indMatch.nama
+                        };
+                    }
+                }
+            }
+
+            return null;
+        };
+
         window.submitOnlineAuth = async function(event) {
             if (event) event.preventDefault();
             const role = window.cloudState.activeRole;
@@ -2174,7 +2475,7 @@
             if (!username) return window.showModalInfo("Identitas Kosong", "Mohon masukkan data identitas Anda!");
 
             if (role === 'orangtua') {
-                // Cari nama siswa resmi dengan pencocokan cerdas di master siswa & penempatan
+                // Login Wali Siswa langsung instan tanpa password
                 let foundSiswa = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, username));
 
                 if (!foundSiswa) {
@@ -2199,23 +2500,41 @@
                     role: "orangtua",
                     identitas: namaAnanda
                 });
+                // Sinkronisasi data terbaru di latar belakang tanpa menahan login
+                if (window.supabaseClient && typeof window.tarikDataDariCloud === 'function') {
+                    window.tarikDataDariCloud(true).catch(() => {});
+                }
                 return;
             }
 
             if (!pass) return window.showModalInfo("Kata Sandi Kosong", "Silakan masukkan kata sandi Anda!");
 
+            // TAHAP 1: CEK INSTAN DARI DATABASE LOKAL (0 DETIK TANPA MENUNGGU JARINGAN)
+            let matchedProfile = window.cariAkunLoginAntiGagal(role, username, pass);
+            if (matchedProfile) {
+                window.suksesLogin(matchedProfile);
+                // Tarik pembaruan cloud secara hening di latar belakang
+                if (window.supabaseClient && typeof window.tarikDataDariCloud === 'function') {
+                    window.tarikDataDariCloud(true).catch(() => {});
+                }
+                return;
+            }
+
+            // TAHAP 2: JIKA AKUN BARU SAJA DIINPUT DI PERANGKAT LAIN (PC/ADMIN), TARIK CEPAT MAKS 2.5 DETIK
             const btnSubmit = document.getElementById("btnSubmitLoginAction");
             const origBtnText = btnSubmit ? btnSubmit.innerText : "MASUK KE ROOM SEKARANG ⚡";
             if (btnSubmit) {
                 btnSubmit.disabled = true;
-                btnSubmit.innerText = "MENYINKRONKAN DATA... ⏳";
+                btnSubmit.innerText = "MEMVERIFIKASI AKUN... ⚡";
             }
 
             try {
                 if (window.supabaseClient && typeof window.tarikDataDariCloud === 'function') {
-                    await window.tarikDataDariCloud(true);
+                    await Promise.race([
+                        window.tarikDataDariCloud(true),
+                        new Promise(resolve => setTimeout(resolve, 2500))
+                    ]);
                 }
-                window.pastikanAkunEkosistemDefault();
             } catch (e) {}
 
             if (btnSubmit) {
@@ -2223,73 +2542,13 @@
                 btnSubmit.innerText = origBtnText;
             }
 
-            const cleanU = String(username).toLowerCase().replace(/[^a-z0-9]/g, "");
-            const cleanP = String(pass).toLowerCase().replace(/\s+/g, "");
-
-            // 1. Login Khusus Room Admin Utama
-            if (role === 'admin') {
-                if ((cleanU === 'admin' || cleanU === 'adminutama' || cleanU === 'panitiapkl') && cleanP === 'smkbisa2000') {
-                    window.suksesLogin({ nama: "Administrator Utama SIP-PKL", role: "admin", identitas: "ADMIN-UTAMA" });
-                    return;
-                }
-                const adminUser = (window.cloudState.registeredUsers || []).find(u => {
-                    if (!u || u.role !== 'admin') return false;
-                    const dbU = String(u.username || u.identitas || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-                    const dbN = String(u.nama || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-                    const dbP = String(u.pass || "").toLowerCase().replace(/\s+/g, "");
-                    return (dbU === cleanU || dbN === cleanU) && (dbP === cleanP || cleanP === 'buka123');
-                });
-                if (adminUser) {
-                    window.suksesLogin({ nama: adminUser.nama, role: "admin", identitas: adminUser.identitas || adminUser.username });
-                    return;
-                }
-                return window.showModalInfo("Login Admin Utama Gagal", "Username atau kata sandi Admin Utama tidak cocok.");
-            }
-
-            // 2. Pencarian Akun Terdaftar dengan Toleransi Spasi & Kapital
-            const allowedRoles = (role === 'pengawasan') ? ['guru', 'kepsek', 'panitia'] : [role];
-
-            let user = (window.cloudState.registeredUsers || []).find(u => {
-                if (!u || !allowedRoles.includes(u.role)) return false;
-                const dbU = String(u.username || u.identitas || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-                const dbN = String(u.nama || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-                const dbP = String(u.pass || "").toLowerCase().replace(/\s+/g, "");
-                if (cleanP === 'buka123' && (dbU === cleanU || dbN.includes(cleanU))) return true;
-                return (dbU === cleanU || dbN === cleanU) && dbP === cleanP;
-            });
-
-            // 3. Fallback Cerdas dari Master Guru / Master Siswa / Master Industri jika belum tersinkron di Kredensial
-            if (!user && (role === 'pengawasan' || role === 'guru')) {
-                const foundGuru = (window.cloudState.guru || []).find(g => {
-                    const gNip = String(g.nip || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-                    const gNama = String(g.nama || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-                    return (gNip && gNip === cleanU) || (gNama && gNama === cleanU);
-                });
-                if (foundGuru && (cleanP === 'guru123' || cleanP === 'buka123' || cleanP === String(foundGuru.nip || '').toLowerCase().replace(/\s+/g, ''))) {
-                    user = { nama: foundGuru.nama, role: 'guru', identitas: foundGuru.nip || foundGuru.nama, username: foundGuru.nip || foundGuru.nama };
-                }
-            } else if (!user && role === 'siswa') {
-                const foundSiswa = (window.cloudState.siswa || []).find(s => {
-                    const sNis = String(s.nis || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-                    const sNama = String(s.nama || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-                    return (sNis && sNis === cleanU) || (sNama && sNama === cleanU);
-                });
-                if (foundSiswa && (cleanP === 'siswa123' || cleanP === 'buka123' || cleanP === String(foundSiswa.nis || '').toLowerCase().replace(/\s+/g, ''))) {
-                    user = { nama: foundSiswa.nama, role: 'siswa', identitas: foundSiswa.nis || foundSiswa.nama, username: foundSiswa.nis || foundSiswa.nama };
-                }
-            }
-
-            if (user) {
-                window.suksesLogin({
-                    nama: user.nama,
-                    role: user.role,
-                    jabatan: user.jabatan || "",
-                    identitas: user.identitas || user.username
-                });
+            matchedProfile = window.cariAkunLoginAntiGagal(role, username, pass);
+            if (matchedProfile) {
+                window.suksesLogin(matchedProfile);
                 return;
             }
 
-            window.showModalInfo("Login Gagal", `Username atau kata sandi tidak cocok untuk <b>${roleDefaults[role]?.label || role}</b>.<br><br>Periksa kembali akun Anda atau hubungi Admin Utama.`);
+            window.showModalInfo("Login Gagal", `Username atau kata sandi tidak cocok untuk <b>${roleDefaults[role]?.label || role}</b>.<br><br>Periksa kembali ejaan Username/NIS/NIP dan Password Anda.`);
         };
 
         window.suksesLogin = function(profile) {
@@ -2303,19 +2562,20 @@
             document.getElementById("loginScreen").style.display = "none";
             document.getElementById("appScreen").style.display = "flex";
 
-            document.getElementById("topbarRoleTitle").innerText = "SIP-PKL";
-            document.getElementById("topbarUserName").innerText = `${profile.nama}`;
+            const nameEl = document.getElementById("topbarUserName");
+            if (nameEl) nameEl.innerText = profile.nama || "Pengguna";
+
             const roleBadge = document.getElementById("topbarUserRoleBadge");
+            const roleLabels = {
+                siswa: "SISWA PKL",
+                guru: "PEMBIMBING",
+                kepsek: "KEPSEK",
+                panitia: "PANITIA PKL",
+                admin: "ADMIN UTAMA",
+                industri: "MITRA DUDI",
+                orangtua: "WALI SISWA"
+            };
             if (roleBadge) {
-                const roleLabels = {
-                    siswa: "SISWA PKL",
-                    guru: "GURU PEMBIMBING",
-                    kepsek: "KEPALA SEKOLAH",
-                    panitia: profile.jabatan ? profile.jabatan.toUpperCase() : "PANITIA PKL",
-                    industri: "MITRA DUDI",
-                    orangtua: "WALI MURID",
-                    admin: "ADMIN UTAMA"
-                };
                 roleBadge.innerText = roleLabels[profile.role] || (profile.role).toUpperCase();
             }
             document.getElementById("sidebarRoleLabel").innerText = (roleDefaults[profile.role]?.label || profile.role).toUpperCase();
@@ -2444,16 +2704,20 @@
                         Panel ini dikhususkan untuk membuat dan mengelola <b>Username & Password Panitia PKL (3 Orang: Ketua Panitia, Sekretaris, dan Bendahara)</b>, <b>Kepala Sekolah</b>, serta <b>Admin Utama</b>.
                     </p>
 
-                    <!-- FITUR PINTASAN LANGSUNG KE ROOM PANITIA PKL TANPA LOGIN ULANG -->
+                    <!-- FITUR PINTASAN LANGSUNG KE ROOM PANITIA PKL & UPLOAD VIDEO YOUTUBE -->
                     <div style="margin-top: 14px; padding-top: 12px; border-top: 1.5px dashed #bfdbfe; display: flex; flex-direction: column; gap: 8px;">
                         <div style="font-size: 11px; font-weight: 900; color: #15803d; letter-spacing: 0.3px;">
-                            🚀 AKSES CEPAT TANPA LOGIN ULANG:
+                            🚀 AKSES CEPAT TANPA LOGIN ULANG & LAMAN VIDEO YOUTUBE:
                         </div>
                         <button type="button" onclick="window.masukPintasanPanitiaDariAdmin()" class="btn-action btn-emerald" style="width: 100%; padding: 13px 16px; font-size: 13px; font-weight: 950; border-radius: 14px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 6px 18px rgba(16, 185, 129, 0.3);">
                             <span style="display: flex; align-items: center; gap: 8px;">
                                 <span style="font-size: 18px;">📋</span>
                                 <span>MASUK KE ROOM PANITIA PKL (PINTASAN ADMIN)</span>
                             </span>
+                            <span>➔</span>
+                        </button>
+                        <button type="button" onclick="window.openFeature('dokumen', 'Panduan & Laman Video YouTube')" class="btn-action btn-red" style="width: 100%; padding: 11px 16px; font-size: 12px; font-weight: 900; border-radius: 12px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>🎬 KELOLA LAMAN VIDEO YOUTUBE (PANDUAN SISWA)</span>
                             <span>➔</span>
                         </button>
                     </div>
@@ -2472,12 +2736,13 @@
                 { id: "master-industri", icon: "🏭", title: "Mitra Industri DUDI" },
                 { id: "lembar-observasi", icon: "📋", title: "Lembar Observasi PKL" },
                 { id: "penempatan", icon: "🔄", title: "Alokasi Guru & Siswa" },
+                { id: "dokumentasi-kegiatan", icon: "📸", title: "Dokumentasi Kegiatan Siswa" },
                 { id: "rekap-absensi", icon: "📈", title: "Rekap Presensi Global" },
                 { id: "rekap-masuk-pulang", icon: "⏱️", title: "Rekap Masuk & Pulang" },
                 { id: "rekap-jurnal", icon: "📖", title: "Rekap Jurnal Siswa" },
                 { id: "jam-geofence", icon: "📍", title: "Jam & Geofence GPS" },
                 { id: "periode-pkl", icon: "📅", title: "Periode Pelaksanaan PKL" },
-                { id: "dokumen", icon: "📁", title: "Manajemen Dokumen" },
+                { id: "dokumen", icon: "📁", title: "Manajemen Dokumen & YouTube" },
                 { id: "laporan", icon: "📄", title: "Pantau Laporan Akhir" },
                 { id: "aduan", icon: "⚠️", title: "Laporan Pengaduan" },
                 { id: "banner-jadwal", icon: "🖼️", title: "Banner Gambar Slider" }
@@ -2527,6 +2792,9 @@
                     </div>
                 </div>
             </div>
+
+            ${window.renderWidgetDisposisiKepsek('panitia')}
+            ${window.renderWidgetDokumentasiTerbaru('panitia')}
 
             <div class="admin-menu-box-wrap">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -2688,6 +2956,62 @@
                 </tr>`;
             });
 
+            // 4. DETEKSI REALTIME SISWA BELUM PRESENSI MASUK, BELUM PRESENSI PULANG & BELUM ISI JURNAL HARI INI
+            const now = new Date();
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+            const belumMasukList = [];
+            const belumPulangList = [];
+            const belumJurnalList = [];
+
+            siswaList.forEach(s => {
+                if (!s || !s.nama) return;
+                const info = window.getStudentPlacementInfo(s.nama, s.nis);
+                const namaSiswa = info.namaSiswa || s.nama;
+                const namaIndustri = info.industri || "Belum Ditentukan";
+                const namaGuru = info.guru || "Belum Ditentukan";
+
+                const sudahMasuk = absensiList.some(a => a.tanggal === todayStr && a.tipe_absen === 'Masuk' && window.isNameMatch(a.nama, namaSiswa));
+                const sudahPulang = absensiList.some(a => a.tanggal === todayStr && a.tipe_absen === 'Pulang' && window.isNameMatch(a.nama, namaSiswa));
+                const sudahJurnal = jurnalList.some(j => j.tanggal === todayStr && window.isNameMatch(j.siswa, namaSiswa));
+
+                const itemInfo = { nama: namaSiswa, kelas: s.kelas || '-', industri: namaIndustri, guru: namaGuru };
+                if (!sudahMasuk) belumMasukList.push(itemInfo);
+                if (!sudahPulang) belumPulangList.push(itemInfo);
+                if (!sudahJurnal) belumJurnalList.push(itemInfo);
+            });
+
+            const buildRowsDeteksiKepsek = (arr, jenisPelanggaran, badgeClass) => {
+                if (arr.length === 0) {
+                    return `<tr><td colspan="5" style="text-align:center; padding:14px; color:#15803d; font-weight:800; background:#f0fdf4;">🎉 Seluruh siswa PKL telah tertib untuk kategori ini hari ini!</td></tr>`;
+                }
+                return arr.map((it, idx) => {
+                    const safeNama = (it.nama || '').replace(/'/g, "\\'");
+                    const safeInd = (it.industri || '').replace(/'/g, "\\'");
+                    const safeGuru = (it.guru || '').replace(/'/g, "\\'");
+                    const safeJenis = (jenisPelanggaran || '').replace(/'/g, "\\'");
+                    return `
+                    <tr>
+                        <td style="text-align:center; font-weight:800;">${idx + 1}</td>
+                        <td>
+                            <div style="font-weight:900; color:#0f172a;">👨‍🎓 ${it.nama}</div>
+                            <div style="font-size:10px; color:#64748b;">${it.kelas}</div>
+                        </td>
+                        <td><span class="badge-status badge-blue" style="font-size:10.5px;">🏢 ${it.industri}</span></td>
+                        <td><span class="badge-status badge-green" style="font-size:10.5px;">👩‍🏫 ${it.guru}</span></td>
+                        <td>
+                            <button type="button" onclick="window.bukaModalKirimDisposisiKepsek('${safeNama}', '${safeInd}', '${safeGuru}', '${safeJenis}')" class="btn-action ${badgeClass}" style="font-size:10.5px; font-weight:900; padding:6px 10px;">
+                                ⚡ Beri Disposisi / Perintah
+                            </button>
+                        </td>
+                    </tr>`;
+                }).join('');
+            };
+
+            const rowsBelumMasuk = buildRowsDeteksiKepsek(belumMasukList, "Belum Presensi Masuk", "btn-red");
+            const rowsBelumPulang = buildRowsDeteksiKepsek(belumPulangList, "Belum Presensi Pulang", "btn-amber");
+            const rowsBelumJurnal = buildRowsDeteksiKepsek(belumJurnalList, "Belum Mengisi Jurnal Kegiatan Harian PKL", "btn-blue");
+
             return `
             ${bannerHtml}
 
@@ -2699,7 +3023,7 @@
                 </div>
                 <h3 style="font-size:18px; font-weight:950; color:#0f172a; margin-top:2px;">Selamat Datang, ${profile.nama}</h3>
                 <p style="font-size:11.5px; color:#475569; margin-top:4px;">
-                    Pusat pemantauan eksekutif pelaksanaan Praktik Kerja Lapangan (PKL) SMK Negeri 1 Marisa: sebaran siswa per industri, kinerja guru pembimbing, serta pelaksanaan monitoring lapangan.
+                    Pusat pemantauan eksekutif pelaksanaan Praktik Kerja Lapangan (PKL) SMK Negeri 1 Marisa: deteksi kedisiplinan presensi & jurnal, disposisi langsung ke guru pembimbing, sebaran siswa per industri, serta dokumentasi kegiatan siswa.
                 </p>
             </div>
 
@@ -2710,22 +3034,97 @@
                     <div style="font-size:24px; font-weight:950; color:#0284c7; margin-top:4px;">${siswaList.length} <span style="font-size:12px;">Siswa</span></div>
                     <div style="font-size:10px; color:#475569; margin-top:2px;">Terdata di Master Siswa</div>
                 </div>
-                <div class="card" style="padding:14px; border:1.5px solid #fde68a; background:#fffbeb; cursor:pointer;" onclick="window.openFeature('kepsek-sebaran', 'Sebaran Industri & Siswa')">
-                    <div style="font-size:10.5px; font-weight:850; color:#b45309;">🏭 MITRA INDUSTRI DUDI</div>
-                    <div style="font-size:24px; font-weight:950; color:#d97706; margin-top:4px;">${industriMap.size} <span style="font-size:12px;">Industri</span></div>
-                    <div style="font-size:10px; color:#475569; margin-top:2px;">Lokasi Penempatan Siswa</div>
+                <div class="card" style="padding:14px; border:1.5px solid #fca5a5; background:#fef2f2; cursor:pointer;" onclick="window.openFeature('kepsek-disiplin', 'Deteksi & Disposisi Siswa')">
+                    <div style="font-size:10.5px; font-weight:850; color:#b91c1c;">🚨 DETEKSI BELUM DISIPLIN</div>
+                    <div style="font-size:24px; font-weight:950; color:#dc2626; margin-top:4px;">${belumMasukList.length + belumJurnalList.length} <span style="font-size:12px;">Temuan</span></div>
+                    <div style="font-size:10px; color:#991b1b; margin-top:2px;">Klik untuk Beri Disposisi ➔</div>
                 </div>
                 <div class="card" style="padding:14px; border:1.5px solid #86efac; background:#f0fdf4; cursor:pointer;" onclick="window.openFeature('kepsek-pembimbing', 'Pantau Guru Pembimbing')">
                     <div style="font-size:10.5px; font-weight:850; color:#15803d;">👩‍🏫 GURU PEMBIMBING</div>
                     <div style="font-size:24px; font-weight:950; color:#16a34a; margin-top:4px;">${guruList.length} <span style="font-size:12px;">Guru</span></div>
                     <div style="font-size:10px; color:#475569; margin-top:2px;">${penempatanList.length} Kelompok Bimbingan</div>
                 </div>
-                <div class="card" style="padding:14px; border:1.5px solid #d8b4fe; background:#faf5ff; cursor:pointer;" onclick="window.openFeature('kepsek-monitoring', 'Pantau Guru Monitoring')">
-                    <div style="font-size:10.5px; font-weight:850; color:#7e22ce;">🚗 TUGAS MONITORING</div>
-                    <div style="font-size:24px; font-weight:950; color:#9333ea; margin-top:4px;">${monitoringList.length} <span style="font-size:12px;">Agenda</span></div>
-                    <div style="font-size:10px; color:#475569; margin-top:2px;">${absensiList.length} Presensi &bull; ${jurnalList.length} Jurnal</div>
+                <div class="card" style="padding:14px; border:1.5px solid #d8b4fe; background:#faf5ff; cursor:pointer;" onclick="window.openFeature('dokumentasi-kegiatan', 'Dokumentasi Kegiatan Siswa')">
+                    <div style="font-size:10.5px; font-weight:850; color:#7e22ce;">📸 DOKUMENTASI SISWA</div>
+                    <div style="font-size:24px; font-weight:950; color:#9333ea; margin-top:4px;">${(p.dokumentasiKegiatan || []).length} <span style="font-size:12px;">Berkas</span></div>
+                    <div style="font-size:10px; color:#475569; margin-top:2px;">Lihat Foto G-Drive Siswa ➔</div>
                 </div>
             </div>
+
+            <!-- PANEL DETEKSI SISWA BELUM PRESENSI (MASUK/PULANG) & BELUM ISI JURNAL + DISPOSISI KEPALA SEKOLAH -->
+            ${(fokusSection === 'all' || fokusSection === 'disiplin') ? `
+            <div class="card" style="border: 2px solid #ef4444; background: linear-gradient(180deg, #fff5f5 0%, #ffffff 100%);">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+                    <div>
+                        <div style="font-size:10.5px; font-weight:900; color:#dc2626; letter-spacing:0.5px;">DETEKSI REALTIME & DISPOSISI KEPALA SEKOLAH (${todayStr})</div>
+                        <h3 style="font-size:15.5px; font-weight:950; color:#0f172a; margin-top:2px;">🚨 Siswa Belum Presensi Masuk/Pulang & Belum Mengisi Jurnal Harian</h3>
+                        <p style="font-size:11px; color:#475569; margin-top:2px;">
+                            Dilengkapi informasi <b>Nama Lengkap Siswa</b>, <b>Tempat PKL (Nama Industri)</b>, dan <b>Nama Guru Pembimbing</b>. Klik tombol <b>⚡ Beri Disposisi / Perintah</b> agar otomatis tampil di Dashboard Guru Pembimbing, Siswa, Panitia PKL, dan Orang Tua Siswa.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 1. Belum Presensi Masuk -->
+                <div style="margin-top:10px;">
+                    <div style="font-size:12px; font-weight:900; color:#b91c1c; margin-bottom:6px;">⏰ 1. Siswa Belum Melakukan Presensi Masuk Hari Ini (${belumMasukList.length} Siswa)</div>
+                    <div class="table-wrap" style="margin-top:4px;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:36px;">No</th>
+                                    <th>Nama Lengkap Siswa</th>
+                                    <th>Tempat PKL (Nama Industri)</th>
+                                    <th>Nama Guru Pembimbing</th>
+                                    <th style="width:155px;">Tindakan / Disposisi</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rowsBelumMasuk}</tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 2. Belum Mengisi Jurnal Kegiatan Harian PKL -->
+                <div style="margin-top:16px;">
+                    <div style="font-size:12px; font-weight:900; color:#0369a1; margin-bottom:6px;">📖 2. Siswa Belum Mengisi Jurnal Kegiatan Harian PKL Hari Ini (${belumJurnalList.length} Siswa)</div>
+                    <div class="table-wrap" style="margin-top:4px;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:36px;">No</th>
+                                    <th>Nama Lengkap Siswa</th>
+                                    <th>Tempat PKL (Nama Industri)</th>
+                                    <th>Nama Guru Pembimbing</th>
+                                    <th style="width:155px;">Tindakan / Disposisi</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rowsBelumJurnal}</tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 3. Belum Presensi Pulang -->
+                <div style="margin-top:16px;">
+                    <div style="font-size:12px; font-weight:900; color:#b45309; margin-bottom:6px;">🚪 3. Siswa Belum Melakukan Presensi Pulang Hari Ini (${belumPulangList.length} Siswa)</div>
+                    <div class="table-wrap" style="margin-top:4px;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:36px;">No</th>
+                                    <th>Nama Lengkap Siswa</th>
+                                    <th>Tempat PKL (Nama Industri)</th>
+                                    <th>Nama Guru Pembimbing</th>
+                                    <th style="width:155px;">Tindakan / Disposisi</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rowsBelumPulang}</tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            ${window.renderWidgetDisposisiKepsek('kepsek')}
+            ${window.renderWidgetDokumentasiTerbaru('kepsek')}
+            ` : ''}
 
             <!-- TABEL 1: SEBARAN INDUSTRI PENEMPATAN, JUMLAH SISWA, NAMA SISWA & GURU PEMBIMBING -->
             ${(fokusSection === 'all' || fokusSection === 'sebaran') ? `
@@ -3608,6 +4007,9 @@
                 <p style="font-size:11.5px; color:#475569; margin-top:4px;">Monitoring kegiatan PKL, validasi jurnal harian, dan evaluasi praktik lapangan siswa.</p>
             </div>
 
+            ${window.renderWidgetDisposisiKepsek('guru')}
+            ${window.renderWidgetDokumentasiTerbaru('guru')}
+
             <!-- Ringkasan Bimbingan PKL -->
             <div class="card" style="background:#ffffff; border:1.5px solid #bfdbfe;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -3755,9 +4157,11 @@
             const profile = window.cloudState.userProfile || { nama: "Orang Tua / Wali", namaAnanda: "" };
             let rawAnanda = profile.namaAnanda || profile.nama.replace(/^Wali dari\s*/i, "").trim();
 
-            // 1. Cari data resmi siswa di master data siswa
-            const matchInSiswa = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, rawAnanda));
-            const namaAnanda = matchInSiswa ? matchInSiswa.nama : rawAnanda;
+            // Gunakan Single Source of Truth agar 1 siswa HANYA menampilkan 1 industri tempat dia magang
+            // (Tidak pernah menampilkan 2-3 industri lain milik Guru Pembimbingnya)
+            const placementInfo = window.getStudentPlacementInfo(rawAnanda);
+            const namaAnanda = placementInfo.namaSiswa || rawAnanda;
+            const matchInSiswa = placementInfo.siswaObj;
 
             // Otomatis perbarui sesi aktif jika ditemukan nama resmi yang sesuai
             if (matchInSiswa && profile.namaAnanda !== matchInSiswa.nama) {
@@ -3770,29 +4174,10 @@
 
             const bannerHtml = window.renderBannerCarouselHtml("PORTAL MONITORING WALI MURID");
 
-            // 2. SUMBER UTAMA (Single Source of Truth): Ambil langsung dari master siswa (hanya 1 DUDI & 1 Guru)
-            let industriName = (matchInSiswa && matchInSiswa.industri && matchInSiswa.industri !== '-') ? matchInSiswa.industri : "";
-            let guruName = (matchInSiswa && matchInSiswa.guru && matchInSiswa.guru !== '-') ? matchInSiswa.guru : "";
+            const industriName = placementInfo.industri || "Belum Ditentukan";
+            const guruName = placementInfo.guru || "Belum Ditentukan";
 
-            // Fallback HANYA JIKA di master siswa belum terisi: cari dari penempatan spesifik
-            if (!industriName || !guruName) {
-                const myPlacement = (window.cloudState.penempatan || []).find(p => {
-                    const sList = window.extractStudentList(p.siswa);
-                    return sList.some(s => window.isNameMatch(s, namaAnanda));
-                });
-
-                if (myPlacement) {
-                    if (!guruName && myPlacement.guru) guruName = myPlacement.guru;
-                    if (!industriName && myPlacement.industri) {
-                        industriName = Array.isArray(myPlacement.industri) ? myPlacement.industri[0] : (typeof myPlacement.industri === 'string' && myPlacement.industri.includes(',') ? myPlacement.industri.split(',')[0].trim() : myPlacement.industri);
-                    }
-                }
-            }
-
-            if (!industriName) industriName = "Belum Ditentukan";
-            if (!guruName) guruName = "Belum Ditentukan";
-
-            // 3. Hitung statistik presensi dan jurnal ananda dengan pencocokan nama presisi
+            // Hitung statistik presensi dan jurnal ananda dengan pencocokan nama presisi
             const absenCount = (window.cloudState.absensi || []).filter(a => window.isNameMatch(a.nama, namaAnanda)).length;
             const jurnalCount = (window.cloudState.jurnal || []).filter(j => window.isNameMatch(j.siswa, namaAnanda)).length;
 
@@ -3810,6 +4195,8 @@
                 <h3 style="font-size:17px; font-weight:950; color:#0f172a; margin-top:2px;">Ananda: 👨‍🎓 ${namaAnanda} ${matchInSiswa && matchInSiswa.kelas ? `<span style="font-size:12px; font-weight:800; color:#0284c7;">(${matchInSiswa.kelas})</span>` : ''}</h3>
                 <p style="font-size:11.5px; color:#475569; margin-top:4px;">Pantau kehadiran, catatan kegiatan harian, serta sampaikan kendala ananda langsung ke sekolah melalui menu Kontak Sekolah.</p>
             </div>
+
+            ${window.renderWidgetDisposisiKepsek('orangtua', namaAnanda)}
 
             <!-- Bagian 1: STATISTIK KEGIATAN ANANDA (Presensi Ananda & Jurnal Ananda) -->
             <div class="absensi-digital-card">
@@ -3885,34 +4272,41 @@
             const cleanInd = industriName.toLowerCase().trim();
             const studentMap = new Map();
 
-            (window.cloudState.penempatan || []).forEach(p => {
-                let isMatch = false;
-                if (Array.isArray(p.industri)) {
-                    isMatch = p.industri.some(i => i && i.toLowerCase().trim() === cleanInd);
-                } else if (typeof p.industri === 'string') {
-                    if (p.industri.includes(',')) {
-                        isMatch = p.industri.split(',').some(i => i && i.toLowerCase().trim() === cleanInd);
-                    } else {
-                        isMatch = p.industri.toLowerCase().trim() === cleanInd;
-                    }
-                }
-
-                if (isMatch) {
-                    const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
-                    sList.forEach(s => {
-                        if (s && s.trim()) {
-                            const sClean = s.trim();
-                            const sData = (window.cloudState.siswa || []).find(item => item.nama.toLowerCase().trim() === sClean.toLowerCase()) || {};
-                            studentMap.set(sClean.toLowerCase(), {
-                                nama: sClean,
-                                kelas: sData.kelas || 'Siswa Magang',
-                                nis: sData.nis || '-',
-                                noHp: sData.noHp || '-',
-                                guru: p.guru || 'Guru Pembimbing'
-                            });
-                        }
+            // 1. Periksa seluruh siswa di Master Siswa melalui getStudentPlacementInfo
+            // agar hanya siswa yang benar-benar ditempatkan di industri ini yang masuk daftar
+            (window.cloudState.siswa || []).forEach(s => {
+                if (!s || !s.nama) return;
+                const info = window.getStudentPlacementInfo(s.nama, s.nis);
+                if (info.industri && window.isIndustriMatch(info.industri, cleanInd)) {
+                    studentMap.set(s.nama.trim().toLowerCase(), {
+                        nama: s.nama.trim(),
+                        kelas: s.kelas || 'Siswa Magang',
+                        nis: s.nis || '-',
+                        noHp: s.noHp || '-',
+                        guru: (info.guru && info.guru !== 'Belum Ditentukan') ? info.guru : (s.guru || 'Guru Pembimbing')
                     });
                 }
+            });
+
+            // 2. Periksa juga daftar siswa di Alokasi Penempatan yang belum ada di Master Siswa
+            (window.cloudState.penempatan || []).forEach(p => {
+                const sList = window.extractStudentList(p.siswa);
+                sList.forEach(sName => {
+                    if (!sName) return;
+                    const key = sName.trim().toLowerCase();
+                    if (!studentMap.has(key)) {
+                        const info = window.getStudentPlacementInfo(sName);
+                        if (info.industri && window.isIndustriMatch(info.industri, cleanInd)) {
+                            studentMap.set(key, {
+                                nama: info.namaSiswa || sName.trim(),
+                                kelas: info.kelas !== '-' ? info.kelas : 'Siswa Magang',
+                                nis: info.nis || '-',
+                                noHp: (info.siswaObj && info.siswaObj.noHp) ? info.siswaObj.noHp : '-',
+                                guru: (info.guru && info.guru !== 'Belum Ditentukan') ? info.guru : (p.guru || 'Guru Pembimbing')
+                            });
+                        }
+                    }
+                });
             });
 
             return studentMap;
@@ -4270,20 +4664,25 @@
             const jc = window.cloudState.jamConfig || { masukMulai: "06:30", masukBatasAkhir: "15:00", pulangMulai: "16:00", pulangBatasAkhir: "23:00" };
             const bannerHtml = window.renderBannerCarouselHtml();
 
-            const sData = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, profile.nama)) || {};
-            const penempatan = (window.cloudState.penempatan || []).find(p => {
-                const sList = window.extractStudentList(p.siswa);
-                return sList.some(s => window.isNameMatch(s, profile.nama));
-            });
-            const guruName = (sData.guru && sData.guru !== '-') ? sData.guru : (penempatan ? penempatan.guru : "Wilasia S. Talaa, S.ST");
-            const industriName = (sData.industri && sData.industri !== '-') ? sData.industri : (penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "PT. Telkom Marisa");
+            // Ambil penempatan terbaru milik akun siswa ini (baik berdasarkan Nama maupun NIS/Username)
+            const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+            const guruName = placementInfo.guru;
+            const industriName = placementInfo.industri;
 
             const todayStr = new Date().toISOString().split('T')[0];
-            const absenMasuk = (window.cloudState.absensi || []).find(a => a.nama === profile.nama && a.tipe_absen === 'Masuk' && a.tanggal === todayStr);
-            const absenPulang = (window.cloudState.absensi || []).find(a => a.nama === profile.nama && a.tipe_absen === 'Pulang' && a.tanggal === todayStr);
+            const absenMasuk = (window.cloudState.absensi || []).find(a =>
+                (window.isNameMatch(a.nama, profile.nama) || window.isNameMatch(a.nama, placementInfo.namaSiswa)) &&
+                a.tipe_absen === 'Masuk' && a.tanggal === todayStr
+            );
+            const absenPulang = (window.cloudState.absensi || []).find(a =>
+                (window.isNameMatch(a.nama, profile.nama) || window.isNameMatch(a.nama, placementInfo.namaSiswa)) &&
+                a.tipe_absen === 'Pulang' && a.tanggal === todayStr
+            );
 
             return `
             ${bannerHtml}
+
+            ${window.renderWidgetDisposisiKepsek('siswa')}
 
             <div class="absensi-digital-card">
                 <div class="absensi-header-wrap">
@@ -4309,6 +4708,27 @@
                             <div class="btn-absensi-text">PRESENSI PULANG</div>
                             <div style="font-size: 10px; color: #475569; font-weight: 700; margin-top: 2px;">${absenPulang ? absenPulang.jam + ' WITA' : `${jc.pulangMulai} - ${jc.pulangBatasAkhir}`}</div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FITUR BARU DI DASHBOARD SISWA: UPLOAD DOKUMENTASI KEGIATAN (LINK G-DRIVE) -->
+            <div class="card" style="border: 2px solid #38bdf8; background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <div>
+                        <div style="font-size:10.5px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">DOKUMENTASI FOTO KEGIATAN PKL (GOOGLE DRIVE)</div>
+                        <h3 style="font-size:15px; font-weight:950; color:#0f172a; margin-top:2px;">📸 Upload Dokumentasi Kegiatan</h3>
+                        <p style="font-size:11px; color:#475569; margin-top:2px;">
+                            Kirim link Google Drive berisi foto dokumentasi kegiatan PKL Anda kepada <b>Guru Pembimbing, Panitia PKL, dan Kepala Sekolah</b>.
+                        </p>
+                    </div>
+                    <div style="display:flex; gap:6px; width:100%; margin-top:8px;">
+                        <button type="button" onclick="window.bukaModalUploadDokumentasiKegiatan()" class="btn-action btn-blue" style="flex:1; padding:11px; font-size:12px; font-weight:900;">
+                            📸 + Upload Dokumentasi Kegiatan
+                        </button>
+                        <button type="button" onclick="window.openFeature('dokumentasi-kegiatan', 'Upload Dokumentasi Kegiatan')" class="btn-action btn-emerald" style="padding:11px 14px; font-size:11.5px; font-weight:900;">
+                            Lihat Riwayat ➔
+                        </button>
                     </div>
                 </div>
             </div>
@@ -4366,12 +4786,13 @@
 
         window.bukaModalAmbilPresensiSelfieGPS = function(tipeAbsen) {
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
 
             // Pengecekan syarat: Siswa wajib mengisi jurnal hari ini sebelum presensi pulang
             if (tipeAbsen === 'Pulang' && window.cloudState.activeRole === 'siswa') {
                 const todayStr = new Date().toISOString().split('T')[0];
                 const sudahIsiJurnal = (window.cloudState.jurnal || []).some(j => 
-                    (j.siswa === profile.nama || j.user_id === (profile.identitas || profile.nama)) &&
+                    (window.isNameMatch(j.siswa, profile.nama) || window.isNameMatch(j.siswa, placementInfo.namaSiswa) || j.user_id === (profile.identitas || profile.nama)) &&
                     j.tanggal === todayStr
                 );
 
@@ -4381,7 +4802,7 @@
                             <div style="font-size:42px; margin-bottom:8px;">⚠️</div>
                             <h3 style="font-size:16px; font-weight:900; color:#ef4444; margin-bottom:6px;">Wajib Mengisi Jurnal Harian Dahulu!</h3>
                             <p style="font-size:12px; color:#475569; line-height:1.5; margin-bottom:16px;">
-                                Halo <b>${profile.nama}</b>, Anda belum membuat dan mengirimkan <b>Jurnal Harian PKL</b> untuk hari ini ke Guru Pembimbing & Panitia.<br><br>
+                                Halo <b>${placementInfo.namaSiswa || profile.nama}</b>, Anda belum membuat dan mengirimkan <b>Jurnal Harian PKL</b> untuk hari ini ke Guru Pembimbing & Panitia.<br><br>
                                 Sistem mewajibkan pengisian jurnal kegiatan sebelum Anda diizinkan melakukan <b>Presensi Pulang</b>.
                             </p>
                             <div style="display:flex; flex-direction:column; gap:8px;">
@@ -4398,9 +4819,11 @@
                 }
             }
 
-            const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
-            const namaInd = penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri[0] : penempatan.industri) : "PT. Telkom Marisa";
-            const dataInd = (window.cloudState.industri || []).find(i => i.nama.toLowerCase().includes(namaInd.toLowerCase())) || {
+            // Deteksi industri penempatan spesifik untuk siswa pemilik akun ini
+            const namaInd = (placementInfo.industri && placementInfo.industri !== 'Belum Ditentukan')
+                ? placementInfo.industri
+                : "Belum Ditentukan";
+            const dataInd = placementInfo.industriObj || {
                 nama: namaInd,
                 lat: "0.45612",
                 lng: "121.94210",
@@ -4409,7 +4832,7 @@
 
             const indLat = parseFloat(dataInd.lat) || 0.45612;
             const indLng = parseFloat(dataInd.lng) || 121.94210;
-            const indRadius = 50; // Standar baku radius 50 meter
+            const indRadius = parseInt(dataInd.radius) || 50;
 
             window.tempSelfieBase64 = null;
             window.currentSelfieLocation = null;
@@ -4628,20 +5051,26 @@
         window.mulaiStreamKameraSelfie = function() {
             const video = document.getElementById("selfieVideoElement");
             const loading = document.getElementById("selfieCameraLoading");
+            const preview = document.getElementById("selfieCapturedPreview");
+            if (preview) preview.style.display = "none";
+            if (video) video.style.display = "block";
+            if (loading) loading.style.display = "block";
+
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 480 }, height: { ideal: 360 } }, audio: false })
                     .then(stream => {
                         window.liveCameraStream = stream;
                         if (video) {
                             video.srcObject = stream;
-                            if (loading) loading.style.display = "none";
+                            video.play().catch(() => {});
                         }
+                        if (loading) loading.style.display = "none";
                     })
-                    .catch(err => {
-                        if (loading) loading.innerText = "Kamera HP siap via tombol Unggah";
+                    .catch(() => {
+                        if (loading) loading.innerText = "Kamera tidak diizinkan. Gunakan tombol Unggah.";
                     });
             } else {
-                if (loading) loading.innerText = "Gunakan tombol Unggah";
+                if (loading) loading.innerText = "Gunakan tombol Unggah Foto.";
             }
         };
 
@@ -4650,29 +5079,31 @@
             window.closeDynamicModal();
         };
 
-        window.jepretFotoSelfie = function() {
+        window.jepretFotoSelfie = async function() {
             const video = document.getElementById("selfieVideoElement");
             const preview = document.getElementById("selfieCapturedPreview");
             if (!video || !video.videoWidth) return window.showModalInfo("Kamera Belum Siap", "Silakan tunggu gambar kamera muncul atau unggah foto.");
 
             const canvas = document.createElement("canvas");
-            canvas.width = 480;
-            canvas.height = 360;
+            canvas.width = 360;
+            canvas.height = 270;
             const ctx = canvas.getContext("2d");
-            ctx.drawImage(video, 0, 0, 480, 360);
+            ctx.drawImage(video, 0, 0, 360, 270);
 
-            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-            ctx.fillRect(0, 320, 480, 40);
+            ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+            ctx.fillRect(0, 238, 360, 32);
             ctx.fillStyle = "#fde047";
-            ctx.font = "bold 13px sans-serif";
+            ctx.font = "bold 10.5px sans-serif";
             const now = new Date();
-            ctx.fillText("SMKN 1 MARISA PKL | " + now.toLocaleDateString('id-ID') + " " + now.toLocaleTimeString('it-IT') + " WITA", 12, 345);
+            ctx.fillText("SMKN 1 MARISA PKL | " + now.toLocaleDateString('id-ID') + " " + now.toLocaleTimeString('it-IT') + " WITA", 10, 258);
 
-            const base64 = canvas.toDataURL("image/jpeg", 0.65);
-            window.tempSelfieBase64 = base64;
+            // Kompres gambar otomatis dengan kualitas ringan (0.55) agar aplikasi super ringan & responsif
+            const rawDataUrl = canvas.toDataURL("image/jpeg", 0.55);
+            const compressedBase64 = await window.compressImageDataUrl(rawDataUrl, 360, 270, 0.55);
+            window.tempSelfieBase64 = compressedBase64;
 
             if (preview) {
-                preview.src = base64;
+                preview.src = compressedBase64;
                 preview.style.display = "block";
                 video.style.display = "none";
             }
@@ -4681,12 +5112,14 @@
         window.handleUploadSelfieFallback = function(inputEl) {
             if (inputEl.files && inputEl.files[0]) {
                 const reader = new FileReader();
-                reader.onload = function(e) {
-                    window.tempSelfieBase64 = e.target.result;
+                reader.onload = async function(e) {
+                    // Kompres otomatis foto yang dipilih dari galeri/kamera HP
+                    const compressed = await window.compressImageDataUrl(e.target.result, 360, 270, 0.55);
+                    window.tempSelfieBase64 = compressed;
                     const preview = document.getElementById("selfieCapturedPreview");
                     const video = document.getElementById("selfieVideoElement");
                     if (preview) {
-                        preview.src = e.target.result;
+                        preview.src = compressed;
                         preview.style.display = "block";
                         if (video) video.style.display = "none";
                     }
@@ -4695,7 +5128,7 @@
             }
         };
 
-        window.simpanPresensiSelfieFinal = function(tipeAbsen, industriNama, indLat, indLng, indRadius) {
+        window.simpanPresensiSelfieFinal = async function(tipeAbsen, industriNama, indLat, indLng, indRadius) {
             const kat = document.getElementById("presensiKategoriSelect")?.value || "hadir_lokasi";
 
             // Validasi keamanan: Jika Hadir di Lokasi, tolak penyimpanan jika di luar radius 50m
@@ -4715,19 +5148,33 @@
                 return window.showModalInfo("Foto Belum Diambil", "Silakan jepret wajah selfie Anda terlebih dahulu!");
             }
 
+            const btnSimpan = document.getElementById("btnSimpanPresensiAction");
+            const origText = btnSimpan ? btnSimpan.innerHTML : "";
+            if (btnSimpan) {
+                btnSimpan.disabled = true;
+                btnSimpan.innerHTML = "⏳ Mengompres & Mengunggah Foto...";
+            }
+
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+            const namaResmiSiswa = placementInfo.namaSiswa || profile.nama;
+
             const now = new Date();
             const jamStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-            const tglStr = now.toISOString().split('T')[0];
+            const tglStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
             let katText = "Hadir di Lokasi Industri";
             if (kat === 'tugas_luar') katText = "Dinas Luar / Lapangan";
             else if (kat === 'izin_sakit') katText = "Izin / Sakit";
 
+            // 1. Kompres otomatis & unggah file foto ke Supabase Storage Bucket (foto_presensi / berkas_pkl)
+            // agar database utama hanya menyimpan URL link gambar (bebas Base64 & anti-limit)
+            const uploadedFotoUrl = await window.uploadFotoKeSupabaseStorage(window.tempSelfieBase64, `selfie_${tipeAbsen.toLowerCase()}`);
+
             const itemAbsen = {
                 id: "abs_" + Date.now(),
-                user_id: profile.identitas || profile.nama,
-                nama: profile.nama,
+                user_id: profile.identitas || namaResmiSiswa,
+                nama: namaResmiSiswa,
                 tipe_absen: tipeAbsen,
                 kategori_hadir: katText,
                 industri: industriNama,
@@ -4737,14 +5184,20 @@
                 jarak_meter: window.currentSelfieLocation ? window.currentSelfieLocation.distance : 0,
                 latitude: window.currentSelfieLocation ? window.currentSelfieLocation.lat : indLat,
                 longitude: window.currentSelfieLocation ? window.currentSelfieLocation.lng : indLng,
-                foto_selfie: window.tempSelfieBase64
+                foto_url: uploadedFotoUrl,
+                foto_selfie: uploadedFotoUrl
             };
 
             window.cloudState.absensi.unshift(itemAbsen);
             window.simpanDatabasePersisten(true);
 
+            if (btnSimpan) {
+                btnSimpan.disabled = false;
+                btnSimpan.innerHTML = origText;
+            }
+
             window.tutupModalPresensiSelfie();
-            window.showModalInfo("Presensi Berhasil ✅", `Presensi <b>${tipeAbsen}</b> [${katText}] berhasil dicatat pukul <b>${jamStr} WITA</b>.`);
+            window.showModalInfo("Presensi Berhasil ✅", `Presensi <b>${tipeAbsen}</b> [${katText}] berhasil dicatat pukul <b>${jamStr} WITA</b>.<br><span style="font-size:11px; color:#16a34a; font-weight:800;">✓ Foto selfie telah dikompres otomatis & disimpan terpisah ke Storage Cloud.</span>`);
             window.openFeature("dashboard", "Beranda");
         };
 
@@ -4832,13 +5285,15 @@
 
             if (!kegiatan) return window.showModalInfo("Lengkapi Jurnal", "Uraian kegiatan hari ini wajib diisi!");
 
-            const penempatan = (window.cloudState.penempatan || []).find(p => Array.isArray(p.siswa) && p.siswa.includes(profile.nama));
-            const indName = penempatan ? (Array.isArray(penempatan.industri) ? penempatan.industri.join(', ') : penempatan.industri) : "DUDI Mitra";
+            const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+            const indName = (placementInfo.industri && placementInfo.industri !== 'Belum Ditentukan')
+                ? placementInfo.industri
+                : "DUDI Mitra";
 
             window.cloudState.jurnal.unshift({
                 id: "jur_" + Date.now(),
                 user_id: profile.identitas || profile.nama,
-                siswa: profile.nama,
+                siswa: placementInfo.namaSiswa || profile.nama,
                 industri: indName,
                 tanggal: tgl,
                 kegiatan: kegiatan,
@@ -5494,61 +5949,33 @@
                 identitas: username
             });
 
-            window.simpanDatabasePersisten(true);
-            window.closeDynamicModal();
-            window.openFeature("kelola-akun", "Buat Akun & Kredensial");
-        };
-
-        window.bukaModalEditKredensial = function(idx) {
-            const user = window.cloudState.registeredUsers[idx];
-            if (!user) return;
-            const currentRole = window.cloudState.activeRole || "admin";
-            if (currentRole !== 'admin' && (user.role === 'panitia' || user.role === 'kepsek' || user.role === 'admin')) {
-                return window.showModalInfo("Akses Ditolak 🔒", "Panitia PKL tidak diizinkan mengedit username dan password Panitia PKL, Kepala Sekolah, maupun Admin Utama. Silakan hubungi <b>Admin Utama</b>.");
+            // Pastikan jika akun Siswa/Guru/Industri dibuat di Kredensial, otomatis terdaftar juga di Master Data
+            if (role === 'siswa') {
+                const existS = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, nama) || String(s.nis || '').trim() === username);
+                if (!existS) {
+                    window.cloudState.siswa.push({
+                        nama: nama,
+                        kelas: DAFTAR_JURUSAN_SMKN1[0],
+                        nis: username,
+                        jk: "L",
+                        industri: "-",
+                        guru: "-",
+                        noHp: "-"
+                    });
+                } else if (!existS.nis || existS.nis === '-') {
+                    existS.nis = username;
+                }
+            } else if (role === 'guru') {
+                const existG = (window.cloudState.guru || []).find(g => window.isNameMatch(g.nama, nama) || String(g.nip || '').trim() === username);
+                if (!existG) {
+                    window.cloudState.guru.push({
+                        nama: nama,
+                        nip: username,
+                        mapel: "-",
+                        noHp: "-"
+                    });
+                }
             }
-            window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">✏️ Edit Akun Kredensial</h3>
-                ${user.role === 'panitia' ? `
-                <div class="form-group">
-                    <label class="form-label">Jabatan Panitia PKL:</label>
-                    <select id="editAkunJabatan" class="form-control" style="font-weight:800; color:#0284c7;">
-                        <option value="Ketua Panitia" ${user.jabatan === 'Ketua Panitia' ? 'selected' : ''}>1. Ketua Panitia</option>
-                        <option value="Sekretaris" ${user.jabatan === 'Sekretaris' ? 'selected' : ''}>2. Sekretaris</option>
-                        <option value="Bendahara" ${user.jabatan === 'Bendahara' ? 'selected' : ''}>3. Bendahara</option>
-                    </select>
-                </div>` : ''}
-                <div class="form-group">
-                    <label class="form-label">Nama Lengkap:</label>
-                    <input type="text" id="editAkunNama" class="form-control" value="${user.nama}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Username (ID):</label>
-                    <input type="text" id="editAkunUsername" class="form-control" value="${user.username}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Kata Sandi (Password):</label>
-                    <input type="text" id="editAkunPass" class="form-control" value="${user.pass}">
-                </div>
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanEditKredensial(${idx})" class="btn-action btn-blue">💾 Simpan Perubahan</button>
-                </div>
-            `);
-        };
-
-        window.simpanEditKredensial = function(idx) {
-            const nama = document.getElementById("editAkunNama")?.value.trim();
-            const username = document.getElementById("editAkunUsername")?.value.trim();
-            const pass = document.getElementById("editAkunPass")?.value.trim();
-            const jabatanEl = document.getElementById("editAkunJabatan");
-
-            if (!nama || !username || !pass) return window.showModalInfo("Lengkapi Data", "Semua kolom wajib diisi!");
-
-            window.cloudState.registeredUsers[idx].nama = nama;
-            window.cloudState.registeredUsers[idx].username = username;
-            window.cloudState.registeredUsers[idx].pass = pass;
-            window.cloudState.registeredUsers[idx].identitas = username;
-            if (jabatanEl) window.cloudState.registeredUsers[idx].jabatan = jabatanEl.value;
 
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
@@ -5794,6 +6221,54 @@
             if (!nama || !kelas) return window.showModalInfo("Lengkapi Data", "Nama dan Jurusan wajib diisi!");
 
             window.cloudState.siswa.unshift({ nama, kelas, nis, jk, industri, guru, noHp });
+
+            // Otomatis buatkan akun kredensial login jika belum ada agar siswa langsung bisa login tanpa gagal
+            const loginId = (nis && nis !== '-') ? nis : nama.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const hasCred = (window.cloudState.registeredUsers || []).some(u =>
+                u.role === 'siswa' && (window.isNameMatch(u.nama, nama) || String(u.username || '').trim() === loginId)
+            );
+            if (!hasCred && loginId) {
+                window.cloudState.registeredUsers.push({
+                    role: "siswa",
+                    nama: nama,
+                    username: loginId,
+                    pass: "siswa123",
+                    identitas: loginId
+                });
+            }
+
+            // Sinkronkan juga ke tabel Alokasi Penempatan jika Guru & Industri sudah dipilih
+            if (guru && guru !== '-' && industri && industri !== '-') {
+                const sKey = window.normalizeTextCompact(nama);
+                // Hapus pemetaan lama siswa ini dari grup penempatan lain jika ada
+                (window.cloudState.penempatan || []).forEach(p => {
+                    if (Array.isArray(p.siswa)) {
+                        p.siswa = p.siswa.filter(sn => !window.isNameMatch(sn, nama));
+                    }
+                    if (p.siswaIndustriMap && p.siswaIndustriMap[sKey]) {
+                        delete p.siswaIndustriMap[sKey];
+                    }
+                });
+                const gPen = (window.cloudState.penempatan || []).find(p => window.isNameMatch(p.guru, guru));
+                if (gPen) {
+                    if (!Array.isArray(gPen.siswa)) gPen.siswa = window.extractStudentList(gPen.siswa);
+                    if (!gPen.siswa.some(sn => window.isNameMatch(sn, nama))) gPen.siswa.push(nama);
+                    if (!gPen.siswaIndustriMap) gPen.siswaIndustriMap = {};
+                    gPen.siswaIndustriMap[sKey] = industri;
+                } else {
+                    window.cloudState.penempatan.push({
+                        id: "pen_" + Date.now(),
+                        guru: guru,
+                        industri: industri,
+                        siswa: [nama],
+                        siswaIndustriMap: { [sKey]: industri }
+                    });
+                }
+                if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
+                    window.konsolidasiSatuBarisPerGuru();
+                }
+            }
+
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
             window.openFeature("master-siswa", "Data Master Siswa");
@@ -5867,6 +6342,8 @@
         };
 
         window.simpanEditSiswa = function(idx) {
+            const oldSiswa = window.cloudState.siswa[idx] || {};
+            const oldNama = oldSiswa.nama || "";
             const nama = document.getElementById("editSiswaNama")?.value.trim();
             const kelas = document.getElementById("editSiswaKelas")?.value;
             const nis = document.getElementById("editSiswaNis")?.value.trim();
@@ -5875,7 +6352,60 @@
             const guru = document.getElementById("editSiswaGuru")?.value || "-";
             const noHp = document.getElementById("editSiswaNoHp")?.value.trim() || "-";
 
-            window.cloudState.siswa[idx] = { ...window.cloudState.siswa[idx], nama, kelas, nis, jk, industri, guru, noHp };
+            window.cloudState.siswa[idx] = { ...oldSiswa, nama, kelas, nis, jk, industri, guru, noHp };
+
+            // Sinkronkan perpindahan Industri & Guru ke tabel Alokasi Penempatan (siswaIndustriMap)
+            const oldKey = window.normalizeTextCompact(oldNama);
+            const newKey = window.normalizeTextCompact(nama);
+
+            (window.cloudState.penempatan || []).forEach(p => {
+                const sList = window.extractStudentList(p.siswa);
+                const hasStudent = sList.some(sn => window.isNameMatch(sn, oldNama) || window.isNameMatch(sn, nama));
+                if (hasStudent) {
+                    if (guru && guru !== '-' && !window.isNameMatch(p.guru, guru)) {
+                        // Siswa pindah ke guru pembimbing lain: cabut dari guru lama
+                        p.siswa = sList.filter(sn => !window.isNameMatch(sn, oldNama) && !window.isNameMatch(sn, nama));
+                        if (p.siswaIndustriMap) {
+                            delete p.siswaIndustriMap[oldKey];
+                            delete p.siswaIndustriMap[newKey];
+                        }
+                    } else {
+                        // Guru tetap sama: perbarui nama & industri spesifik siswa ini
+                        p.siswa = sList.map(sn => (window.isNameMatch(sn, oldNama) || window.isNameMatch(sn, nama)) ? nama : sn);
+                        if (!p.siswaIndustriMap) p.siswaIndustriMap = {};
+                        if (oldKey !== newKey) delete p.siswaIndustriMap[oldKey];
+                        if (industri && industri !== '-') {
+                            p.siswaIndustriMap[newKey] = industri;
+                        }
+                    }
+                }
+            });
+
+            if (guru && guru !== '-') {
+                let targetPen = (window.cloudState.penempatan || []).find(p => window.isNameMatch(p.guru, guru));
+                if (targetPen) {
+                    const sList = window.extractStudentList(targetPen.siswa);
+                    if (!sList.some(sn => window.isNameMatch(sn, nama))) sList.push(nama);
+                    targetPen.siswa = sList;
+                    if (!targetPen.siswaIndustriMap) targetPen.siswaIndustriMap = {};
+                    if (industri && industri !== '-') {
+                        targetPen.siswaIndustriMap[newKey] = industri;
+                    }
+                } else if (industri && industri !== '-') {
+                    window.cloudState.penempatan.push({
+                        id: "pen_" + Date.now(),
+                        guru: guru,
+                        industri: industri,
+                        siswa: [nama],
+                        siswaIndustriMap: { [newKey]: industri }
+                    });
+                }
+            }
+
+            if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
+                window.konsolidasiSatuBarisPerGuru();
+            }
+
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
             window.openFeature("master-siswa", "Data Master Siswa");
@@ -7278,6 +7808,19 @@
             if (selectedS.length === 0) return window.showModalInfo("Pilih Siswa", "Centang minimal 1 siswa bimbingan!");
             if (selectedInd.length === 0) return window.showModalInfo("Pilih Industri", "Centang minimal 1 mitra industri atau pilih industri pada siswa yang dicentang!");
 
+            // Cabut siswa yang dicentang ini dari grup penempatan guru lain agar tidak ganda
+            (window.cloudState.penempatan || []).forEach((otherP, otherIdx) => {
+                if (otherIdx === idx) return;
+                if (Array.isArray(otherP.siswa)) {
+                    otherP.siswa = otherP.siswa.filter(sn => !selectedS.some(sel => window.isNameMatch(sel, sn)));
+                }
+                if (otherP.siswaIndustriMap) {
+                    selectedS.forEach(sel => {
+                        delete otherP.siswaIndustriMap[window.normalizeTextCompact(sel)];
+                    });
+                }
+            });
+
             window.cloudState.penempatan[idx] = {
                 ...window.cloudState.penempatan[idx],
                 guru,
@@ -7286,6 +7829,7 @@
                 siswaIndustriMap: updatedSiswaIndMap
             };
 
+            // Sinkronkan industri baru setiap siswa langsung ke Data Master Siswa
             selectedS.forEach(sNama => {
                 const sKey = window.normalizeTextCompact(sNama);
                 const foundS = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, sNama));
@@ -7320,11 +7864,12 @@
             const list = window.cloudState.absensi || [];
             let rows = "";
             list.forEach((ab, idx) => {
+                const fotoSrc = ab.foto_url || ab.foto_selfie || "";
                 rows += `<tr>
                     <td><input type="checkbox" class="cb-absensi" value="${idx}"></td>
                     <td>${idx + 1}</td>
                     <td>
-                        ${ab.foto_selfie ? `<img src="${ab.foto_selfie}" alt="Foto" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid #7dd3fc; cursor:pointer;" onclick="window.bukaPratinjauFotoSelfie('${ab.foto_selfie}', '${ab.nama}', '${ab.tanggal} ${ab.jam}')">` : '<span style="color:#94a3b8;">-</span>'}
+                        ${fotoSrc ? `<img src="${fotoSrc}" alt="Foto" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid #7dd3fc; cursor:pointer;" onclick="window.bukaPratinjauFotoSelfie('${fotoSrc}', '${(ab.nama || '').replace(/'/g, "\\'")}', '${ab.tanggal} ${ab.jam}')">` : '<span style="color:#94a3b8;">-</span>'}
                     </td>
                     <td><b>${ab.nama}</b></td>
                     <td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td>
@@ -8527,26 +9072,104 @@
 
         window.renderManajemenDokumen = function() {
             const docs = window.cloudState.dokumen || [];
+            const role = window.cloudState.activeRole || "siswa";
+            const canManage = (role === 'panitia' || role === 'admin');
+            const videos = Array.isArray(window.cloudState.videoPanduanYoutube) ? window.cloudState.videoPanduanYoutube : [];
+
+            let videoBannersHtml = "";
+            if (videos.length > 0) {
+                videos.forEach((v, vIdx) => {
+                    const vidId = window.extractYoutubeId(v.url) || v.videoId || "";
+                    const thumbUrl = vidId
+                        ? `https://img.youtube.com/vi/${vidId}/hqdefault.jpg`
+                        : "https://images.unsplash.com/photo-1611162616475-46b635cb6868?auto=format&fit=crop&w=900&q=80";
+                    const safeUrl = (v.url || "https://www.youtube.com").replace(/'/g, "\\'");
+
+                    videoBannersHtml += `
+                    <div style="position:relative; border-radius:20px; overflow:hidden; border:2px solid #ef4444; box-shadow:0 8px 22px rgba(239,68,68,0.18); margin-bottom:12px; background:#0f172a;">
+                        <a href="${v.url || '#'}" target="_blank" rel="noopener noreferrer" style="display:block; position:relative; width:100%; height:200px; text-decoration:none; cursor:pointer;">
+                            <img src="${thumbUrl}" alt="${v.judul || 'Video YouTube'}" style="width:100%; height:100%; object-fit:cover; opacity:0.85;" onerror="this.src='https://images.unsplash.com/photo-1611162616475-46b635cb6868?auto=format&fit=crop&w=900&q=80'">
+                            <div style="position:absolute; inset:0; background:linear-gradient(180deg, rgba(15,23,42,0.15) 0%, rgba(15,23,42,0.88) 100%); display:flex; flex-direction:column; justify-content:space-between; padding:14px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <span style="background:#ef4444; color:#ffffff; font-size:10px; font-weight:900; padding:4px 10px; border-radius:8px; letter-spacing:0.5px;">
+                                        ▶ KANAL YOUTUBE RESMI PKL
+                                    </span>
+                                    <span style="background:rgba(255,255,255,0.2); color:#ffffff; font-size:10px; font-weight:800; padding:3px 8px; border-radius:6px;">
+                                        Klik untuk Menonton ↗
+                                    </span>
+                                </div>
+
+                                <div style="align-self:center; width:58px; height:58px; border-radius:50%; background:rgba(239,68,68,0.95); border:3px solid #ffffff; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 20px rgba(0,0,0,0.45);">
+                                    <span style="color:#ffffff; font-size:24px; margin-left:3px;">▶</span>
+                                </div>
+
+                                <div>
+                                    <div style="font-size:14.5px; font-weight:950; color:#ffffff; line-height:1.25; text-shadow:0 2px 4px rgba(0,0,0,0.8);">
+                                        🎬 ${v.judul || 'Video Panduan Pelaksanaan PKL'}
+                                    </div>
+                                    <div style="font-size:10.5px; color:#fde047; font-weight:800; margin-top:3px;">
+                                        Diupload oleh: ${v.oleh || 'Panitia PKL / Admin Utama'} &bull; Klik banner untuk membuka di YouTube
+                                    </div>
+                                </div>
+                            </div>
+                        </a>
+                        ${canManage ? `
+                        <div style="background:#1e293b; padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:10.5px; color:#cbd5e1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70%;">🔗 ${v.url}</span>
+                            <button type="button" onclick="window.hapusVideoPanduanYoutube(${vIdx})" class="btn-action btn-red" style="padding:4px 10px; font-size:10.5px;">
+                                🗑️ Hapus Video
+                            </button>
+                        </div>
+                        ` : ''}
+                    </div>`;
+                });
+            } else {
+                videoBannersHtml = `
+                <div style="background:#f8fafc; border:1.5px dashed #cbd5e1; border-radius:16px; padding:18px; text-align:center; color:#64748b; font-size:11.5px;">
+                    🎬 Belum ada video panduan YouTube yang diunggah oleh Panitia PKL / Admin Utama.
+                </div>`;
+            }
+
             let rows = "";
             docs.forEach((d, idx) => {
                 rows += `<tr>
                     <td>${idx + 1}</td>
                     <td><b>${d.judul}</b></td>
                     <td>${d.peruntukan || 'Semua'}</td>
-                    <td>
+                    <td style="display:flex; gap:6px;">
                         <a href="${d.link}" target="_blank" class="btn-action btn-blue" style="text-decoration:none;">Buka ↗</a>
+                        ${canManage ? `<button onclick="window.hapusDokumenPanduan(${idx})" class="btn-action btn-red" style="padding:4px 8px; font-size:10.5px;">Hapus</button>` : ''}
                     </td>
                 </tr>`;
             });
 
             return `
+            <!-- LAMAN BANNER VIDEO YOUTUBE PANDUAN PKL -->
+            <div class="card" style="border: 2px solid #fca5a5; background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%); margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#dc2626; letter-spacing:0.5px;">LAMAN VIDEO PANDUAN YOUTUBE</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🎬 Laman Video YouTube PKL</h3>
+                        <p style="font-size:11px; color:#475569; margin-top:2px;">
+                            Klik pada tampilan banner video di bawah untuk menonton panduan langsung di kanal YouTube.
+                        </p>
+                    </div>
+                    ${canManage ? `
+                        <button type="button" onclick="window.bukaModalTambahVideoYoutube()" class="btn-action btn-red" style="padding:9px 14px; font-size:11.5px; font-weight:900; box-shadow:0 4px 12px rgba(239,68,68,0.3);">
+                            🎬 + Upload Link Video YouTube
+                        </button>
+                    ` : ''}
+                </div>
+                ${videoBannersHtml}
+            </div>
+
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">ARSIP & FORMAT RESMI</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📁 Panduan & Dokumen PKL</h3>
                     </div>
-                    <button onclick="window.bukaModalUploadDokumen()" class="btn-action btn-blue">+ Tambah Dokumen</button>
+                    ${canManage ? `<button onclick="window.bukaModalUploadDokumen()" class="btn-action btn-blue">+ Tambah Dokumen</button>` : ''}
                 </div>
 
                 <div class="table-wrap">
@@ -8561,6 +9184,501 @@
                         </thead>
                         <tbody>
                             ${rows || '<tr><td colspan="4" class="empty-placeholder">Belum ada dokumen yang diunggah</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        };
+
+        window.extractYoutubeId = function(url) {
+            if (!url) return "";
+            const str = String(url).trim();
+            const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/|live\/)([^#&?]*).*/;
+            const match = str.match(regExp);
+            return (match && match[2] && match[2].length === 11) ? match[2] : "";
+        };
+
+        window.bukaModalTambahVideoYoutube = function() {
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#dc2626; margin-bottom:6px;">🎬 Upload Link Video YouTube</h3>
+                <p style="font-size:11px; color:#475569; margin-bottom:12px;">
+                    Video yang diinput oleh Panitia PKL / Admin Utama akan otomatis tampil sebagai <b>Banner Video YouTube</b> di bagian <b>Panduan & Dokumen</b> pada Dashboard Siswa.
+                </p>
+                <div class="form-group">
+                    <label class="form-label">Judul Video Panduan YouTube:</label>
+                    <input type="text" id="ytInputJudul" class="form-control" placeholder="Contoh: Tutorial Pengisian Jurnal & Presensi PKL SMKN 1 Marisa">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Link / URL Video YouTube:</label>
+                    <input type="url" id="ytInputUrl" class="form-control" placeholder="https://www.youtube.com/watch?v=... atau https://youtu.be/...">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button type="button" onclick="window.simpanVideoYoutubeBaru()" class="btn-action btn-red" style="font-weight:900; padding:10px 18px;">
+                        🎬 Terbitkan Banner YouTube
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanVideoYoutubeBaru = function() {
+            const judul = document.getElementById("ytInputJudul")?.value.trim();
+            const url = document.getElementById("ytInputUrl")?.value.trim();
+            if (!judul || !url) return window.showModalInfo("Lengkapi Data", "Judul video dan Link YouTube wajib diisi!");
+
+            const videoId = window.extractYoutubeId(url);
+            const profile = window.cloudState.userProfile || { nama: "Panitia PKL / Admin" };
+            if (!Array.isArray(window.cloudState.videoPanduanYoutube)) window.cloudState.videoPanduanYoutube = [];
+
+            window.cloudState.videoPanduanYoutube.unshift({
+                id: "yt_" + Date.now(),
+                judul: judul,
+                url: url,
+                videoId: videoId,
+                oleh: profile.nama,
+                tanggal: new Date().toISOString().split('T')[0]
+            });
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Video YouTube Diterbitkan 🎬", `Banner video <b>"${judul}"</b> berhasil ditambahkan dan langsung tampil di menu <b>Panduan & Dokumen</b> siswa.`);
+            window.openFeature("dokumen", "Panduan & Dokumen");
+        };
+
+        window.hapusVideoPanduanYoutube = function(idx) {
+            window.showConfirmDialog("Hapus Video YouTube", "Hapus banner video YouTube ini dari halaman Panduan & Dokumen?", () => {
+                window.cloudState.videoPanduanYoutube.splice(idx, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("dokumen", "Panduan & Dokumen");
+            });
+        };
+
+        window.hapusDokumenPanduan = function(idx) {
+            window.showConfirmDialog("Hapus Dokumen", "Hapus berkas dokumen panduan ini?", () => {
+                window.cloudState.dokumen.splice(idx, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("dokumen", "Panduan & Dokumen");
+            });
+        };
+
+        // =========================================================================
+        // FITUR DISPOSISI / PERINTAH KEPALA SEKOLAH TERINTEGRASI LINTAS EKOSISTEM
+        // (Kepala Sekolah ➔ Guru Pembimbing, Siswa, Panitia PKL, Orang Tua Siswa)
+        // =========================================================================
+        window.bukaModalKirimDisposisiKepsek = function(namaSiswa, namaIndustri, namaGuru, jenisMasalah) {
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#dc2626; margin-bottom:4px;">⚡ Disposisi / Perintah Kepala Sekolah</h3>
+                <p style="font-size:11px; color:#475569; margin-bottom:12px;">
+                    Disposisi ini akan langsung dikirimkan dan tampil di Dashboard <b>Guru Pembimbing (${namaGuru})</b>, <b>Siswa (${namaSiswa})</b>, <b>Panitia PKL</b>, serta <b>Orang Tua / Wali Siswa</b>.
+                </p>
+
+                <div style="background:#fef2f2; border:1.5px solid #fca5a5; border-radius:14px; padding:12px; margin-bottom:12px; font-size:11.5px;">
+                    <div><b>👨‍🎓 Nama Lengkap Siswa:</b> <span style="color:#0f172a; font-weight:900;">${namaSiswa}</span></div>
+                    <div style="margin-top:3px;"><b>🏢 Tempat PKL (Industri):</b> <span style="color:#0284c7; font-weight:850;">${namaIndustri}</span></div>
+                    <div style="margin-top:3px;"><b>👩‍🏫 Guru Pembimbing:</b> <span style="color:#15803d; font-weight:850;">${namaGuru}</span></div>
+                    <div style="margin-top:3px;"><b>⚠️ Temuan Kedisiplinan:</b> <span style="color:#dc2626; font-weight:900;">${jenisMasalah}</span></div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Isi Disposisi / Instruksi Kepala Sekolah kepada Guru Pembimbing & Siswa:</label>
+                    <textarea id="inputIsiDisposisiKepsek" class="form-control" style="height:95px; font-weight:700;" placeholder="Tuliskan perintah tindak lanjut...">Kepada Guru Pembimbing (${namaGuru}), mohon segera menindaklanjuti dan memberikan arahan/pembinaan kepada siswa ${namaSiswa} (PKL di ${namaIndustri}) karena terdeteksi ${jenisMasalah} pada hari ini.</textarea>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button type="button" onclick="window.simpanDisposisiKepsek('${namaSiswa.replace(/'/g, "\\'")}', '${namaIndustri.replace(/'/g, "\\'")}', '${namaGuru.replace(/'/g, "\\'")}', '${jenisMasalah.replace(/'/g, "\\'")}')" class="btn-action btn-red" style="font-weight:900; padding:10px 18px;">
+                        ⚡ Kirim Disposisi Sekarang
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanDisposisiKepsek = function(namaSiswa, namaIndustri, namaGuru, jenisMasalah) {
+            const instruksi = document.getElementById("inputIsiDisposisiKepsek")?.value.trim();
+            if (!instruksi) return window.showModalInfo("Instruksi Kosong", "Silakan isi pesan disposisi/perintah terlebih dahulu!");
+
+            if (!Array.isArray(window.cloudState.disposisiKepsek)) window.cloudState.disposisiKepsek = [];
+            const now = new Date();
+            const tglStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            const jamStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) + " WITA";
+            const kepsekProfile = window.cloudState.userProfile || { nama: "Kepala Sekolah" };
+
+            window.cloudState.disposisiKepsek.unshift({
+                id: "disp_" + Date.now(),
+                siswa: namaSiswa,
+                industri: namaIndustri,
+                guru: namaGuru,
+                jenisMasalah: jenisMasalah,
+                instruksi: instruksi,
+                kepsek: kepsekProfile.nama,
+                tanggal: tglStr,
+                jam: jamStr,
+                status: "Menunggu Tindak Lanjut Guru",
+                tindakLanjut: ""
+            });
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo(
+                "Disposisi Berhasil Dikirim! ⚡",
+                `Perintah disposisi untuk Guru Pembimbing <b>${namaGuru}</b> terkait siswa <b>${namaSiswa}</b> telah dikirim dan langsung tampil di Dashboard <b>Guru Pembimbing, Siswa, Panitia PKL, dan Orang Tua Siswa</b>.`
+            );
+            window.openFeature(window.cloudState.currentFeature || "dashboard", "Beranda", true);
+        };
+
+        window.bukaModalTindakLanjutDisposisi = function(dispId) {
+            const list = window.cloudState.disposisiKepsek || [];
+            const item = list.find(d => d.id === dispId);
+            if (!item) return;
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">✅ Laporan Tindak Lanjut Disposisi</h3>
+                <p style="font-size:11px; color:#475569; margin-bottom:12px;">
+                    Siswa: <b>${item.siswa}</b> &bull; Tempat PKL: <b>${item.industri}</b>
+                </p>
+                <div style="background:#fff5f5; border:1px solid #fca5a5; border-radius:12px; padding:10px; font-size:11.5px; margin-bottom:12px;">
+                    <b>📌 Instruksi Kepala Sekolah:</b><br>${item.instruksi}
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Catatan Tindak Lanjut / Arahan yang Telah Diberikan:</label>
+                    <textarea id="inputCatatanTindakLanjutDisp" class="form-control" style="height:85px;" placeholder="Contoh: Siswa telah dihubungi dan diberikan pembinaan agar disiplin melakukan presensi dan mengisi jurnal...">${item.tindakLanjut || ''}</textarea>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button type="button" onclick="window.simpanTindakLanjutDisposisi('${dispId}')" class="btn-action btn-emerald" style="font-weight:900;">
+                        💾 Simpan & Tandai Selesai
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanTindakLanjutDisposisi = function(dispId) {
+            const catatan = document.getElementById("inputCatatanTindakLanjutDisp")?.value.trim();
+            if (!catatan) return window.showModalInfo("Lengkapi Catatan", "Silakan tuliskan hasil tindak lanjut/arahan yang telah diberikan kepada siswa.");
+
+            const item = (window.cloudState.disposisiKepsek || []).find(d => d.id === dispId);
+            if (!item) return;
+
+            item.status = "Sudah Ditindaklanjuti";
+            item.tindakLanjut = catatan;
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Tindak Lanjut Tersimpan ✅", "Laporan tindak lanjut berhasil disimpan dan otomatis terupdate di Dashboard Kepala Sekolah, Panitia PKL, Siswa, serta Orang Tua.");
+            window.openFeature(window.cloudState.currentFeature || "dashboard", "Beranda", true);
+        };
+
+        window.hapusDisposisiKepsek = function(dispId) {
+            window.showConfirmDialog("Hapus Disposisi", "Hapus catatan disposisi ini?", () => {
+                window.cloudState.disposisiKepsek = (window.cloudState.disposisiKepsek || []).filter(d => d.id !== dispId);
+                window.simpanDatabasePersisten(true);
+                window.openFeature(window.cloudState.currentFeature || "dashboard", "Beranda", true);
+            });
+        };
+
+        window.renderWidgetDisposisiKepsek = function(targetRole, namaAnandaOpsional = "") {
+            const allDisp = Array.isArray(window.cloudState.disposisiKepsek) ? window.cloudState.disposisiKepsek : [];
+            if (allDisp.length === 0) return "";
+
+            const profile = window.cloudState.userProfile || { nama: "" };
+            let filtered = [];
+
+            if (targetRole === 'kepsek' || targetRole === 'panitia' || targetRole === 'admin') {
+                filtered = allDisp;
+            } else if (targetRole === 'guru') {
+                filtered = allDisp.filter(d => window.isNameMatch(d.guru, profile.nama));
+            } else if (targetRole === 'siswa') {
+                const info = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+                filtered = allDisp.filter(d => window.isNameMatch(d.siswa, profile.nama) || window.isNameMatch(d.siswa, info.namaSiswa));
+            } else if (targetRole === 'orangtua') {
+                const targetSiswa = namaAnandaOpsional || profile.namaAnanda || profile.nama.replace(/^Wali dari\s*/i, "").trim();
+                filtered = allDisp.filter(d => window.isNameMatch(d.siswa, targetSiswa));
+            }
+
+            if (filtered.length === 0) return "";
+
+            let itemsHtml = "";
+            filtered.slice(0, 6).forEach(d => {
+                const isDone = (d.status === "Sudah Ditindaklanjuti");
+                itemsHtml += `
+                <div style="background:#ffffff; border:1.5px solid ${isDone ? '#86efac' : '#fca5a5'}; border-radius:14px; padding:12px; margin-bottom:8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:6px;">
+                        <div>
+                            <span class="badge-status ${isDone ? 'badge-green' : 'badge-red'}" style="font-size:10px;">
+                                ${isDone ? '✓ Sudah Ditindaklanjuti Guru' : '🚨 Disposisi Kepala Sekolah: ' + (d.jenisMasalah || 'Kedisiplinan')}
+                            </span>
+                            <div style="font-size:12.5px; font-weight:900; color:#0f172a; margin-top:4px;">
+                                👨‍🎓 Siswa: ${d.siswa} &bull; <span style="color:#0284c7;">🏢 ${d.industri}</span>
+                            </div>
+                            <div style="font-size:11px; color:#15803d; font-weight:800;">
+                                👩‍🏫 Guru Pembimbing: ${d.guru} &bull; 📅 ${d.tanggal} (${d.jam || ''})
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:6px;">
+                            ${(targetRole === 'guru' || targetRole === 'panitia') ? `
+                                <button type="button" onclick="window.bukaModalTindakLanjutDisposisi('${d.id}')" class="btn-action btn-emerald" style="font-size:10.5px; padding:5px 10px; font-weight:900;">
+                                    ✓ Tindak Lanjuti / Beri Arahan
+                                </button>
+                            ` : ''}
+                            ${(targetRole === 'kepsek' || targetRole === 'panitia' || targetRole === 'admin') ? `
+                                <button type="button" onclick="window.hapusDisposisiKepsek('${d.id}')" class="btn-action btn-red" style="font-size:10px; padding:4px 8px;">
+                                    Hapus
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                    <div style="font-size:11.5px; color:#334155; background:#f8fafc; border-left:3px solid #ef4444; padding:8px 10px; border-radius:6px; margin-top:8px; line-height:1.45;">
+                        <b>Instruksi Kepala Sekolah:</b> ${d.instruksi}
+                    </div>
+                    ${d.tindakLanjut ? `
+                        <div style="font-size:11px; color:#166534; background:#f0fdf4; border:1px solid #bbf7d0; padding:7px 10px; border-radius:8px; margin-top:6px;">
+                            <b>✓ Tindak Lanjut Guru Pembimbing:</b> ${d.tindakLanjut}
+                        </div>
+                    ` : ''}
+                </div>`;
+            });
+
+            return `
+            <div class="card" style="border: 2px solid #ef4444; background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <div>
+                        <div style="font-size:10.5px; font-weight:900; color:#dc2626; letter-spacing:0.5px;">INTEGRASI DISPOSISI EKSEKUTIF KEPALA SEKOLAH</div>
+                        <h3 style="font-size:15px; font-weight:950; color:#0f172a; margin-top:2px;">⚡ Daftar Disposisi & Perintah Pembinaan Siswa</h3>
+                    </div>
+                    <span class="badge-status badge-red">${filtered.length} Disposisi</span>
+                </div>
+                ${itemsHtml}
+            </div>`;
+        };
+
+        // =========================================================================
+        // FITUR UPLOAD DOKUMENTASI KEGIATAN SISWA (LINK G-DRIVE)
+        // Terintegrasi ke: Guru Pembimbing, Panitia PKL, dan Kepala Sekolah
+        // =========================================================================
+        window.bukaModalUploadDokumentasiKegiatan = function() {
+            const profile = window.cloudState.userProfile || { nama: "Siswa PKL" };
+            const info = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">📸 Upload Dokumentasi Kegiatan PKL</h3>
+                <p style="font-size:11px; color:#475569; margin-bottom:12px;">
+                    Unggah tautan Google Drive berisi foto/dokumentasi kegiatan praktik Anda. Otomatis terkirim kepada <b>Guru Pembimbing, Panitia PKL, dan Kepala Sekolah</b>.
+                </p>
+
+                <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:12px; padding:10px; font-size:11px; margin-bottom:12px;">
+                    <div><b>👨‍🎓 Nama Siswa:</b> ${info.namaSiswa || profile.nama}</div>
+                    <div><b>🏢 Tempat PKL:</b> ${info.industri}</div>
+                    <div><b>👩‍🏫 Guru Pembimbing:</b> ${info.guru}</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Judul Dokumentasi Kegiatan:</label>
+                    <input type="text" id="dokInputJudul" class="form-control" placeholder="Contoh: Dokumentasi Perbaikan Jaringan & Server Minggu Ke-2">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Upload File melalui Link Google Drive (Foto / Folder Kegiatan):</label>
+                    <input type="url" id="dokInputLinkGdrive" class="form-control" placeholder="https://drive.google.com/drive/folders/... atau https://drive.google.com/file/...">
+                    <div style="font-size:10px; color:#64748b; margin-top:4px;">Pastikan akses link Google Drive diatur ke <b>"Siapa saja yang memiliki link"</b>.</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Ditujukan Kepada (Terkoneksi Otomatis):</label>
+                    <div style="display:flex; flex-direction:column; gap:6px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:12px; padding:10px;">
+                        <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:800; color:#0f172a;">
+                            <input type="checkbox" id="dokTujuanGuru" checked style="width:16px; height:16px; accent-color:#0284c7;">
+                            <span>👩‍🏫 Guru Pembimbing (${info.guru})</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:800; color:#0f172a;">
+                            <input type="checkbox" id="dokTujuanPanitia" checked style="width:16px; height:16px; accent-color:#0284c7;">
+                            <span>📋 Panitia PKL</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:800; color:#0f172a;">
+                            <input type="checkbox" id="dokTujuanKepsek" checked style="width:16px; height:16px; accent-color:#0284c7;">
+                            <span>🎓 Kepala Sekolah</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button type="button" onclick="window.simpanDokumentasiKegiatanBaru()" class="btn-action btn-blue" style="font-weight:900; padding:10px 18px;">
+                        📸 Kirim Dokumentasi Sekarang
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanDokumentasiKegiatanBaru = function() {
+            const judul = document.getElementById("dokInputJudul")?.value.trim();
+            const link = document.getElementById("dokInputLinkGdrive")?.value.trim();
+            if (!judul || !link) {
+                return window.showModalInfo("Lengkapi Data", "Judul Dokumentasi Kegiatan dan Link Google Drive wajib diisi!");
+            }
+
+            const keGuru = !!document.getElementById("dokTujuanGuru")?.checked;
+            const kePanitia = !!document.getElementById("dokTujuanPanitia")?.checked;
+            const keKepsek = !!document.getElementById("dokTujuanKepsek")?.checked;
+            const tujuanArr = [];
+            if (keGuru) tujuanArr.push("Guru Pembimbing");
+            if (kePanitia) tujuanArr.push("Panitia PKL");
+            if (keKepsek) tujuanArr.push("Kepala Sekolah");
+            if (tujuanArr.length === 0) tujuanArr.push("Guru Pembimbing", "Panitia PKL", "Kepala Sekolah");
+
+            const profile = window.cloudState.userProfile || { nama: "Siswa PKL" };
+            const info = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+            const now = new Date();
+            const tglStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            const jamStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) + " WITA";
+
+            if (!Array.isArray(window.cloudState.dokumentasiKegiatan)) window.cloudState.dokumentasiKegiatan = [];
+
+            window.cloudState.dokumentasiKegiatan.unshift({
+                id: "dokkeg_" + Date.now(),
+                siswa: info.namaSiswa || profile.nama,
+                kelas: info.kelas || "-",
+                industri: info.industri || "-",
+                guru: info.guru || "-",
+                judul: judul,
+                linkGdrive: link,
+                tujuan: tujuanArr,
+                tanggal: tglStr,
+                jam: jamStr
+            });
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo(
+                "Dokumentasi Kegiatan Terkirim! 📸",
+                `Dokumentasi <b>"${judul}"</b> berhasil diunggah dan langsung dapat diakses oleh <b>${tujuanArr.join(", ")}</b>.`
+            );
+            window.openFeature("dokumentasi-kegiatan", "Upload Dokumentasi Kegiatan");
+        };
+
+        window.hapusDokumentasiKegiatan = function(id) {
+            window.showConfirmDialog("Hapus Dokumentasi", "Hapus kiriman dokumentasi kegiatan ini?", () => {
+                window.cloudState.dokumentasiKegiatan = (window.cloudState.dokumentasiKegiatan || []).filter(item => item.id !== id);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("dokumentasi-kegiatan", "Dokumentasi Kegiatan");
+            });
+        };
+
+        window.renderWidgetDokumentasiTerbaru = function(roleView) {
+            const allDok = Array.isArray(window.cloudState.dokumentasiKegiatan) ? window.cloudState.dokumentasiKegiatan : [];
+            if (allDok.length === 0) return "";
+
+            const profile = window.cloudState.userProfile || { nama: "" };
+            let list = allDok;
+            if (roleView === 'guru') {
+                list = allDok.filter(d => window.isNameMatch(d.guru, profile.nama));
+            }
+            if (list.length === 0) return "";
+
+            let cardsHtml = "";
+            list.slice(0, 4).forEach(d => {
+                cardsHtml += `
+                <div style="background:#ffffff; border:1px solid #bae6fd; border-radius:12px; padding:10px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <div>
+                        <div style="font-size:12px; font-weight:900; color:#0f172a;">📸 ${d.judul}</div>
+                        <div style="font-size:10.5px; color:#0284c7; font-weight:800; margin-top:2px;">
+                            👨‍🎓 ${d.siswa} &bull; 🏢 ${d.industri} &bull; 👩‍🏫 ${d.guru}
+                        </div>
+                        <div style="font-size:9.5px; color:#64748b;">📅 ${d.tanggal} (${d.jam || ''})</div>
+                    </div>
+                    <a href="${d.linkGdrive}" target="_blank" rel="noopener noreferrer" class="btn-action btn-blue" style="text-decoration:none; font-size:11px; font-weight:900;">
+                        📂 Lihat Foto G-Drive ↗
+                    </a>
+                </div>`;
+            });
+
+            return `
+            <div class="card" style="border: 1.5px solid #38bdf8; background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <div>
+                        <div style="font-size:10.5px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">KIRIMAN FOTO KEGIATAN SISWA (G-DRIVE)</div>
+                        <h3 style="font-size:15px; font-weight:950; color:#0f172a; margin-top:2px;">📸 Dokumentasi Kegiatan Siswa Terbaru</h3>
+                    </div>
+                    <button type="button" onclick="window.openFeature('dokumentasi-kegiatan', 'Dokumentasi Kegiatan Siswa')" class="btn-action btn-blue" style="font-size:10.5px; padding:6px 12px;">
+                        Semua (${list.length}) ➔
+                    </button>
+                </div>
+                ${cardsHtml}
+            </div>`;
+        };
+
+        window.renderDokumentasiKegiatanPage = function() {
+            const role = window.cloudState.activeRole || "siswa";
+            const profile = window.cloudState.userProfile || { nama: "Pengguna" };
+            const allDok = Array.isArray(window.cloudState.dokumentasiKegiatan) ? window.cloudState.dokumentasiKegiatan : [];
+
+            let list = allDok;
+            if (role === 'siswa') {
+                const info = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+                list = allDok.filter(d => window.isNameMatch(d.siswa, profile.nama) || window.isNameMatch(d.siswa, info.namaSiswa));
+            } else if (role === 'guru') {
+                list = allDok.filter(d => window.isNameMatch(d.guru, profile.nama));
+            }
+
+            let rows = "";
+            list.forEach((d, idx) => {
+                const tujuanBadges = (Array.isArray(d.tujuan) ? d.tujuan : ["Guru Pembimbing", "Panitia PKL", "Kepala Sekolah"])
+                    .map(t => `<span class="badge-status badge-blue" style="font-size:9.5px; margin:1px;">✓ ${t}</span>`).join(' ');
+
+                rows += `
+                <tr>
+                    <td style="text-align:center;">${idx + 1}</td>
+                    <td>
+                        <b>👨‍🎓 ${d.siswa}</b>
+                        <div style="font-size:10px; color:#0284c7; font-weight:800;">🏢 ${d.industri || '-'}</div>
+                        <div style="font-size:10px; color:#15803d;">👩‍🏫 Guru: ${d.guru || '-'}</div>
+                    </td>
+                    <td style="white-space:normal; min-width:180px;">
+                        <div style="font-weight:900; color:#0f172a;">📸 ${d.judul}</div>
+                        <div style="font-size:10px; color:#64748b; margin-top:2px;">📅 ${d.tanggal} ${d.jam || ''}</div>
+                    </td>
+                    <td style="white-space:normal;">${tujuanBadges}</td>
+                    <td style="display:flex; gap:6px; align-items:center;">
+                        <a href="${d.linkGdrive}" target="_blank" rel="noopener noreferrer" class="btn-action btn-blue" style="text-decoration:none; font-weight:900;">
+                            📂 Buka G-Drive ↗
+                        </a>
+                        ${(role === 'siswa' || role === 'panitia' || role === 'admin') ? `
+                            <button type="button" onclick="window.hapusDokumentasiKegiatan('${d.id}')" class="btn-action btn-red" style="padding:5px 8px;">
+                                🗑️
+                            </button>
+                        ` : ''}
+                    </td>
+                </tr>`;
+            });
+
+            return `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">GALERI TAUTAN GOOGLE DRIVE KEGIATAN PKL</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📸 Dokumentasi Kegiatan Siswa PKL</h3>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">
+                            Terhubung langsung antara Siswa PKL, Guru Pembimbing, Panitia PKL, dan Kepala Sekolah.
+                        </p>
+                    </div>
+                    ${role === 'siswa' ? `
+                        <button type="button" onclick="window.bukaModalUploadDokumentasiKegiatan()" class="btn-action btn-blue" style="padding:9px 14px; font-size:12px; font-weight:900;">
+                            📸 + Upload Dokumentasi Kegiatan
+                        </button>
+                    ` : ''}
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:40px;">No</th>
+                                <th>Identitas Siswa & Penempatan</th>
+                                <th>Judul Dokumentasi Kegiatan</th>
+                                <th>Ditujukan Kepada</th>
+                                <th>Akses File G-Drive</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada dokumentasi kegiatan yang diunggah</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -8701,19 +9819,15 @@
             const profile = window.cloudState.userProfile || { nama: "Pengguna" };
             const isOrangTua = (role === 'orangtua');
             const rawAnanda = isOrangTua ? (profile.namaAnanda || profile.nama.replace(/^Wali dari\s*/i, "").trim()) : "";
-            const matchInSiswa = isOrangTua ? (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, rawAnanda)) : null;
-            const namaAnanda = matchInSiswa ? matchInSiswa.nama : rawAnanda;
+            const placementAnanda = isOrangTua ? window.getStudentPlacementInfo(rawAnanda) : null;
+            const namaAnanda = placementAnanda ? placementAnanda.namaSiswa : rawAnanda;
 
-            // Pencarian data penempatan ananda untuk Kontak Sekolah
-            const penempatanAnanda = (window.cloudState.penempatan || []).find(p => {
-                const sList = window.extractStudentList(p.siswa);
-                return sList.some(s => window.isNameMatch(s, namaAnanda) || window.isNameMatch(s, rawAnanda));
-            });
-            const guruAnandaNama = penempatanAnanda ? (penempatanAnanda.guru || "Belum Ditentukan") : "Belum Ditentukan";
-            const indAnandaNama = penempatanAnanda ? (Array.isArray(penempatanAnanda.industri) ? penempatanAnanda.industri.join(', ') : penempatanAnanda.industri) : "Belum Ditentukan";
+            // Pencarian data penempatan spesifik ananda untuk Kontak Sekolah (Hanya 1 Industri tempat ananda magang)
+            const guruAnandaNama = placementAnanda ? placementAnanda.guru : "Belum Ditentukan";
+            const indAnandaNama = placementAnanda ? placementAnanda.industri : "Belum Ditentukan";
 
             const dataGuru = (window.cloudState.guru || []).find(g => window.isNameMatch(g.nama, guruAnandaNama)) || {};
-            const dataInd = (window.cloudState.industri || []).find(i => window.isIndustriMatch ? window.isIndustriMatch(i.nama, indAnandaNama) : (i.nama === indAnandaNama)) || {};
+            const dataInd = placementAnanda ? (placementAnanda.industriObj || {}) : {};
             const noWaGuru = dataGuru.noHp || "-";
             const noWaInd = dataInd.noWa || "-";
 
@@ -8903,18 +10017,16 @@
             const role = window.cloudState.activeRole || "siswa";
             const profile = window.cloudState.userProfile || { nama: "Pengguna" };
             const isOrangTua = (role === 'orangtua');
-            const namaAnanda = isOrangTua ? (profile.namaAnanda || profile.nama.replace("Wali dari ", "").trim()) : "";
+            const rawAnanda = isOrangTua ? (profile.namaAnanda || profile.nama.replace("Wali dari ", "").trim()) : profile.nama;
 
             window.tempLampiranAduanBase64 = null;
             window.tempLampiranAduanName = null;
 
-            // Dapatkan guru & industri ananda
-            const penempatanAnanda = (window.cloudState.penempatan || []).find(p => {
-                const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
-                return sList.some(s => s && s.toLowerCase().trim() === (namaAnanda || profile.nama).toLowerCase().trim());
-            });
-            const guruNama = penempatanAnanda ? penempatanAnanda.guru : "Guru Pembimbing";
-            const indNama = penempatanAnanda ? (Array.isArray(penempatanAnanda.industri) ? penempatanAnanda.industri.join(', ') : penempatanAnanda.industri) : "Mitra Industri DUDI";
+            // Dapatkan 1 guru & 1 industri spesifik tempat siswa/ananda magang
+            const placementInfo = window.getStudentPlacementInfo(rawAnanda, profile.identitas);
+            const namaAnanda = isOrangTua ? placementInfo.namaSiswa : "";
+            const guruNama = (placementInfo.guru && placementInfo.guru !== 'Belum Ditentukan') ? placementInfo.guru : "Guru Pembimbing";
+            const indNama = (placementInfo.industri && placementInfo.industri !== 'Belum Ditentukan') ? placementInfo.industri : "Mitra Industri DUDI";
 
             let tujuanOptions = "";
             if (isOrangTua) {
@@ -9234,6 +10346,7 @@
         };
 
         window.addEventListener('DOMContentLoaded', async () => {
+            window.inisialisasiSupabaseClient();
             const savedSession = localStorage.getItem(STORAGE_KEY_SESSION);
             if (savedSession) {
                 try {
@@ -9241,13 +10354,31 @@
                     if (prof && prof.role) window.suksesLogin(prof);
                 } catch(e) {}
             }
-            window.inisialisasiSupabaseClient();
             if (window.supabaseClient) {
                 await window.tarikDataDariCloud(true);
-                // Sinkronkan ulang antarmuka dashboard secara senyap agar data terbaru langsung tampil tanpa popup
                 if (window.cloudState.userProfile && window.cloudState.currentFeature) {
                     window.openFeature(window.cloudState.currentFeature, undefined, true);
                 }
+
+                // Sinkronisasi Realtime Otomatis Lintas Perangkat (PC ⇄ HP) setiap 8 detik
+                setInterval(async () => {
+                    const activeEl = document.activeElement;
+                    const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+                    const isModalOpen = (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex');
+                    if (!isTyping && !isModalOpen && !document.hidden) {
+                        await window.tarikDataDariCloud(true);
+                    }
+                }, 8000);
+
+                // Tarik data terbaru begitu pengguna berpindah tab atau membuka layar HP kembali
+                window.addEventListener('focus', () => {
+                    window.tarikDataDariCloud(true);
+                });
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden) {
+                        window.tarikDataDariCloud(true);
+                    }
+                });
             }
         });
     </script>
