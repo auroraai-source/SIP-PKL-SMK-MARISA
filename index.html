@@ -1041,16 +1041,33 @@
         const STORAGE_KEY_BACKUP_PEN = "SIP_PKL_MARISA_BACKUP_PENEMPATAN";
 
         const DAFTAR_JURUSAN_SMKN1 = [
-            "Akuntansi (AK)",
-            "Bisnis Digital (BD)",
-            "Nautika Kapal Penangkap Ikan (NKPI)",
-            "Desain pemodelan dan Informasi Bangunan (DPIB)",
-            "Teknik Sepeda Motor (TSM)",
-            "Teknik Kendaraan Ringan (TKR)",
-            "Teknik Jaringan Komputer & Telekomunikasi (TJKT)",
-            "Teknik Pemesinan (TP)",
-            "Teknik Konstruksi dan Perumahan (TKP)"
+            "XII AK",
+            "XII BD",
+            "XII NKPI",
+            "XII DPIB",
+            "XII TSM",
+            "XII TKR",
+            "XII TJKT",
+            "XII TP",
+            "XII TKP"
         ];
+
+        window.normalisasiKodeKelas = function(kelasRaw) {
+            if (!kelasRaw || kelasRaw === '-') return "XII TJKT";
+            const k = String(kelasRaw).trim();
+            if (DAFTAR_JURUSAN_SMKN1.includes(k)) return k;
+            const upper = k.toUpperCase();
+            if (upper.includes("(TP)") || upper.includes("PEMESINAN") || upper === "TP") return "XII TP";
+            if (upper.includes("(AK)") || upper.includes("AKUNTANSI") || upper === "AK") return "XII AK";
+            if (upper.includes("(BD)") || upper.includes("BISNIS DIGITAL") || upper === "BD") return "XII BD";
+            if (upper.includes("(NKPI)") || upper.includes("NAUTIKA") || upper === "NKPI") return "XII NKPI";
+            if (upper.includes("(DPIB)") || upper.includes("DESAIN PEMODELAN") || upper === "DPIB") return "XII DPIB";
+            if (upper.includes("(TSM)") || upper.includes("SEPEDA MOTOR") || upper === "TSM") return "XII TSM";
+            if (upper.includes("(TKR)") || upper.includes("KENDARAAN RINGAN") || upper === "TKR") return "XII TKR";
+            if (upper.includes("(TJKT)") || upper.includes("JARINGAN KOMPUTER") || upper === "TJKT") return "XII TJKT";
+            if (upper.includes("(TKP)") || upper.includes("KONSTRUKSI") || upper === "TKP") return "XII TKP";
+            return k;
+        };
 
         const DEFAULT_PKL_CONFIG = {
             tglAwal: "15 Juli 2026",
@@ -1492,25 +1509,14 @@
             if (!ca || !cb) return false;
             if (ca === cb) return true;
 
-            // Toleransi tanda kutip/karakter khusus dan huruf berulang yang sama
-            const collapsedA = ca.replace(/(.)\1+/g, '$1');
-            const collapsedB = cb.replace(/(.)\1+/g, '$1');
-            if (collapsedA === collapsedB) return true;
-
-            // Pencocokan awalan penuh jika nama cukup panjang (>= 8 karakter)
-            if (ca.length >= 8 && cb.length >= 8) {
-                if (ca.startsWith(cb) || cb.startsWith(ca)) return true;
-            }
-
             return false;
         };
 
-        // Pencocokan Nama Industri yang Cerdas & Toleran (Huruf besar/kecil, titik, koma, PT/CV, spasi)
+        // Pencocokan Nama Industri yang Presisi (Tidak menyamakan dua industri berbeda)
         window.normalizeIndustriKey = function(str) {
             if (!str || str === '-') return "";
             return String(str)
                 .toLowerCase()
-                .replace(/\b(pt|cv|ud|toko|bengkel|kantor|dinas|badan|cabang|unit|persero|tbk)\b\.?/gi, '')
                 .replace(/[^a-z0-9]/g, '')
                 .trim();
         };
@@ -1519,7 +1525,6 @@
             if (!targetInd || !currentIndName || targetInd === '-' || currentIndName === '-') return false;
             const cleanCurrent = String(currentIndName).toLowerCase().trim();
             const compactCurrent = window.normalizeTextCompact(cleanCurrent);
-            const coreCurrent = window.normalizeIndustriKey(cleanCurrent);
 
             const checkSingle = (item) => {
                 if (!item || item === '-') return false;
@@ -1527,13 +1532,6 @@
                 if (cleanItem === cleanCurrent) return true;
                 const compactItem = window.normalizeTextCompact(cleanItem);
                 if (compactItem && compactCurrent && compactItem === compactCurrent) return true;
-                const coreItem = window.normalizeIndustriKey(cleanItem);
-                if (coreItem && coreCurrent && coreItem.length >= 4 && coreCurrent.length >= 4) {
-                    if (coreItem === coreCurrent) return true;
-                    if (coreItem.length >= 6 && coreCurrent.length >= 6 && (coreItem.includes(coreCurrent) || coreCurrent.includes(coreItem))) {
-                        return true;
-                    }
-                }
                 return false;
             };
 
@@ -1669,6 +1667,16 @@
                     const gKey = window.normalizeTextCompact(gCanonical);
 
                     if (gKey) {
+                        // Hapus siswa ini dari grup guru lain jika sebelumnya pernah terdaftar di guru lain
+                        guruMap.forEach((otherEntry, otherKey) => {
+                            if (otherKey !== gKey) {
+                                otherEntry.siswaList = otherEntry.siswaList.filter(sn => !window.isNameMatch(sn, sClean));
+                                if (otherEntry.siswaIndustriMap && otherEntry.siswaIndustriMap[sKey]) {
+                                    delete otherEntry.siswaIndustriMap[sKey];
+                                }
+                            }
+                        });
+
                         if (!guruMap.has(gKey)) {
                             guruMap.set(gKey, {
                                 id: "pen_" + Date.now() + Math.floor(Math.random() * 1000),
@@ -1684,9 +1692,8 @@
                             }
                             if (sInd) {
                                 entry.industriSet.add(sInd);
-                                if (!entry.siswaIndustriMap[sKey] || entry.siswaIndustriMap[sKey] === '-') {
-                                    entry.siswaIndustriMap[sKey] = sInd;
-                                }
+                                // Utamakan industri dari Master Siswa agar hasil edit di Master Siswa selalu menang
+                                entry.siswaIndustriMap[sKey] = sInd;
                             }
                         }
                     }
@@ -1694,10 +1701,11 @@
             });
 
             // 3. Pastikan setiap siswa bimbingan di dalam masing-masing guru memiliki pencatatan industri spesifiknya
+            // TANPA menimpa paksa data yang baru diedit di Master Siswa
             const result = [];
             guruMap.forEach(entry => {
-                const allInds = Array.from(entry.industriSet).filter(x => x && x !== '-');
                 const normalizedStudentNames = [];
+                const recomputedIndSet = new Set();
 
                 entry.siswaList.forEach(sName => {
                     const foundS = (window.cloudState.siswa || []).find(item => window.isNameMatch(item.nama, sName));
@@ -1709,34 +1717,39 @@
                         normalizedStudentNames.push(canonicalSName);
                     }
 
-                    // Cari industri yang sudah terpetakan untuk siswa ini
-                    let mappedInd = entry.siswaIndustriMap[sKey] || entry.siswaIndustriMap[oldKey] || "";
-                    if ((!mappedInd || mappedInd === '-') && foundS && foundS.industri && foundS.industri !== '-' && foundS.industri !== 'Belum Ditentukan') {
-                        mappedInd = String(foundS.industri).split(',')[0].trim();
-                    }
-                    if ((!mappedInd || mappedInd === '-') && allInds.length === 1) {
-                        mappedInd = allInds[0];
-                    }
+                    // Prioritas 1: Industri yang tercatat di Data Master Siswa (s.industri)
+                    let masterInd = (foundS && foundS.industri && foundS.industri !== '-' && foundS.industri !== 'Belum Ditentukan')
+                        ? String(foundS.industri).split(',')[0].trim()
+                        : "";
 
-                    // Cocokkan dengan nama resmi di Master Industri jika ada
-                    if (mappedInd && mappedInd !== '-') {
-                        const matchedMasterInd = (window.cloudState.industri || []).find(ind => window.isIndustriMatch(ind.nama, mappedInd));
+                    // Prioritas 2: Pemetaan spesifik di siswaIndustriMap
+                    let mapInd = entry.siswaIndustriMap[sKey] || entry.siswaIndustriMap[oldKey] || "";
+
+                    let finalStudentInd = masterInd || mapInd || "";
+
+                    if (finalStudentInd && finalStudentInd !== '-') {
+                        const matchedMasterInd = (window.cloudState.industri || []).find(ind => window.isIndustriMatch(ind.nama, finalStudentInd));
                         if (matchedMasterInd && matchedMasterInd.nama) {
-                            mappedInd = matchedMasterInd.nama.trim();
+                            finalStudentInd = matchedMasterInd.nama.trim();
                         }
-                        entry.siswaIndustriMap[sKey] = mappedInd;
-                        entry.industriSet.add(mappedInd);
+                        entry.siswaIndustriMap[sKey] = finalStudentInd;
+                        recomputedIndSet.add(finalStudentInd);
                     }
 
                     if (foundS) {
                         foundS.guru = entry.guru;
-                        if (mappedInd && mappedInd !== '-') {
-                            foundS.industri = mappedInd;
+                        if (finalStudentInd && finalStudentInd !== '-') {
+                            foundS.industri = finalStudentInd;
                         }
                     }
                 });
 
-                const finalInds = Array.from(entry.industriSet).filter(x => x && x !== '-');
+                // Gabungkan industri dari siswa bimbingan dan industri yang dicentang pada guru ini
+                entry.industriSet.forEach(i => {
+                    if (i && i !== '-') recomputedIndSet.add(i);
+                });
+
+                const finalInds = Array.from(recomputedIndSet).filter(x => x && x !== '-');
                 result.push({
                     id: entry.id,
                     guru: entry.guru,
@@ -6238,6 +6251,70 @@
             window.openFeature("kelola-akun", "Buat Akun & Kredensial");
         };
 
+        window.bukaModalEditKredensial = function(idx) {
+            const u = (window.cloudState.registeredUsers || [])[idx];
+            if (!u) return;
+            const currentRole = window.cloudState.activeRole || "admin";
+            if (currentRole !== 'admin' && (u.role === 'panitia' || u.role === 'kepsek' || u.role === 'admin')) {
+                return window.showModalInfo("Akses Ditolak 🔒", "Hanya <b>Admin Utama</b> yang dapat mengedit akun ini.");
+            }
+            const meta = roleConfigMeta[u.role] || roleConfigMeta.siswa;
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">✏️ Edit Akun: ${meta.label}</h3>
+                ${u.role === 'panitia' ? `
+                <div class="form-group">
+                    <label class="form-label">Jabatan Panitia PKL:</label>
+                    <select id="editAkunJabatan" class="form-control" style="font-weight:800; color:#0284c7;">
+                        <option value="Ketua Panitia" ${u.jabatan === 'Ketua Panitia' ? 'selected' : ''}>1. Ketua Panitia</option>
+                        <option value="Sekretaris" ${u.jabatan === 'Sekretaris' ? 'selected' : ''}>2. Sekretaris</option>
+                        <option value="Bendahara" ${u.jabatan === 'Bendahara' ? 'selected' : ''}>3. Bendahara</option>
+                    </select>
+                </div>` : ''}
+                <div class="form-group">
+                    <label class="form-label">Nama Lengkap:</label>
+                    <input type="text" id="editAkunNama" class="form-control" value="${u.nama || ''}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Username / ${meta.namaKolomId}:</label>
+                    <input type="text" id="editAkunUsername" class="form-control" value="${u.username || ''}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kata Sandi (Password):</label>
+                    <input type="text" id="editAkunPass" class="form-control" value="${u.pass || ''}">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button type="button" onclick="window.simpanEditKredensial(${idx})" class="btn-action btn-blue">💾 Update Akun</button>
+                </div>
+            `);
+        };
+
+        window.simpanEditKredensial = function(idx) {
+            const u = (window.cloudState.registeredUsers || [])[idx];
+            if (!u) return;
+            const nama = document.getElementById("editAkunNama")?.value.trim();
+            const username = document.getElementById("editAkunUsername")?.value.trim();
+            const pass = document.getElementById("editAkunPass")?.value.trim();
+            const jabatan = document.getElementById("editAkunJabatan")?.value || u.jabatan || '';
+
+            if (!nama || !username || !pass) return window.showModalInfo("Lengkapi Data", "Semua kolom wajib diisi!");
+
+            window.cloudState.registeredUsers[idx] = {
+                ...u,
+                nama,
+                username,
+                pass,
+                jabatan,
+                identitas: username
+            };
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Akun Diperbarui ✅", `Data kredensial <b>${nama}</b> berhasil disimpan.`);
+            window.openFeature("kelola-akun", "Buat Akun & Kredensial");
+        };
+
         window.konfirmasiHapusKredensial = function(idx) {
             const user = window.cloudState.registeredUsers[idx];
             if (!user) return;
@@ -6338,11 +6415,12 @@
         window.renderMasterSiswaTable = function() {
             let rows = "";
             (window.cloudState.siswa || []).forEach((s, idx) => {
+                const kodeKelas = window.normalisasiKodeKelas ? window.normalisasiKodeKelas(s.kelas) : (s.kelas || '-');
                 rows += `<tr>
                     <td><input type="checkbox" class="cb-siswa" value="${idx}"></td>
                     <td>${idx + 1}</td>
                     <td><b>${s.nama}</b></td>
-                    <td><span class="badge-status badge-blue" style="font-size:10.5px; font-weight:800;">${s.kelas || '-'}</span></td>
+                    <td><span class="badge-status badge-blue" style="font-size:10.5px; font-weight:800;">${kodeKelas}</span></td>
                     <td><code>${s.nis || '-'}</code></td>
                     <td><span class="badge-status ${s.jk === 'P' ? 'badge-amber' : 'badge-blue'}">${s.jk || '-'}</span></td>
                     <td><b>${s.industri || '-'}</b></td>
@@ -6400,8 +6478,9 @@
             let jurOptions = "";
             DAFTAR_JURUSAN_SMKN1.forEach(j => { jurOptions += `<option value="${j}">${j}</option>`; });
 
+            const allIndList = window.getConsolidatedIndustriOptions();
             let indOptions = `<option value="-">-- Belum Ditentukan --</option>`;
-            (window.cloudState.industri || []).forEach(i => {
+            allIndList.forEach(i => {
                 indOptions += `<option value="${i.nama}">${i.nama}</option>`;
             });
 
@@ -6532,20 +6611,42 @@
 
         window.bukaModalEditSiswa = function(idx) {
             const s = window.cloudState.siswa[idx];
+            if (!s) return;
+            const currentKelas = window.normalisasiKodeKelas ? window.normalisasiKodeKelas(s.kelas) : (s.kelas || '');
             let jurOptions = "";
+            let kelasMatched = false;
             DAFTAR_JURUSAN_SMKN1.forEach(j => {
-                jurOptions += `<option value="${j}" ${s.kelas === j ? 'selected' : ''}>${j}</option>`;
+                const isSel = (currentKelas === j);
+                if (isSel) kelasMatched = true;
+                jurOptions += `<option value="${j}" ${isSel ? 'selected' : ''}>${j}</option>`;
             });
+            if (!kelasMatched && currentKelas) {
+                jurOptions += `<option value="${currentKelas}" selected>${currentKelas}</option>`;
+            }
 
+            const allIndList = window.getConsolidatedIndustriOptions();
+            const currentInd = (s.industri && s.industri !== '-') ? String(s.industri).split(',')[0].trim() : '-';
             let indOptions = `<option value="-">-- Belum Ditentukan --</option>`;
-            (window.cloudState.industri || []).forEach(i => {
-                indOptions += `<option value="${i.nama}" ${s.industri === i.nama ? 'selected' : ''}>${i.nama}</option>`;
+            let indMatched = false;
+            allIndList.forEach(i => {
+                const isSel = (!indMatched && currentInd !== '-' && window.isIndustriMatch(currentInd, i.nama));
+                if (isSel) indMatched = true;
+                indOptions += `<option value="${i.nama}" ${isSel ? 'selected' : ''}>${i.nama}</option>`;
             });
+            if (!indMatched && currentInd && currentInd !== '-') {
+                indOptions += `<option value="${currentInd}" selected>${currentInd}</option>`;
+            }
 
             let guruOptions = `<option value="-">-- Belum Ditentukan --</option>`;
+            let guruMatched = false;
             (window.cloudState.guru || []).forEach(g => {
-                guruOptions += `<option value="${g.nama}" ${s.guru === g.nama ? 'selected' : ''}>${g.nama}</option>`;
+                const isSel = (!guruMatched && s.guru && s.guru !== '-' && window.isNameMatch(s.guru, g.nama));
+                if (isSel) guruMatched = true;
+                guruOptions += `<option value="${g.nama}" ${isSel ? 'selected' : ''}>${g.nama}</option>`;
             });
+            if (!guruMatched && s.guru && s.guru !== '-') {
+                guruOptions += `<option value="${s.guru}" selected>${s.guru}</option>`;
+            }
 
             window.openDynamicModal(`
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">✏️ Edit Data Siswa</h3>
@@ -6591,8 +6692,8 @@
                 </div>
 
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.simpanEditSiswa(${idx})" class="btn-action btn-blue">💾 Update</button>
+                    <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button type="button" onclick="window.simpanEditSiswa(${idx})" class="btn-action btn-blue">💾 Update</button>
                 </div>
             `);
         };
@@ -6601,42 +6702,52 @@
             const oldSiswa = window.cloudState.siswa[idx] || {};
             const oldNama = oldSiswa.nama || "";
             const nama = document.getElementById("editSiswaNama")?.value.trim();
-            const kelas = document.getElementById("editSiswaKelas")?.value;
+            const rawKelas = document.getElementById("editSiswaKelas")?.value;
+            const kelas = window.normalisasiKodeKelas ? window.normalisasiKodeKelas(rawKelas) : rawKelas;
             const nis = document.getElementById("editSiswaNis")?.value.trim();
             const jk = document.getElementById("editSiswaJk")?.value;
             const industri = document.getElementById("editSiswaIndustri")?.value || "-";
             const guru = document.getElementById("editSiswaGuru")?.value || "-";
             const noHp = document.getElementById("editSiswaNoHp")?.value.trim() || "-";
 
+            if (!nama) return window.showModalInfo("Nama Kosong", "Nama lengkap siswa wajib diisi!");
+
+            // 1. Simpan langsung hasil editan terakhir ke Data Master Siswa
             window.cloudState.siswa[idx] = { ...oldSiswa, nama, kelas, nis, jk, industri, guru, noHp };
 
-            // Sinkronkan perpindahan Industri & Guru ke tabel Alokasi Penempatan (siswaIndustriMap)
+            // 2. Sinkronkan ke seluruh tabel Alokasi Penempatan agar perubahan industri/guru langsung diterapkan
             const oldKey = window.normalizeTextCompact(oldNama);
             const newKey = window.normalizeTextCompact(nama);
 
             (window.cloudState.penempatan || []).forEach(p => {
+                if (!p) return;
                 const sList = window.extractStudentList(p.siswa);
                 const hasStudent = sList.some(sn => window.isNameMatch(sn, oldNama) || window.isNameMatch(sn, nama));
+
+                if (!p.siswaIndustriMap || typeof p.siswaIndustriMap !== 'object') {
+                    p.siswaIndustriMap = {};
+                }
+
                 if (hasStudent) {
-                    if (guru && guru !== '-' && !window.isNameMatch(p.guru, guru)) {
-                        // Siswa pindah ke guru pembimbing lain: cabut dari guru lama
+                    if (!guru || guru === '-' || !window.isNameMatch(p.guru, guru)) {
+                        // Siswa dipindahkan ke guru lain atau dikosongkan gurunya: keluarkan dari grup lama
                         p.siswa = sList.filter(sn => !window.isNameMatch(sn, oldNama) && !window.isNameMatch(sn, nama));
-                        if (p.siswaIndustriMap) {
-                            delete p.siswaIndustriMap[oldKey];
-                            delete p.siswaIndustriMap[newKey];
-                        }
+                        delete p.siswaIndustriMap[oldKey];
+                        delete p.siswaIndustriMap[newKey];
                     } else {
-                        // Guru tetap sama: perbarui nama & industri spesifik siswa ini
+                        // Guru tetap sama: paksa update nama dan industri baru sesuai hasil editan terakhir
                         p.siswa = sList.map(sn => (window.isNameMatch(sn, oldNama) || window.isNameMatch(sn, nama)) ? nama : sn);
-                        if (!p.siswaIndustriMap) p.siswaIndustriMap = {};
                         if (oldKey !== newKey) delete p.siswaIndustriMap[oldKey];
                         if (industri && industri !== '-') {
                             p.siswaIndustriMap[newKey] = industri;
+                        } else {
+                            delete p.siswaIndustriMap[newKey];
                         }
                     }
                 }
             });
 
+            // 3. Jika guru ditentukan, pastikan siswa dan industri barunya masuk ke baris guru tersebut
             if (guru && guru !== '-') {
                 let targetPen = (window.cloudState.penempatan || []).find(p => window.isNameMatch(p.guru, guru));
                 if (targetPen) {
@@ -6646,14 +6757,16 @@
                     if (!targetPen.siswaIndustriMap) targetPen.siswaIndustriMap = {};
                     if (industri && industri !== '-') {
                         targetPen.siswaIndustriMap[newKey] = industri;
+                    } else {
+                        delete targetPen.siswaIndustriMap[newKey];
                     }
-                } else if (industri && industri !== '-') {
+                } else {
                     window.cloudState.penempatan.push({
                         id: "pen_" + Date.now(),
                         guru: guru,
-                        industri: industri,
+                        industri: (industri && industri !== '-') ? industri : [],
                         siswa: [nama],
-                        siswaIndustriMap: { [newKey]: industri }
+                        siswaIndustriMap: (industri && industri !== '-') ? { [newKey]: industri } : {}
                     });
                 }
             }
@@ -6662,8 +6775,14 @@
                 window.konsolidasiSatuBarisPerGuru();
             }
 
+            // Pastikan sekali lagi nilai di Master Siswa tetap persis seperti yang baru diupdate pengguna
+            window.cloudState.siswa[idx].industri = industri;
+            window.cloudState.siswa[idx].guru = guru;
+            window.cloudState.siswa[idx].kelas = kelas;
+
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
+            window.showModalInfo("Data Siswa Diperbarui ✅", `Perubahan data siswa <b>${nama}</b> (Kelas: <b>${kelas}</b>, Tempat PKL: <b>${industri}</b>, Pembimbing: <b>${guru}</b>) berhasil disimpan.`);
             window.openFeature("master-siswa", "Data Master Siswa");
         };
 
@@ -9294,6 +9413,240 @@
                     </button>
                 </div>
             `);
+        };
+
+        window.simpanAlokasiPenempatanBaru = function() {
+            const guru = document.getElementById("penGuru")?.value;
+            if (!guru || guru === 'Belum ada data guru') {
+                return window.showModalInfo("Pilih Guru", "Silakan pilih Guru Pembimbing terlebih dahulu!");
+            }
+
+            const checkedIndEls = document.querySelectorAll('input[name="selIndPenempatan"]:checked');
+            const selectedIndSet = new Set();
+            checkedIndEls.forEach(el => {
+                if (el.value && el.value !== '-') selectedIndSet.add(el.value.trim());
+            });
+
+            const checkedSiswaEls = document.querySelectorAll('input[name="selSiswaPenempatan"]:checked');
+            const selectedSiswaList = [];
+            const newSiswaIndustriMap = {};
+
+            checkedSiswaEls.forEach(cb => {
+                const sNama = cb.value.trim();
+                const sIdx = cb.getAttribute('data-sidx');
+                const selEl = document.getElementById(`selIndForSiswa_${sIdx}`);
+                let chosenInd = selEl ? selEl.value.trim() : "";
+
+                // Jika dropdown siswa belum dipilih tapi guru hanya mencentang 1 industri, gunakan industri tersebut
+                if (!chosenInd && selectedIndSet.size === 1) {
+                    chosenInd = Array.from(selectedIndSet)[0];
+                }
+                // Jika masih kosong, cek industri yang sudah ada di Master Siswa
+                if (!chosenInd) {
+                    const sMaster = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, sNama));
+                    if (sMaster && sMaster.industri && sMaster.industri !== '-') {
+                        chosenInd = String(sMaster.industri).split(',')[0].trim();
+                    }
+                }
+
+                selectedSiswaList.push(sNama);
+                const sKey = window.normalizeTextCompact(sNama);
+                if (chosenInd && chosenInd !== '-') {
+                    newSiswaIndustriMap[sKey] = chosenInd;
+                    selectedIndSet.add(chosenInd);
+                }
+            });
+
+            if (selectedSiswaList.length === 0 && selectedIndSet.size === 0) {
+                return window.showModalInfo("Pilih Siswa / Industri", "Silakan centang minimal 1 siswa bimbingan atau 1 mitra industri!");
+            }
+
+            if (!Array.isArray(window.cloudState.penempatan)) window.cloudState.penempatan = [];
+
+            // Cabut siswa yang baru dipilih ini dari guru pembimbing lain agar 1 siswa tidak ganda pembimbingnya
+            selectedSiswaList.forEach(sNama => {
+                const sKey = window.normalizeTextCompact(sNama);
+                window.cloudState.penempatan.forEach(p => {
+                    if (!window.isNameMatch(p.guru, guru)) {
+                        const sList = window.extractStudentList(p.siswa);
+                        p.siswa = sList.filter(sn => !window.isNameMatch(sn, sNama));
+                        if (p.siswaIndustriMap && p.siswaIndustriMap[sKey]) {
+                            delete p.siswaIndustriMap[sKey];
+                        }
+                    }
+                });
+            });
+
+            // Cek apakah Guru Pembimbing ini sudah punya baris alokasi (kunci 1 baris per guru)
+            const existingIdx = window.cloudState.penempatan.findIndex(p => window.isNameMatch(p.guru, guru));
+            if (existingIdx !== -1) {
+                const ex = window.cloudState.penempatan[existingIdx];
+                const exInds = Array.isArray(ex.industri)
+                    ? ex.industri
+                    : (typeof ex.industri === 'string' && ex.industri.includes(',') ? ex.industri.split(',').map(x => x.trim()) : [ex.industri || '']);
+                exInds.forEach(i => { if (i && i !== '-') selectedIndSet.add(i); });
+
+                const combinedSiswa = window.extractStudentList(ex.siswa);
+                selectedSiswaList.forEach(sNama => {
+                    if (!combinedSiswa.some(cs => window.isNameMatch(cs, sNama))) {
+                        combinedSiswa.push(sNama);
+                    }
+                });
+
+                ex.guru = guru;
+                const finalIndArr = Array.from(selectedIndSet);
+                ex.industri = finalIndArr.length === 1 ? finalIndArr[0] : finalIndArr;
+                ex.siswa = combinedSiswa;
+                ex.siswaIndustriMap = Object.assign({}, ex.siswaIndustriMap || {}, newSiswaIndustriMap);
+            } else {
+                const finalIndArr = Array.from(selectedIndSet);
+                window.cloudState.penempatan.push({
+                    id: "pen_" + Date.now(),
+                    guru: guru,
+                    industri: finalIndArr.length === 1 ? finalIndArr[0] : finalIndArr,
+                    siswa: selectedSiswaList,
+                    siswaIndustriMap: newSiswaIndustriMap
+                });
+            }
+
+            // Sinkronkan langsung ke Data Master Siswa sesuai pilihan terakhir
+            selectedSiswaList.forEach(sNama => {
+                const sKey = window.normalizeTextCompact(sNama);
+                const chosenInd = newSiswaIndustriMap[sKey] || "";
+                const foundS = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, sNama));
+                if (foundS) {
+                    foundS.guru = guru;
+                    if (chosenInd && chosenInd !== '-') {
+                        foundS.industri = chosenInd;
+                    }
+                }
+            });
+
+            if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
+                window.konsolidasiSatuBarisPerGuru();
+            }
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Alokasi Tersimpan ✅", `Alokasi bimbingan untuk Guru <b>${guru}</b> (${selectedSiswaList.length} siswa) berhasil disimpan dan disinkronkan.`);
+            window.openFeature("penempatan", "Alokasi Guru & Siswa");
+        };
+
+        window.simpanEditPenempatan = function(idx) {
+            const oldItem = (window.cloudState.penempatan || [])[idx];
+            if (!oldItem) return;
+
+            const oldGuru = oldItem.guru || "";
+            const oldSiswaList = window.extractStudentList(oldItem.siswa);
+            const guru = document.getElementById("editPenGuru")?.value || oldGuru;
+
+            const checkedIndEls = document.querySelectorAll('input[name="editIndPenempatan"]:checked');
+            const selectedIndSet = new Set();
+            checkedIndEls.forEach(el => {
+                if (el.value && el.value !== '-') selectedIndSet.add(el.value.trim());
+            });
+
+            const checkedSiswaEls = document.querySelectorAll('input[name="editSiswaPenempatan"]:checked');
+            const selectedSiswaList = [];
+            const newSiswaIndustriMap = {};
+
+            checkedSiswaEls.forEach(cb => {
+                const sNama = cb.value.trim();
+                const sIdx = cb.getAttribute('data-sidx');
+                const selEl = document.getElementById(`editIndForSiswa_${sIdx}`);
+                let chosenInd = selEl ? selEl.value.trim() : "";
+
+                if (!chosenInd && selectedIndSet.size === 1) {
+                    chosenInd = Array.from(selectedIndSet)[0];
+                }
+                if (!chosenInd) {
+                    const sMaster = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, sNama));
+                    if (sMaster && sMaster.industri && sMaster.industri !== '-') {
+                        chosenInd = String(sMaster.industri).split(',')[0].trim();
+                    }
+                }
+
+                selectedSiswaList.push(sNama);
+                const sKey = window.normalizeTextCompact(sNama);
+                if (chosenInd && chosenInd !== '-') {
+                    newSiswaIndustriMap[sKey] = chosenInd;
+                    selectedIndSet.add(chosenInd);
+                }
+            });
+
+            // 1. Jika ada siswa lama yang dilepas centangnya dari guru ini, lepaskan atribut guru pada Master Siswa
+            oldSiswaList.forEach(oldS => {
+                const stillChecked = selectedSiswaList.some(newS => window.isNameMatch(newS, oldS));
+                if (!stillChecked) {
+                    const foundS = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, oldS));
+                    if (foundS && window.isNameMatch(foundS.guru, oldGuru)) {
+                        foundS.guru = "-";
+                    }
+                }
+            });
+
+            // 2. Cabut siswa yang dicentang pada guru ini dari baris guru lain agar tidak duplikat
+            selectedSiswaList.forEach(sNama => {
+                const sKey = window.normalizeTextCompact(sNama);
+                (window.cloudState.penempatan || []).forEach((p, pIndex) => {
+                    if (pIndex !== idx && !window.isNameMatch(p.guru, guru)) {
+                        const sList = window.extractStudentList(p.siswa);
+                        p.siswa = sList.filter(sn => !window.isNameMatch(sn, sNama));
+                        if (p.siswaIndustriMap && p.siswaIndustriMap[sKey]) {
+                            delete p.siswaIndustriMap[sKey];
+                        }
+                    }
+                });
+            });
+
+            // 3. Perbarui Master Siswa sesuai hasil editan terakhir di modal ini
+            selectedSiswaList.forEach(sNama => {
+                const sKey = window.normalizeTextCompact(sNama);
+                const chosenInd = newSiswaIndustriMap[sKey] || "";
+                const foundS = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, sNama));
+                if (foundS) {
+                    foundS.guru = guru;
+                    if (chosenInd && chosenInd !== '-') {
+                        foundS.industri = chosenInd;
+                    }
+                }
+            });
+
+            // 4. Simpan langsung ke baris penempatan
+            const finalIndArr = Array.from(selectedIndSet);
+            window.cloudState.penempatan[idx] = {
+                ...oldItem,
+                guru: guru,
+                industri: finalIndArr.length === 1 ? finalIndArr[0] : finalIndArr,
+                siswa: selectedSiswaList,
+                siswaIndustriMap: newSiswaIndustriMap
+            };
+
+            if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
+                window.konsolidasiSatuBarisPerGuru();
+            }
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Alokasi Berhasil Diperbarui ✅", `Perubahan alokasi Guru Pembimbing <b>${guru}</b> beserta penempatan industri masing-masing siswa telah berhasil disimpan.`);
+            window.openFeature("penempatan", "Alokasi Guru & Siswa");
+        };
+
+        window.konfirmasiHapusPenempatan = function(idx) {
+            const item = (window.cloudState.penempatan || [])[idx];
+            if (!item) return;
+            window.showConfirmDialog("Hapus Alokasi Pembimbing", `Hapus data alokasi Guru Pembimbing <b>${item.guru}</b>?`, () => {
+                const sList = window.extractStudentList(item.siswa);
+                sList.forEach(sNama => {
+                    const foundS = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, sNama));
+                    if (foundS && window.isNameMatch(foundS.guru, item.guru)) {
+                        foundS.guru = "-";
+                    }
+                });
+                window.cloudState.penempatan.splice(idx, 1);
+                window.simpanDatabasePersisten(true);
+                window.openFeature("penempatan", "Alokasi Guru & Siswa");
+            });
         };
 
         window.simpanVideoYoutubeBaru = function() {
