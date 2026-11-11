@@ -2396,6 +2396,91 @@
             return `https://wa.me/${cleaned}${pesan ? '?text=' + encodeURIComponent(pesan) : ''}`;
         };
 
+        window.getWhatsappSvgIcon = function(size = 15) {
+            return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="currentColor" style="flex-shrink:0; display:inline-block; vertical-align:middle;"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12 0 2.625.846 5.059 2.284 7.033l-1.492 5.451 5.581-1.464c1.911 1.258 4.195 1.98 6.627 1.98 6.627 0 12-5.373 12-12s-5.373-12-12-12z"/></svg>`;
+        };
+
+        window.getNoHpGuruByName = function(namaGuru) {
+            if (!namaGuru || namaGuru === '-' || namaGuru === 'Belum Ditentukan') return "";
+            const gObj = (window.cloudState.guru || []).find(g => g && window.isNameMatch(g.nama, namaGuru));
+            if (gObj && gObj.noHp && gObj.noHp !== '-') {
+                return String(gObj.noHp).trim();
+            }
+            return "";
+        };
+
+        window.hubungiWaGuruDariSiswa = function(namaGuru, namaSiswa, namaIndustri) {
+            if (!namaGuru || namaGuru === 'Belum Ditentukan' || namaGuru === '-') {
+                return window.showModalInfo("Guru Pembimbing Belum Ditentukan", "Anda belum memiliki alokasi Guru Pembimbing. Silakan hubungi Panitia PKL.");
+            }
+            const noHp = window.getNoHpGuruByName(namaGuru);
+            if (!noHp) {
+                return window.showModalInfo(
+                    "Nomor WhatsApp Belum Terdaftar 📱",
+                    `Nomor WhatsApp untuk Guru Pembimbing <b>${namaGuru}</b> belum diisi pada Data Master Guru.<br><br>Silakan informasikan kepada Panitia PKL untuk melengkapi nomor HP/WA Guru Pembimbing.`
+                );
+            }
+            const pesan = `Assalamu'alaikum / Selamat pagi Bapak/Ibu Guru Pembimbing *${namaGuru}*, saya *${namaSiswa}* siswa PKL SMK Negeri 1 Marisa yang ditempatkan di *${namaIndustri}*. Mohon izin berkonsultasi mengenai kegiatan PKL...`;
+            const urlWa = window.formatNoWaLink(noHp, pesan);
+            if (urlWa) {
+                window.open(urlWa, '_blank');
+            }
+        };
+
+        window.kirimDisposisiWaLangsungKepsek = function(namaSiswa, namaIndustri, namaGuru, jenisMasalah) {
+            if (!namaGuru || namaGuru === 'Belum Ditentukan' || namaGuru === '-') {
+                return window.showModalInfo("Guru Belum Ditentukan", `Siswa <b>${namaSiswa}</b> belum memiliki Guru Pembimbing yang ditugaskan.`);
+            }
+            const noHp = window.getNoHpGuruByName(namaGuru);
+            const now = new Date();
+            const tglStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            const jamStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) + " WITA";
+            const kepsekProfile = window.cloudState.userProfile || { nama: "Kepala Sekolah" };
+            const instruksiDefault = `Kepada Guru Pembimbing (${namaGuru}), mohon segera menindaklanjuti dan memberikan arahan/pembinaan kepada siswa ${namaSiswa} (PKL di ${namaIndustri}) karena terdeteksi ${jenisMasalah} pada hari ini (${tglStr}).`;
+
+            // Catat juga disposisi secara otomatis ke sistem aplikasi agar histori tetap tersimpan
+            if (!Array.isArray(window.cloudState.disposisiKepsek)) window.cloudState.disposisiKepsek = [];
+            window.cloudState.disposisiKepsek.unshift({
+                id: "disp_" + Date.now(),
+                siswa: namaSiswa,
+                industri: namaIndustri,
+                guru: namaGuru,
+                jenisMasalah: jenisMasalah,
+                instruksi: instruksiDefault,
+                kepsek: kepsekProfile.nama,
+                tanggal: tglStr,
+                jam: jamStr,
+                status: "Menunggu Tindak Lanjut Guru",
+                tindakLanjut: ""
+            });
+            window.simpanDatabasePersisten(true);
+
+            if (!noHp) {
+                window.openFeature(window.cloudState.currentFeature || "dashboard", "Beranda", true);
+                return window.showModalInfo(
+                    "Disposisi Tercatat di Aplikasi (No. WA Kosong) ⚠️",
+                    `Disposisi untuk <b>${namaGuru}</b> terkait siswa <b>${namaSiswa}</b> telah dikirim ke aplikasi, namun <b>Nomor WhatsApp Guru belum terdaftar</b> di Data Master Guru sehingga tidak dapat membuka WhatsApp secara langsung.`
+                );
+            }
+
+            const pesanWa = `*⚡ DISPOSISI KEPALA SEKOLAH - SIP-PKL SMKN 1 MARISA*\n\n` +
+                `Yth. Bapak/Ibu Guru Pembimbing: *${namaGuru}*\n` +
+                `Berikut disampaikan disposisi tindak lanjut kedisiplinan siswa PKL:\n\n` +
+                `👨‍🎓 *Nama Siswa:* ${namaSiswa}\n` +
+                `🏢 *Tempat PKL:* ${namaIndustri}\n` +
+                `⚠️ *Temuan:* ${jenisMasalah}\n` +
+                `📅 *Waktu Deteksi:* ${tglStr} (${jamStr})\n\n` +
+                `📌 *Instruksi Kepala Sekolah:*\n"${instruksiDefault}"\n\n` +
+                `Mohon segera ditindaklanjuti dan dilaporkan melalui aplikasi SIP-PKL. Terima kasih.\n` +
+                `— *${kepsekProfile.nama}*`;
+
+            const urlWa = window.formatNoWaLink(noHp, pesanWa);
+            if (urlWa) {
+                window.open(urlWa, '_blank');
+            }
+            window.openFeature(window.cloudState.currentFeature || "dashboard", "Beranda", true);
+        };
+
         const roleDefaults = {
             siswa: { label: "ROOM SISWA PKL", icon: "👨‍🎓", usernameLabel: "Username / NIS Siswa:", placeholder: "Masukkan NIS / Username Siswa", needPass: true },
             industri: { label: "ROOM INDUSTRI MITRA DUDI", icon: "🏭", usernameLabel: "Username Mitra DUDI:", placeholder: "Masukkan ID / Username Mitra DUDI", needPass: true },
@@ -3476,6 +3561,7 @@
                     const safeInd = (it.industri || '').replace(/'/g, "\\'");
                     const safeGuru = (it.guru || '').replace(/'/g, "\\'");
                     const safeJenis = (jenisPelanggaran || '').replace(/'/g, "\\'");
+                    const hasGuru = it.guru && it.guru !== 'Belum Ditentukan' && it.guru !== '-';
                     return `
                     <tr>
                         <td style="text-align:center; font-weight:800;">${idx + 1}</td>
@@ -3484,7 +3570,16 @@
                             <div style="font-size:10px; color:#64748b;">${it.kelas}</div>
                         </td>
                         <td><span class="badge-status badge-blue" style="font-size:10.5px;">🏢 ${it.industri}</span></td>
-                        <td><span class="badge-status badge-green" style="font-size:10.5px;">👩‍🏫 ${it.guru}</span></td>
+                        <td>
+                            <div style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                <span class="badge-status badge-green" style="font-size:10.5px;">👩‍🏫 ${it.guru}</span>
+                                ${hasGuru ? `
+                                <button type="button" onclick="window.kirimDisposisiWaLangsungKepsek('${safeNama}', '${safeInd}', '${safeGuru}', '${safeJenis}')" title="Kirim Disposisi langsung ke WhatsApp ${it.guru}" style="background:linear-gradient(135deg, #25D366 0%, #128C7E 100%); color:#ffffff; border:none; border-radius:8px; padding:4px 8px; font-size:10px; font-weight:900; cursor:pointer; display:inline-flex; align-items:center; gap:4px; box-shadow:0 2px 6px rgba(37,211,102,0.35);">
+                                    ${window.getWhatsappSvgIcon(13)} <span>WA</span>
+                                </button>
+                                ` : ''}
+                            </div>
+                        </td>
                         <td>
                             <button type="button" onclick="window.bukaModalKirimDisposisiKepsek('${safeNama}', '${safeInd}', '${safeGuru}', '${safeJenis}')" class="btn-action ${badgeClass}" style="font-size:10.5px; font-weight:900; padding:6px 10px;">
                                 ⚡ Beri Disposisi / Perintah
@@ -5204,7 +5299,15 @@
 
             <div class="mentor-info-card">
                 <div class="mentor-label">NAMA GURU PEMBIMBING:</div>
-                <div class="mentor-name">${guruName}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:4px; flex-wrap:wrap;">
+                    <div class="mentor-name" style="margin-top:0; flex:1;">${guruName}</div>
+                    ${(guruName && guruName !== 'Belum Ditentukan' && guruName !== '-') ? `
+                    <button type="button" onclick="window.hubungiWaGuruDariSiswa('${guruName.replace(/'/g, "\\'")}', '${(placementInfo.namaSiswa || profile.nama).replace(/'/g, "\\'")}', '${industriName.replace(/'/g, "\\'")}')" title="Konsultasi via WhatsApp dengan Guru Pembimbing" style="background:linear-gradient(135deg, #25D366 0%, #128C7E 100%); color:#ffffff; border:1.5px solid #ffffff; border-radius:14px; padding:7px 12px; font-size:11.5px; font-weight:900; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 12px rgba(22,163,74,0.35); flex-shrink:0;">
+                        ${window.getWhatsappSvgIcon(16)}
+                        <span>Chat WA</span>
+                    </button>
+                    ` : ''}
+                </div>
 
                 <div class="details-white-sheet">
                     <div class="detail-row-item">
@@ -10046,7 +10149,7 @@
             window.openDynamicModal(`
                 <h3 style="font-size:16px; font-weight:900; color:#dc2626; margin-bottom:4px;">⚡ Disposisi / Perintah Kepala Sekolah</h3>
                 <p style="font-size:11px; color:#475569; margin-bottom:12px;">
-                    Disposisi ini akan langsung dikirimkan dan tampil di Dashboard <b>Guru Pembimbing (${namaGuru})</b>, <b>Siswa (${namaSiswa})</b>, <b>Panitia PKL</b>, serta <b>Orang Tua / Wali Siswa</b>.
+                    Disposisi ini akan langsung dikirimkan dan tampil di Dashboard <b>Guru Pembimbing (${namaGuru})</b>, <b>Siswa (${namaSiswa})</b>, <b>Panitia PKL</b>, serta <b>Orang Tua / Wali Siswa</b>, dan dapat diteruskan langsung ke <b>WhatsApp Guru Pembimbing</b>.
                 </p>
 
                 <div style="background:#fef2f2; border:1.5px solid #fca5a5; border-radius:14px; padding:12px; margin-bottom:12px; font-size:11.5px;">
@@ -10061,16 +10164,19 @@
                     <textarea id="inputIsiDisposisiKepsek" class="form-control" style="height:95px; font-weight:700;" placeholder="Tuliskan perintah tindak lanjut...">Kepada Guru Pembimbing (${namaGuru}), mohon segera menindaklanjuti dan memberikan arahan/pembinaan kepada siswa ${namaSiswa} (PKL di ${namaIndustri}) karena terdeteksi ${jenisMasalah} pada hari ini.</textarea>
                 </div>
 
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px; flex-wrap:wrap;">
                     <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button type="button" onclick="window.simpanDisposisiKepsek('${namaSiswa.replace(/'/g, "\\'")}', '${namaIndustri.replace(/'/g, "\\'")}', '${namaGuru.replace(/'/g, "\\'")}', '${jenisMasalah.replace(/'/g, "\\'")}')" class="btn-action btn-red" style="font-weight:900; padding:10px 18px;">
-                        ⚡ Kirim Disposisi Sekarang
+                    <button type="button" onclick="window.simpanDisposisiKepsek('${namaSiswa.replace(/'/g, "\\'")}', '${namaIndustri.replace(/'/g, "\\'")}', '${namaGuru.replace(/'/g, "\\'")}', '${jenisMasalah.replace(/'/g, "\\'")}', false)" class="btn-action btn-red" style="font-weight:900; padding:10px 14px;">
+                        ⚡ Kirim ke Aplikasi
+                    </button>
+                    <button type="button" onclick="window.simpanDisposisiKepsek('${namaSiswa.replace(/'/g, "\\'")}', '${namaIndustri.replace(/'/g, "\\'")}', '${namaGuru.replace(/'/g, "\\'")}', '${jenisMasalah.replace(/'/g, "\\'")}', true)" class="btn-action btn-emerald" style="background:linear-gradient(135deg, #25D366 0%, #128C7E 100%); font-weight:900; padding:10px 14px; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 12px rgba(37,211,102,0.35);">
+                        ${window.getWhatsappSvgIcon(15)} <span>Kirim Aplikasi & WhatsApp</span>
                     </button>
                 </div>
             `);
         };
 
-        window.simpanDisposisiKepsek = function(namaSiswa, namaIndustri, namaGuru, jenisMasalah) {
+        window.simpanDisposisiKepsek = function(namaSiswa, namaIndustri, namaGuru, jenisMasalah, kirimKeWa = false) {
             const instruksi = document.getElementById("inputIsiDisposisiKepsek")?.value.trim();
             if (!instruksi) return window.showModalInfo("Instruksi Kosong", "Silakan isi pesan disposisi/perintah terlebih dahulu!");
 
@@ -10096,6 +10202,32 @@
 
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
+
+            if (kirimKeWa) {
+                const noHp = window.getNoHpGuruByName(namaGuru);
+                if (noHp) {
+                    const pesanWa = `*⚡ DISPOSISI KEPALA SEKOLAH - SIP-PKL SMKN 1 MARISA*\n\n` +
+                        `Yth. Bapak/Ibu Guru Pembimbing: *${namaGuru}*\n` +
+                        `Berikut disampaikan disposisi tindak lanjut kedisiplinan siswa PKL:\n\n` +
+                        `👨‍🎓 *Nama Siswa:* ${namaSiswa}\n` +
+                        `🏢 *Tempat PKL:* ${namaIndustri}\n` +
+                        `⚠️ *Temuan:* ${jenisMasalah}\n` +
+                        `📅 *Waktu Deteksi:* ${tglStr} (${jamStr})\n\n` +
+                        `📌 *Instruksi Kepala Sekolah:*\n"${instruksi}"\n\n` +
+                        `Mohon segera ditindaklanjuti dan dilaporkan melalui aplikasi SIP-PKL. Terima kasih.\n` +
+                        `— *${kepsekProfile.nama}*`;
+                    const urlWa = window.formatNoWaLink(noHp, pesanWa);
+                    if (urlWa) window.open(urlWa, '_blank');
+                } else {
+                    window.showModalInfo(
+                        "Terkirim ke Aplikasi (No. WA Guru Belum Diisi) ⚠️",
+                        `Disposisi berhasil dikirim ke Dashboard <b>${namaGuru}</b>, namun nomor WhatsApp beliau belum terdaftar di Data Master Guru.`
+                    );
+                    window.openFeature(window.cloudState.currentFeature || "dashboard", "Beranda", true);
+                    return;
+                }
+            }
+
             window.showModalInfo(
                 "Disposisi Berhasil Dikirim! ⚡",
                 `Perintah disposisi untuk Guru Pembimbing <b>${namaGuru}</b> terkait siswa <b>${namaSiswa}</b> telah dikirim dan langsung tampil di Dashboard <b>Guru Pembimbing, Siswa, Panitia PKL, dan Orang Tua Siswa</b>.`
