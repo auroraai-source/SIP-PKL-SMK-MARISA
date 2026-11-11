@@ -1264,10 +1264,17 @@
                     window.cloudState.bannerSliderImages = parsedBanners;
                 }
             }
+            // Bersihkan otomatis jika masih tersangkut banner lama (foto 3 orang laptop / Unsplash default lama) dan belum diupdate Admin
+            const hasLegacyStockPhoto = Array.isArray(window.cloudState.bannerSliderImages) && window.cloudState.bannerSliderImages.some(b =>
+                b && b.url && (
+                    b.url.includes("1522202176988") ||
+                    b.url.includes("1581092918056") ||
+                    b.url.includes("1531482615713")
+                )
+            );
             if (!Array.isArray(window.cloudState.bannerSliderImages) ||
-                (window.cloudState.bannerSliderImages.length === 2 &&
-                 window.cloudState.bannerSliderImages[0]?.slogan1 === "SMK BISA! SMK HEBAT!" &&
-                 !window.cloudState.customBannerUpdatedAt)) {
+                window.cloudState.bannerSliderImages.length === 0 ||
+                (hasLegacyStockPhoto && !window.cloudState.customBannerUpdatedAt)) {
                 window.cloudState.bannerSliderImages = JSON.parse(JSON.stringify(DEFAULT_BANNER_IMAGES));
             }
         } catch(e) {}
@@ -2469,6 +2476,8 @@
             try {
                 // 1. SINKRONISASI PINTAR (PRE-FETCH MERGE): Tarik data terbaru dari Cloud dan gabungkan
                 // sebelum mengunggah agar presensi >50 siswa tidak saling menimpa
+                // SERTA MENCEGAH HP SISWA/GURU MENIMPA GAMBAR BANNER YANG SUDAH DIGANTI ADMIN!
+                let latestRemote = null;
                 try {
                     const [rowState, rowCloud] = await Promise.all([
                         window.directRestFetchRow('app_state', 'id', 1).catch(() => null),
@@ -2476,8 +2485,19 @@
                     ]);
                     const p1 = rowState?.payload;
                     const p2 = rowCloud?.payload;
-                    const latestRemote = (p1 && p2) ? ((Number(p1.lastUpdated || 0) >= Number(p2.lastUpdated || 0)) ? p1 : p2) : (p1 || p2);
+                    latestRemote = (p1 && p2) ? ((Number(p1.lastUpdated || 0) >= Number(p2.lastUpdated || 0)) ? p1 : p2) : (p1 || p2);
                     if (latestRemote && typeof latestRemote === 'object') {
+                        const activeRole = window.cloudState.activeRole || "siswa";
+                        const isAdminOrPanitia = (activeRole === 'admin' || activeRole === 'panitia');
+                        // Jika yang sedang mengunggah data adalah Siswa / Guru / Industri / Orang Tua / Kepsek,
+                        // WAJIB pertahankan bannerSliderImages dari Cloud (milik Admin) agar HP siswa tidak menimpa banner Admin dengan cache lama!
+                        if (!isAdminOrPanitia && Array.isArray(latestRemote.bannerSliderImages) && latestRemote.bannerSliderImages.length > 0) {
+                            window.cloudState.bannerSliderImages = JSON.parse(JSON.stringify(latestRemote.bannerSliderImages));
+                            window.cloudState.customBannerUpdatedAt = Number(latestRemote.customBannerUpdatedAt || Date.now());
+                            try {
+                                localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(window.cloudState.bannerSliderImages));
+                            } catch(e) {}
+                        }
                         window.gabungkanDataCloudTanpaKehilangan(latestRemote);
                     }
                 } catch(e) {}
@@ -2674,54 +2694,95 @@
                     dokLen: (dataObj.dokumentasiKegiatan || []).length,
                     ytLen: (dataObj.videoPanduanYoutube || []).length,
                     ban: dataObj.bannerSliderImages || [],
+                    banTs: dataObj.customBannerUpdatedAt || 0,
                     obs: dataObj.observasiConfig || {},
                     hl: dataObj.hotlineConfig || {},
                     pkl: dataObj.pklConfig || {},
                     jam: dataObj.jamConfig || {},
-                    gpsAcc: dataObj.gpsResetAccess || {}
+                    gps: dataObj.gpsResetAccess || {}
                 });
             } catch (e) {
-                return String(dataObj.lastUpdated || "");
+                return "";
             }
         };
-        window.lastCloudDataSignature = window.computeCloudDataSignature(window.cloudState);
 
-        // Pelacak aktivitas pengguna (ketikan & scroll) agar sinkronisasi realtime TIDAK PERNAH memutus ketikan atau menggeser layar sendiri
+        window.lastCloudDataSignature = "";
         window.lastUserActivityAt = 0;
         window.lastUserScrollAt = 0;
+
+        // Pantau aktivitas ketikan dan sentuhan/scroll pengguna agar sinkronisasi realtime tidak mengganggu
         (function() {
             const markActivity = () => { window.lastUserActivityAt = Date.now(); };
             const markScroll = () => { window.lastUserScrollAt = Date.now(); };
             window.addEventListener('keydown', markActivity, { passive: true });
             window.addEventListener('input', markActivity, { passive: true });
             window.addEventListener('pointerdown', markActivity, { passive: true });
-            window.addEventListener('touchstart', markActivity, { passive: true });
             window.addEventListener('touchmove', markScroll, { passive: true });
             window.addEventListener('scroll', markScroll, { passive: true });
         })();
 
-        // Helper penggabungan array berdasarkan ID unik / kunci komposit agar presensi & jurnal dari banyak HP tidak pernah hilang/tertimpa
-        window.mergeUniqueArrayById = function(localArr, cloudArr, keyFn) {
+        // Helper untuk menggabungkan 2 array objek berdasarkan ID unik tanpa kehilangan item dari salah satu perangkat
+        window.mergeUniqueArrayById = function(localArr, cloudArr, keySelector) {
             const map = new Map();
-            (Array.isArray(cloudArr) ? cloudArr : []).forEach(item => {
-                if (!item || typeof item !== 'object') return;
-                const k = keyFn(item);
-                if (k) map.set(k, item);
-            });
-            (Array.isArray(localArr) ? localArr : []).forEach(item => {
-                if (!item || typeof item !== 'object') return;
-                const k = keyFn(item);
-                if (k) map.set(k, item);
-            });
+            const addList = (arr) => {
+                if (!Array.isArray(arr)) return;
+                arr.forEach(item => {
+                    if (!item || typeof item !== 'object') return;
+                    const key = keySelector(item);
+                    if (key) {
+                        if (map.has(key)) {
+                            map.set(key, Object.assign({}, map.get(key), item));
+                        } else {
+                            map.set(key, item);
+                        }
+                    }
+                });
+            };
+            // Masukkan data cloud terlebih dahulu, lalu gabungkan dengan data lokal terbaru
+            addList(cloudArr);
+            addList(localArr);
             return Array.from(map.values());
         };
 
-        // Helper khusus untuk mendeteksi apakah banner masih 100% default Unsplash bawaan awal
+        // Helper khusus untuk mendeteksi apakah banner masih mengandung gambar stok Unsplash bawaan awal
         window.isDefaultStockBanners = function(bannersArr) {
             if (!Array.isArray(bannersArr) || bannersArr.length === 0) return true;
             if (bannersArr.length === 2 && bannersArr[0]?.slogan1 === "SMK BISA! SMK HEBAT!") return true;
-            const defaultUrls = DEFAULT_BANNER_IMAGES.map(b => b.url);
-            return bannersArr.every(b => b && defaultUrls.includes(b.url));
+            const stockFragments = [
+                "1522202176988",
+                "1581092918056",
+                "1531482615713",
+                "1554224155-6726b3ff858f",
+                "1460925895917-afdab827c52f",
+                "1544551763-46a013bb70d5",
+                "1503387762-592deb58ef4e",
+                "1558981403-c5f9899a28bc",
+                "1486262715619-67b85e0b08d3",
+                "1558494949-ef010cbdcc31",
+                "1581092160607-ee22621dd758",
+                "1541888946425-d09bb18086f6"
+            ];
+            return bannersArr.every(b => b && b.url && stockFragments.some(frag => String(b.url).includes(frag)));
+        };
+
+        // Hitung berapa banyak slide di dalam array banner yang sudah diganti dengan gambar kustom (bukan stok Unsplash)
+        window.countCustomUploadedSlides = function(bannersArr) {
+            if (!Array.isArray(bannersArr)) return 0;
+            const stockFragments = [
+                "1522202176988",
+                "1581092918056",
+                "1531482615713",
+                "1554224155-6726b3ff858f",
+                "1460925895917-afdab827c52f",
+                "1544551763-46a013bb70d5",
+                "1503387762-592deb58ef4e",
+                "1558981403-c5f9899a28bc",
+                "1486262715619-67b85e0b08d3",
+                "1558494949-ef010cbdcc31",
+                "1581092160607-ee22621dd758",
+                "1541888946425-d09bb18086f6"
+            ];
+            return bannersArr.filter(b => b && b.url && !stockFragments.some(frag => String(b.url).includes(frag))).length;
         };
 
         // Hot-Swap DOM Banner Carousel secara langsung di semua dashboard (Siswa, Guru, Industri, Ortu, Kepsek, Panitia)
@@ -2783,27 +2844,38 @@
                 return false;
             }
 
-            const localIsStock = window.isDefaultStockBanners(localBanners);
-            const cloudIsStock = window.isDefaultStockBanners(cloudBanners);
-
-            // Terapkan banner dari Cloud apabila:
-            // 1. Timestamp banner di Cloud lebih baru (cloudBanTs > localBanTs), ATAU
-            // 2. Perangkat lokal masih memakai gambar stok default sedangkan Cloud sudah memakai gambar yang diganti Admin, ATAU
-            // 3. Perangkat yang sedang aktif adalah Siswa / Guru / Industri / Orang Tua / Kepsek dan belum pernah mengedit banner lokal (deteksi perubahan langsung dari Admin)
+            const localCustomCount = window.countCustomUploadedSlides(localBanners);
+            const cloudCustomCount = window.countCustomUploadedSlides(cloudBanners);
             const role = window.cloudState.activeRole || "siswa";
             const isViewerRole = (role !== 'admin' && role !== 'panitia');
 
-            if (cloudBanTs > localBanTs || (localIsStock && !cloudIsStock) || (isViewerRole && !cloudIsStock)) {
+            // ATURAN MUTLAK SINKRONISASI BANNER EKOSISTEM:
+            // 1. Jika yang membuka aplikasi adalah Siswa, Guru, Industri, Orang Tua, atau Kepsek (isViewerRole),
+            //    dan di Cloud sudah ada banner dari Admin (cloudBanTs > 0 atau cloudCustomCount > 0), LANGSUNG GUNAKAN BANNER CLOUD!
+            // 2. Jika di perangkat Admin/Panitia, gunakan yang memiliki timestamp customBannerUpdatedAt terbaru atau jumlah upload kustom terbanyak.
+            const shouldAdoptCloudBanners =
+                (isViewerRole && (cloudBanTs > 0 || cloudCustomCount > 0 || cloudBanTs >= localBanTs)) ||
+                (cloudBanTs > localBanTs) ||
+                (cloudCustomCount > localCustomCount && cloudBanTs >= localBanTs);
+
+            if (shouldAdoptCloudBanners) {
                 window.cloudState.bannerSliderImages = JSON.parse(JSON.stringify(cloudBanners));
-                window.cloudState.customBannerUpdatedAt = Math.max(cloudBanTs, localBanTs, 1);
+                window.cloudState.customBannerUpdatedAt = Math.max(cloudBanTs, localBanTs, Date.now());
                 try {
                     localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(window.cloudState.bannerSliderImages));
+                    const rawDb = localStorage.getItem(STORAGE_KEY_DB);
+                    if (rawDb) {
+                        const parsedDb = JSON.parse(rawDb);
+                        parsedDb.bannerSliderImages = window.cloudState.bannerSliderImages;
+                        parsedDb.customBannerUpdatedAt = window.cloudState.customBannerUpdatedAt;
+                        localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(parsedDb));
+                    }
                 } catch(e) {}
                 setTimeout(() => {
                     if (typeof window.perbaruiDomBannerCarouselLangsung === 'function') {
                         window.perbaruiDomBannerCarouselLangsung();
                     }
-                }, 50);
+                }, 30);
                 return true;
             }
             return false;
@@ -10019,10 +10091,13 @@
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MEDIA BERANDA &bull; 9 KONSENTRASI KEAHLIAN</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🖼️ Banner Gambar Slider (${banners.length} Slide Aktif)</h3>
                         <p style="font-size:11px; color:#64748b; margin-top:2px;">
-                            Gambar banner yang Anda unggah atau edit dikunci permanen di penyimpanan lokal & Supabase Storage sehingga tidak akan terhempas oleh sinkronisasi.
+                            Gambar banner yang Anda unggah atau edit dikunci permanen di Supabase Storage & otomatis disinkronkan ke seluruh Dashboard Siswa, Guru, Industri, dan Orang Tua.
                         </p>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button type="button" onclick="window.siarkanBannerKeSeluruhEkosistem()" class="btn-action btn-amber" style="font-size:11px; font-weight:900; box-shadow:0 3px 10px rgba(245,158,11,0.3);">
+                            🚀 Siarkan Banner ke Semua HP Sekarang
+                        </button>
                         <button type="button" onclick="window.pulihkan9BannerJurusanDefault()" class="btn-action btn-blue" style="font-size:11px;">
                             🔄 Muat 9 Banner Jurusan
                         </button>
@@ -10036,6 +10111,26 @@
                     ${bannerList || '<div style="text-align:center; color:#94a3b8; font-size:12px; padding:16px;">Belum ada slide banner</div>'}
                 </div>
             </div>`;
+        };
+
+        window.siarkanBannerKeSeluruhEkosistem = async function() {
+            const nowTs = Date.now();
+            window.cloudState.customBannerUpdatedAt = nowTs;
+            window.cloudState.lastUpdated = nowTs;
+            try {
+                localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(window.cloudState.bannerSliderImages || []));
+            } catch(e) {}
+            window.showModalInfo("⏳ Menyiarkan Banner...", "Sedang mengunggah dan menyinkronkan gambar banner dari Admin ke seluruh Dashboard Siswa, Guru, Industri, dan Orang Tua...");
+            const ok = await window.kirimSnapshotKeSupabase(window.cloudState, true);
+            if (ok) {
+                window.showModalInfo(
+                    "Banner Berhasil Disiarkan ke Seluruh Ekosistem! 🚀",
+                    `Seluruh <b>${(window.cloudState.bannerSliderImages || []).length} slide gambar banner</b> di Panel Admin telah dikunci sebagai versi terbaru di Supabase Cloud.<br><br>` +
+                    `<span style="color:#16a34a; font-weight:800;">✓ Saat Siswa, Guru, Industri, atau Orang Tua membuka dashboard mereka, gambar banner baru akan langsung tampil menggantikan banner lama!</span>`
+                );
+            } else {
+                window.showModalInfo("Gagal Menyiarkan Banner ⚠️", "Pastikan koneksi internet aktif lalu coba tekan tombol kembali.");
+            }
         };
 
         window.pulihkan9BannerJurusanDefault = function() {
@@ -10253,53 +10348,6 @@
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
             window.showModalInfo("Banner Diperbarui & Disinkronkan ✅", `Slide banner <b>#${idx + 1} (${s1})</b> berhasil diperbarui di Supabase Cloud dan langsung tampil di seluruh dashboard pengguna.`);
-            window.openFeature("banner-jadwal", "Banner Gambar Slider");
-        };
-
-        window.simpanEditBannerSlide = async function(idx) {
-            const banners = window.cloudState.bannerSliderImages || [];
-            const oldItem = banners[idx];
-            if (!oldItem) return;
-
-            const btn = document.getElementById("btnUpdateBannerModal");
-            if (btn) {
-                btn.disabled = true;
-                btn.innerText = "⏳ Menyimpan Perubahan...";
-            }
-
-            const directUrl = document.getElementById("editBanUrlDirect")?.value.trim();
-            let finalUrl = oldItem.url;
-
-            if (window.tempBannerBase64) {
-                const uploadedUrl = await window.uploadFotoKeSupabaseStorage(window.tempBannerBase64, "banner_pkl");
-                if (uploadedUrl && (uploadedUrl.startsWith("http://") || uploadedUrl.startsWith("https://"))) {
-                    finalUrl = uploadedUrl;
-                } else {
-                    finalUrl = window.tempBannerBase64;
-                }
-            } else if (directUrl) {
-                finalUrl = directUrl;
-            }
-
-            const jur = document.getElementById("editBanJurusan")?.value || oldItem.jurusan || "";
-            const s1 = document.getElementById("editBanSlogan1")?.value.trim() || oldItem.slogan1 || "SMK BISA! SMK HEBAT!";
-            const s2 = document.getElementById("editBanSlogan2")?.value.trim() || oldItem.slogan2 || "SIAP KERJA, SANTUN, MANDIRI, KREATIF";
-
-            window.cloudState.bannerSliderImages[idx] = {
-                ...oldItem,
-                jurusan: jur,
-                url: finalUrl,
-                slogan1: s1,
-                slogan2: s2
-            };
-            window.cloudState.customBannerUpdatedAt = Date.now();
-            try {
-                localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(window.cloudState.bannerSliderImages));
-            } catch(e) {}
-
-            window.simpanDatabasePersisten(true);
-            window.closeDynamicModal();
-            window.showModalInfo("Banner Diperbarui ✅", `Slide banner <b>#${idx + 1} (${s1})</b> berhasil diperbarui dan dikunci permanen.`);
             window.openFeature("banner-jadwal", "Banner Gambar Slider");
         };
 
@@ -12540,6 +12588,9 @@
             }
             if (window.supabaseClient) {
                 await window.tarikDataDariCloud(true);
+                if (typeof window.perbaruiDomBannerCarouselLangsung === 'function') {
+                    window.perbaruiDomBannerCarouselLangsung();
+                }
 
                 // Sinkronisasi Realtime Halus di Belakang Layar (Tanpa Mengganggu Ketikan & Tanpa Menggeser Layar)
                 setInterval(async () => {
