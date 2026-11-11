@@ -1586,10 +1586,31 @@
             const b = String(nameB).toLowerCase().trim();
             if (a === b) return true;
 
-            const ca = window.normalizeTextCompact(a);
-            const cb = window.normalizeTextCompact(b);
-            if (!ca || !cb) return false;
-            if (ca === cb) return true;
+            // Bersihkan gelar dan karakter non-alfabet untuk perbandingan inti
+            const cleanStr = (str) => {
+                let s = str.split(',')[0]; 
+                s = s.replace(/\b(s\.?pd|m\.?pd|s\.?st|drs|dra|hj|h\.?|st|mt|m\.?kom)\b/gi, ''); 
+                return s.replace(/[^a-z0-9]/g, '');
+            };
+
+            const ca = cleanStr(a);
+            const cb = cleanStr(b);
+            
+            if (ca && cb) {
+                if (ca === cb) return true;
+                if (ca.includes(cb) || cb.includes(ca)) return true;
+                // Toleransi tinggi untuk variasi ejaan (contoh: Arthur vs Artur)
+                const caNoH = ca.replace(/h/g, '');
+                const cbNoH = cb.replace(/h/g, '');
+                if (caNoH && cbNoH && (caNoH === cbNoH || caNoH.includes(cbNoH) || cbNoH.includes(caNoH))) return true;
+            }
+
+            const compA = window.normalizeTextCompact(a);
+            const compB = window.normalizeTextCompact(b);
+            if (compA === compB) return true;
+            if (compA.length > 5 && compB.length > 5) {
+                if (compA.startsWith(compB) || compB.startsWith(compA)) return true;
+            }
 
             return false;
         };
@@ -2181,7 +2202,11 @@
             // dan timestamp lokal lebih baru dari cloud, jangan timpa perubahan lokal yang sedang diproses
             const localTs = Number(window.cloudState.lastUpdated || 0);
             const cloudTs = Number(cloudData.lastUpdated || 0);
-            if (localTs > 0 && cloudTs > 0 && localTs > cloudTs && (Date.now() - localTs < 6000)) {
+            
+            // Paksa tarik data dari cloud jika lokal masih kosong (Mencegah PC kosong saat HP sudah input)
+            const isLocalEmpty = (window.cloudState.siswa || []).length === 0 && (window.cloudState.guru || []).length === 0;
+
+            if (!isLocalEmpty && localTs > 0 && cloudTs > 0 && localTs > cloudTs && (Date.now() - localTs < 6000)) {
                 return;
             }
 
@@ -4173,13 +4198,7 @@
 
             // Fungsi pencocokan nama guru yang fleksibel dan aman dari gelar/spasi
             const isMatchGuru = (guruName) => {
-                if (!guruName || !profile.nama) return false;
-                const a = guruName.toLowerCase().trim();
-                const b = profile.nama.toLowerCase().trim();
-                if (a === b) return true;
-                const cleanA = a.replace(/[,.]/g, ' ').replace(/\s+/g, ' ').trim();
-                const cleanB = b.replace(/[,.]/g, ' ').replace(/\s+/g, ' ').trim();
-                return cleanA.includes(cleanB) || cleanB.includes(cleanA);
+                return window.isNameMatch(guruName, profile.nama);
             };
 
             // 1. ISOLASI DATA KETAT: Ambil HANYA penempatan siswa resmi guru ini dari Data Master Siswa & Alokasi Guru
@@ -9025,13 +9044,7 @@
             }
 
             const isMatchGuru = (guruName) => {
-                if (!guruName || !profile.nama) return false;
-                const a = guruName.toLowerCase().trim();
-                const b = profile.nama.toLowerCase().trim();
-                if (a === b) return true;
-                const cleanA = a.replace(/[,.]/g, ' ').replace(/\s+/g, ' ').trim();
-                const cleanB = b.replace(/[,.]/g, ' ').replace(/\s+/g, ' ').trim();
-                return cleanA.includes(cleanB) || cleanB.includes(cleanA);
+                return window.isNameMatch(guruName, profile.nama);
             };
 
             const myPlacements = (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru));
@@ -9126,13 +9139,7 @@
                 list = list.filter(j => j.siswa && sMap.has(j.siswa.trim().toLowerCase()));
             } else if (role === 'guru') {
                 const isMatchGuru = (guruName) => {
-                    if (!guruName || !profile.nama) return false;
-                    const a = guruName.toLowerCase().trim();
-                    const b = profile.nama.toLowerCase().trim();
-                    if (a === b) return true;
-                    const cleanA = a.replace(/[,.]/g, ' ').replace(/\s+/g, ' ').trim();
-                    const cleanB = b.replace(/[,.]/g, ' ').replace(/\s+/g, ' ').trim();
-                    return cleanA.includes(cleanB) || cleanB.includes(cleanA);
+                    return window.isNameMatch(guruName, profile.nama);
                 };
                 const myPlacements = (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru));
                 const gMap = new Set();
@@ -11082,7 +11089,7 @@
                     if (!isInteracting && !isModalOpen && !document.hidden) {
                         await window.tarikDataDariCloud(true);
                     }
-                }, 25000);
+                }, 10000); // Sinkronisasi dipercepat menjadi 10 detik
 
                 // Tarik data secara hening saat tab kembali aktif (dengan jeda anti-agresif)
                 let lastFocusSync = 0;
