@@ -1483,17 +1483,36 @@
         };
 
         window.getSanitizedCloudPayload = function() {
-            // Pastikan field foto_selfie di database utama hanya menyimpan URL link Storage
-            // (Jika ada foto yang sudah memiliki URL Storage, gunakan URL tersebut agar DB bebas Base64)
+            // Pastikan field foto_selfie, banner, dan lampiran di database JSONB utama bebas dari Base64 raksasa
+            // agar ukuran paket selalu kecil (< 150 KB) dan TIDAK PERNAH mengalami "TypeError: Failed to fetch"
             const sanitizedAbsensi = (window.cloudState.absensi || []).map(a => {
                 if (!a) return a;
                 const copy = Object.assign({}, a);
                 if (copy.foto_url && (copy.foto_url.startsWith('http://') || copy.foto_url.startsWith('https://'))) {
                     copy.foto_selfie = copy.foto_url;
-                } else if (copy.foto_selfie && copy.foto_selfie.startsWith('data:image') && copy.foto_selfie.length > 35000) {
-                    // Jaga agar ukuran payload JSONB tetap sangat ringan
-                    delete copy.foto_selfie;
+                } else if (copy.foto_selfie && copy.foto_selfie.startsWith('data:image') && copy.foto_selfie.length > 18000) {
                     copy.foto_selfie = "";
+                }
+                if (copy.foto_url && copy.foto_url.startsWith('data:image') && copy.foto_url.length > 18000) {
+                    copy.foto_url = "";
+                }
+                return copy;
+            });
+
+            const sanitizedBanners = (window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES).map((b, idx) => {
+                if (!b) return b;
+                const copy = Object.assign({}, b);
+                if (copy.url && copy.url.startsWith('data:image') && copy.url.length > 25000) {
+                    copy.url = DEFAULT_BANNER_IMAGES[idx % DEFAULT_BANNER_IMAGES.length].url;
+                }
+                return copy;
+            });
+
+            const sanitizedPengaduan = (window.cloudState.pengaduan || []).map(ad => {
+                if (!ad) return ad;
+                const copy = Object.assign({}, ad);
+                if (copy.lampiran && copy.lampiran.startsWith('data:') && copy.lampiran.length > 25000) {
+                    copy.lampiran = null;
                 }
                 return copy;
             });
@@ -1512,11 +1531,11 @@
                 nilai: window.cloudState.nilai || [],
                 agendaKunjungan: window.cloudState.agendaKunjungan || [],
                 laporanAkhir: window.cloudState.laporanAkhir || [],
-                pengaduan: window.cloudState.pengaduan || [],
+                pengaduan: sanitizedPengaduan,
                 disposisiKepsek: window.cloudState.disposisiKepsek || [],
                 dokumentasiKegiatan: window.cloudState.dokumentasiKegiatan || [],
                 videoPanduanYoutube: window.cloudState.videoPanduanYoutube || [],
-                bannerSliderImages: window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES,
+                bannerSliderImages: sanitizedBanners,
                 pklConfig: window.cloudState.pklConfig || DEFAULT_PKL_CONFIG,
                 observasiConfig: window.cloudState.observasiConfig || DEFAULT_OBSERVASI_CONFIG,
                 hotlineConfig: window.cloudState.hotlineConfig || DEFAULT_HOTLINE_CONFIG,
@@ -2153,7 +2172,12 @@
                 const stored = localStorage.getItem(STORAGE_KEY_CLOUD_CFG);
                 if (stored) {
                     const parsed = JSON.parse(stored);
-                    if (parsed.url && parsed.key) return parsed;
+                    if (parsed.url && parsed.key) {
+                        return {
+                            url: String(parsed.url).trim().replace(/\/+$/, ""),
+                            key: String(parsed.key).trim()
+                        };
+                    }
                 }
             } catch(e) {}
             return {
@@ -2166,8 +2190,10 @@
             if (typeof supabase !== 'undefined') {
                 try {
                     const creds = window.getSupabaseCredentials();
-                    window.supabaseClient = supabase.createClient(creds.url, creds.key, {
-                        auth: { persistSession: false }
+                    const cleanUrl = String(creds.url || "").trim().replace(/\/+$/, "");
+                    const cleanKey = String(creds.key || "").trim();
+                    window.supabaseClient = supabase.createClient(cleanUrl, cleanKey, {
+                        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
                     });
                     window.isCloudConnected = true;
                 } catch(err) {
@@ -2176,23 +2202,114 @@
             }
         };
 
+        // =========================================================================
+        // JALUR DIRECT REST FETCH FALLBACK (ANTI "TypeError: Failed to fetch")
+        // Mendukung penuh baik Anon JWT Key (eyJ...) maupun Publishable Key (sb_publishable_...)
+        // =========================================================================
+        window.buildSupabaseHeaders = function(includePreferUpsert = false) {
+            const creds = window.getSupabaseCredentials();
+            const cleanKey = String(creds.key || "").trim();
+            const headers = {
+                "apikey": cleanKey,
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            };
+            // Jika key adalah JWT standar (eyJ...), sertakan Bearer. Jika sb_publishable_, gunakan apikey & Bearer adaptif
+            headers["Authorization"] = `Bearer ${cleanKey}`;
+            if (includePreferUpsert) {
+                headers["Prefer"] = "resolution=merge-duplicates,return=minimal";
+            }
+            return headers;
+        };
+
+        window.directRestFetchRow = async function(tableName, idColumn, idValue) {
+            const creds = window.getSupabaseCredentials();
+            const baseUrl = String(creds.url || "").trim().replace(/\/+$/, "");
+            const endpoint = `${baseUrl}/rest/v1/${tableName}?${idColumn}=eq.${encodeURIComponent(idValue)}&select=payload,updated_at&limit=1`;
+
+            const tryFetch = async (withAuthBearer) => {
+                const headers = {
+                    "apikey": String(creds.key || "").trim(),
+                    "Accept": "application/json"
+                };
+                if (withAuthBearer) {
+                    headers["Authorization"] = `Bearer ${String(creds.key || "").trim()}`;
+                }
+                const resp = await fetch(endpoint, {
+                    method: "GET",
+                    headers: headers,
+                    mode: "cors",
+                    cache: "no-store"
+                });
+                if (!resp.ok) {
+                    const errTxt = await resp.text().catch(() => "");
+                    throw new Error(`HTTP ${resp.status}: ${errTxt || resp.statusText}`);
+                }
+                const arr = await resp.json();
+                return (Array.isArray(arr) && arr.length > 0) ? arr[0] : null;
+            };
+
+            try {
+                return await tryFetch(true);
+            } catch (e1) {
+                return await tryFetch(false);
+            }
+        };
+
+        window.directRestUpsertRow = async function(tableName, rowObject, conflictColumn) {
+            const creds = window.getSupabaseCredentials();
+            const baseUrl = String(creds.url || "").trim().replace(/\/+$/, "");
+            const endpoint = `${baseUrl}/rest/v1/${tableName}?on_conflict=${encodeURIComponent(conflictColumn)}`;
+            const bodyStr = JSON.stringify(rowObject);
+
+            const tryPost = async (withAuthBearer) => {
+                const headers = {
+                    "apikey": String(creds.key || "").trim(),
+                    "Content-Type": "application/json",
+                    "Prefer": "resolution=merge-duplicates,return=minimal"
+                };
+                if (withAuthBearer) {
+                    headers["Authorization"] = `Bearer ${String(creds.key || "").trim()}`;
+                }
+                const resp = await fetch(endpoint, {
+                    method: "POST",
+                    headers: headers,
+                    body: bodyStr,
+                    mode: "cors"
+                });
+                if (!resp.ok) {
+                    const errTxt = await resp.text().catch(() => "");
+                    throw new Error(`HTTP ${resp.status}: ${errTxt || resp.statusText}`);
+                }
+                return true;
+            };
+
+            try {
+                return await tryPost(true);
+            } catch (e1) {
+                return await tryPost(false);
+            }
+        };
+
         window.kirimSnapshotKeSupabase = async function(payload, silent = false) {
-            if (!window.supabaseClient) {
+            const creds = window.getSupabaseCredentials();
+            if (!creds || !creds.url || !creds.key) {
                 if (!silent) {
-                    window.showModalInfo("Koneksi Belum Terhubung ❌", "Klien Supabase belum terhubung. Periksa konfigurasi URL & Key di menu Database Cloud.");
+                    window.showModalInfo("Kredensial Kosong ⚠️", "URL atau Key Supabase belum diisi di menu Database Cloud.");
                 }
                 return false;
             }
+
             try {
-                // SINKRONISASI PINTAR (PRE-FETCH MERGE): Tarik data terbaru dari Cloud dan gabungkan array presensi/jurnal
-                // sebelum mengunggah agar presensi >50 siswa secara bersamaan tidak saling menimpa (Anti Data Hilang).
+                // 1. SINKRONISASI PINTAR (PRE-FETCH MERGE): Tarik data terbaru dari Cloud dan gabungkan
+                // sebelum mengunggah agar presensi >50 siswa tidak saling menimpa
                 try {
-                    const [resState, resCloud] = await Promise.all([
-                        window.supabaseClient.from('app_state').select('payload').eq('id', 1).maybeSingle(),
-                        window.supabaseClient.from('app_cloud_db').select('payload').eq('id', 'master').maybeSingle()
+                    const [rowState, rowCloud] = await Promise.all([
+                        window.directRestFetchRow('app_state', 'id', 1).catch(() => null),
+                        window.directRestFetchRow('app_cloud_db', 'id', 'master').catch(() => null)
                     ]);
-                    const p1 = resState?.data?.payload;
-                    const p2 = resCloud?.data?.payload;
+                    const p1 = rowState?.payload;
+                    const p2 = rowCloud?.payload;
                     const latestRemote = (p1 && p2) ? ((Number(p1.lastUpdated || 0) >= Number(p2.lastUpdated || 0)) ? p1 : p2) : (p1 || p2);
                     if (latestRemote && typeof latestRemote === 'object') {
                         window.gabungkanDataCloudTanpaKehilangan(latestRemote);
@@ -2204,17 +2321,41 @@
                 let okCloud = false;
                 let errMsg = "";
 
+                // 2. Unggah ke app_state (Gunakan Direct REST Upsert + Fallback SDK)
                 try {
-                    const resState = await window.supabaseClient.from('app_state').upsert({ id: 1, payload: cleanData }, { onConflict: 'id' });
-                    if (!resState.error) okState = true;
-                    else errMsg += "app_state: " + resState.error.message + "; ";
-                } catch(e) { errMsg += "app_state: " + e.message + "; "; }
+                    await window.directRestUpsertRow('app_state', { id: 1, payload: cleanData }, 'id');
+                    okState = true;
+                } catch (restErr1) {
+                    if (window.supabaseClient) {
+                        try {
+                            const resState = await window.supabaseClient.from('app_state').upsert({ id: 1, payload: cleanData }, { onConflict: 'id' });
+                            if (!resState.error) okState = true;
+                            else errMsg += "app_state: " + resState.error.message + "; ";
+                        } catch (sdkErr1) {
+                            errMsg += "app_state: " + (restErr1.message || sdkErr1.message) + "; ";
+                        }
+                    } else {
+                        errMsg += "app_state: " + restErr1.message + "; ";
+                    }
+                }
 
+                // 3. Unggah ke app_cloud_db (Gunakan Direct REST Upsert + Fallback SDK)
                 try {
-                    const resCloud = await window.supabaseClient.from('app_cloud_db').upsert({ id: 'master', payload: cleanData }, { onConflict: 'id' });
-                    if (!resCloud.error) okCloud = true;
-                    else errMsg += "app_cloud_db: " + resCloud.error.message + "; ";
-                } catch(e) { errMsg += "app_cloud_db: " + e.message + "; "; }
+                    await window.directRestUpsertRow('app_cloud_db', { id: 'master', payload: cleanData }, 'id');
+                    okCloud = true;
+                } catch (restErr2) {
+                    if (window.supabaseClient) {
+                        try {
+                            const resCloud = await window.supabaseClient.from('app_cloud_db').upsert({ id: 'master', payload: cleanData }, { onConflict: 'id' });
+                            if (!resCloud.error) okCloud = true;
+                            else errMsg += "app_cloud_db: " + resCloud.error.message + "; ";
+                        } catch (sdkErr2) {
+                            errMsg += "app_cloud_db: " + (restErr2.message || sdkErr2.message) + "; ";
+                        }
+                    } else {
+                        errMsg += "app_cloud_db: " + restErr2.message + "; ";
+                    }
+                }
 
                 if (okState || okCloud) {
                     window.isCloudConnected = true;
@@ -2237,8 +2378,18 @@
                     }
                     return true;
                 } else {
+                    window.isCloudConnected = false;
                     if (!silent) {
-                        window.showModalInfo("Gagal Mengunggah ke Cloud ❌", "Terjadi kendala saat menyimpan ke Supabase: " + (errMsg || "Tabel tidak merespons.") + "<br><br><i>Catatan: Seluruh data Anda tetap tersimpan aman di penyimpanan internal perangkat ini.</i>");
+                        const isFetchFailed = errMsg.toLowerCase().includes("failed to fetch") || errMsg.toLowerCase().includes("networkerror");
+                        const panduanPerbaikan = isFetchFailed
+                            ? `<div style="background:#fff7ed; border:1.5px solid #fdba74; border-radius:12px; padding:10px; text-align:left; font-size:11.5px; color:#9a3412; margin-top:10px; line-height:1.45;">
+                                <b>💡 Cara Mengatasi "Failed to fetch" dengan Cepat:</b><br>
+                                1. Pastikan proyek Supabase Anda tidak sedang berstatus <i>Paused</i> di dashboard Supabase.<br>
+                                2. Pastikan Anda sudah menekan tombol <b>RUN</b> pada skrip SQL di menu <b>SQL Editor Supabase</b>.<br>
+                                3. Di menu <b>Database Cloud [Supabase]</b> di bawah, pastikan <b>Project URL</b> dan <b>Anon / Public Key</b> sesuai dengan yang ada di <i>Supabase Project Settings ➔ API</i>.
+                               </div>`
+                            : "";
+                        window.showModalInfo("Gagal Mengunggah ke Cloud ❌", "Terjadi kendala saat menyimpan ke Supabase:<br><code>" + (errMsg || "Tabel tidak merespons.") + "</code>" + panduanPerbaikan + "<br><i>Catatan: Seluruh data Anda tetap tersimpan aman di penyimpanan internal perangkat ini.</i>");
                     }
                     return false;
                 }
@@ -2249,9 +2400,10 @@
         };
 
         window.tarikDataDariCloud = async function(silent = true) {
-            if (!window.supabaseClient) {
+            const creds = window.getSupabaseCredentials();
+            if (!creds || !creds.url || !creds.key) {
                 if (!silent) {
-                    window.showModalInfo("Koneksi Belum Terhubung ❌", "Klien Supabase belum terinisialisasi. Cek konfigurasi URL & Key di menu Database Cloud.");
+                    window.showModalInfo("Koneksi Belum Terhubung ❌", "Cek konfigurasi URL & Key di menu Database Cloud.");
                 }
                 return false;
             }
@@ -2259,15 +2411,27 @@
                 let statePayload = null;
                 let cloudDbPayload = null;
 
-                // Ambil dari kedua tabel secara paralel lalu pilih yang paling baru (lastUpdated tertinggi)
+                // 1. Coba tarik melalui Direct REST Fetch terlebih dahulu (paling tahan blokir WebSocket/CORS)
                 try {
-                    const [resState, resCloud] = await Promise.all([
-                        window.supabaseClient.from('app_state').select('payload, updated_at').eq('id', 1).maybeSingle(),
-                        window.supabaseClient.from('app_cloud_db').select('payload, updated_at').eq('id', 'master').maybeSingle()
+                    const [rowState, rowCloud] = await Promise.all([
+                        window.directRestFetchRow('app_state', 'id', 1).catch(() => null),
+                        window.directRestFetchRow('app_cloud_db', 'id', 'master').catch(() => null)
                     ]);
-                    if (resState && resState.data && resState.data.payload) statePayload = resState.data.payload;
-                    if (resCloud && resCloud.data && resCloud.data.payload) cloudDbPayload = resCloud.data.payload;
+                    if (rowState && rowState.payload) statePayload = rowState.payload;
+                    if (rowCloud && rowCloud.payload) cloudDbPayload = rowCloud.payload;
                 } catch(e) {}
+
+                // 2. Jika Direct REST belum mendapat data, fallback ke Supabase SDK
+                if (!statePayload && !cloudDbPayload && window.supabaseClient) {
+                    try {
+                        const [resState, resCloud] = await Promise.all([
+                            window.supabaseClient.from('app_state').select('payload, updated_at').eq('id', 1).maybeSingle(),
+                            window.supabaseClient.from('app_cloud_db').select('payload, updated_at').eq('id', 'master').maybeSingle()
+                        ]);
+                        if (resState && resState.data && resState.data.payload) statePayload = resState.data.payload;
+                        if (resCloud && resCloud.data && resCloud.data.payload) cloudDbPayload = resCloud.data.payload;
+                    } catch(e) {}
+                }
 
                 let cloudPayload = null;
                 if (statePayload && cloudDbPayload) {
@@ -2278,7 +2442,7 @@
                     cloudPayload = statePayload || cloudDbPayload;
                 }
 
-                if (cloudPayload) {
+                if (cloudPayload && Object.keys(cloudPayload).length > 0) {
                     window.terapkanDataRealtime(cloudPayload);
                     window.isCloudConnected = true;
                     if (!silent) {
@@ -2299,7 +2463,7 @@
                     return true;
                 } else {
                     if (!silent) {
-                        window.showModalInfo("Data Cloud Belum Ada", "Tidak ditemukan payload data di tabel Supabase. Klik tombol <b>⚡ Unggah ke Cloud Sekarang</b> untuk mencadangkan data lokal ke server.");
+                        window.showModalInfo("Data Cloud Masih Kosong / Belum Terhubung", "Tabel Supabase belum berisi snapshot atau proyek belum aktif. Klik tombol <b>⚡ Unggah ke Cloud Sekarang</b> untuk mengirim data dari perangkat ini ke server.");
                     }
                     return false;
                 }
