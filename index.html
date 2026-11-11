@@ -1446,56 +1446,77 @@
             if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) return dataUrl;
 
             const compressedDataUrl = await window.compressImageDataUrl(dataUrl, 360, 270, 0.55);
-
-            if (!window.supabaseClient) {
-                return compressedDataUrl;
-            }
-
             const blob = window.dataUrlToBlob(compressedDataUrl);
-            if (!blob) return compressedDataUrl;
+            if (!blob) return "";
 
             const fileName = `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
-            const bucketsToTry = ['foto_presensi', 'berkas_pkl'];
+            const bucketsToTry = ['foto_presensi', 'berkas_pkl', 'bukti_jurnal'];
+            const creds = window.getSupabaseCredentials ? window.getSupabaseCredentials() : null;
+            const baseUrl = creds && creds.url ? String(creds.url).trim().replace(/\/+$/, "") : "";
+            const apiKey = creds && creds.key ? String(creds.key).trim() : "";
 
-            for (const bucketName of bucketsToTry) {
-                try {
-                    const { error } = await window.supabaseClient
-                        .storage
-                        .from(bucketName)
-                        .upload(fileName, blob, {
-                            contentType: 'image/jpeg',
-                            upsert: true
+            // 1. Jalur Utama: Direct REST Upload ke Supabase Storage (Tahan blokir & pastikan tersimpan sebagai file fisik)
+            if (baseUrl && apiKey) {
+                for (const bucketName of bucketsToTry) {
+                    try {
+                        const uploadEndpoint = `${baseUrl}/storage/v1/object/${bucketName}/${fileName}`;
+                        const resp = await fetch(uploadEndpoint, {
+                            method: 'POST',
+                            headers: {
+                                'apikey': apiKey,
+                                'Authorization': `Bearer ${apiKey}`,
+                                'Content-Type': 'image/jpeg',
+                                'x-upsert': 'true'
+                            },
+                            body: blob,
+                            mode: 'cors'
                         });
-
-                    if (!error) {
-                        const { data: pubData } = window.supabaseClient
-                            .storage
-                            .from(bucketName)
-                            .getPublicUrl(fileName);
-                        if (pubData && pubData.publicUrl) {
-                            return pubData.publicUrl;
+                        if (resp.ok) {
+                            return `${baseUrl}/storage/v1/object/public/${bucketName}/${fileName}`;
                         }
-                    }
-                } catch (e) {}
+                    } catch (errRest) {}
+                }
             }
 
-            return compressedDataUrl;
+            // 2. Jalur Kedua: Supabase SDK Storage Upload
+            if (window.supabaseClient) {
+                for (const bucketName of bucketsToTry) {
+                    try {
+                        const { error } = await window.supabaseClient
+                            .storage
+                            .from(bucketName)
+                            .upload(fileName, blob, {
+                                contentType: 'image/jpeg',
+                                upsert: true
+                            });
+
+                        if (!error) {
+                            const { data: pubData } = window.supabaseClient
+                                .storage
+                                .from(bucketName)
+                                .getPublicUrl(fileName);
+                            if (pubData && pubData.publicUrl) {
+                                return pubData.publicUrl;
+                            }
+                        }
+                    } catch (e) {}
+                }
+            }
+
+            return "";
         };
 
         window.getSanitizedCloudPayload = function() {
-            // Pastikan field foto_selfie, banner, dan lampiran di database JSONB utama bebas dari Base64 raksasa
-            // agar ukuran paket selalu kecil (< 150 KB) dan TIDAK PERNAH mengalami "TypeError: Failed to fetch"
+            // Pastikan field foto_selfie dan foto_url di database JSONB utama MURNI menyimpan link URL Supabase Storage
+            // dan TIDAK PERNAH menyimpan string Base64 di baris database
             const sanitizedAbsensi = (window.cloudState.absensi || []).map(a => {
                 if (!a) return a;
                 const copy = Object.assign({}, a);
-                if (copy.foto_url && (copy.foto_url.startsWith('http://') || copy.foto_url.startsWith('https://'))) {
-                    copy.foto_selfie = copy.foto_url;
-                } else if (copy.foto_selfie && copy.foto_selfie.startsWith('data:image') && copy.foto_selfie.length > 18000) {
-                    copy.foto_selfie = "";
-                }
-                if (copy.foto_url && copy.foto_url.startsWith('data:image') && copy.foto_url.length > 18000) {
-                    copy.foto_url = "";
-                }
+                const validUrl = (copy.foto_url && (copy.foto_url.startsWith('http://') || copy.foto_url.startsWith('https://')))
+                    ? copy.foto_url
+                    : ((copy.foto_selfie && (copy.foto_selfie.startsWith('http://') || copy.foto_selfie.startsWith('https://'))) ? copy.foto_selfie : "");
+                copy.foto_url = validUrl;
+                copy.foto_selfie = validUrl;
                 return copy;
             });
 
@@ -2023,8 +2044,8 @@
             return false;
         };
 
-        // Helper untuk mengunci permanen koordinat GPS Industri ke Master Industri, Master Siswa & Cache Lokal
-        window.kunciKoordinatGpsIndustriPermanen = function(namaInd, latVal, lngVal, namaSiswaOpsional = "") {
+        // Helper untuk mengunci permanen koordinat GPS Industri Utama atau Cabang Industri (Lokasi Kedua)
+        window.kunciKoordinatGpsIndustriPermanen = function(namaInd, latVal, lngVal, namaSiswaOpsional = "", isCabangBaru = false, namaCabang = "") {
             const fixedLat = parseFloat(latVal).toFixed(6).toString();
             const fixedLng = parseFloat(lngVal).toFixed(6).toString();
             if (!Array.isArray(window.cloudState.industri)) window.cloudState.industri = [];
@@ -2032,12 +2053,32 @@
             let foundInd = false;
             window.cloudState.industri.forEach(ind => {
                 if (ind && window.isIndustriMatch(ind.nama, namaInd)) {
-                    ind.lat = fixedLat;
-                    ind.lng = fixedLng;
-                    ind.radius = (ind.radius && parseInt(ind.radius) >= 100) ? parseInt(ind.radius) : 100;
-                    ind.gpsLocked = true;
-                    ind.gpsLockedAt = Date.now();
                     foundInd = true;
+                    ind.radius = (ind.radius && parseInt(ind.radius) >= 100) ? parseInt(ind.radius) : 100;
+                    if (isCabangBaru) {
+                        // Simpan sebagai titik cabang tambahan agar titik industri utama siswa lain tidak terganggu
+                        if (!Array.isArray(ind.cabangCoords)) ind.cabangCoords = [];
+                        ind.cabangCoords.push({
+                            namaCabang: namaCabang || `Cabang ${ind.nama}`,
+                            lat: fixedLat,
+                            lng: fixedLng,
+                            radius: 100,
+                            siswa: namaSiswaOpsional || "",
+                            lockedAt: Date.now()
+                        });
+                        // Jika industri utama belum pernah dikunci sama sekali, isi juga titik utamanya
+                        if (window.isDefaultUncalibratedCoords(ind.lat, ind.lng, ind)) {
+                            ind.lat = fixedLat;
+                            ind.lng = fixedLng;
+                            ind.gpsLocked = true;
+                            ind.gpsLockedAt = Date.now();
+                        }
+                    } else {
+                        ind.lat = fixedLat;
+                        ind.lng = fixedLng;
+                        ind.gpsLocked = true;
+                        ind.gpsLockedAt = Date.now();
+                    }
                 }
             });
 
@@ -2054,16 +2095,30 @@
                     lat: fixedLat,
                     lng: fixedLng,
                     gpsLocked: true,
-                    gpsLockedAt: Date.now()
+                    gpsLockedAt: Date.now(),
+                    cabangCoords: isCabangBaru ? [{
+                        namaCabang: namaCabang || `Cabang ${namaInd}`,
+                        lat: fixedLat,
+                        lng: fixedLng,
+                        radius: 100,
+                        siswa: namaSiswaOpsional || "",
+                        lockedAt: Date.now()
+                    }] : []
                 });
             }
 
-            // Simpan juga di objek siswa terkait agar saat Presensi Pulang selalu terbaca terkunci
+            // Simpan titik terkunci spesifik pada profil siswa agar saat Presensi Pulang & hari berikutnya langsung terkunci
             if (Array.isArray(window.cloudState.siswa)) {
                 window.cloudState.siswa.forEach(s => {
                     if (!s) return;
-                    if ((namaSiswaOpsional && window.isNameMatch(s.nama, namaSiswaOpsional)) ||
-                        (s.industri && window.isIndustriMatch(s.industri, namaInd))) {
+                    if (namaSiswaOpsional && window.isNameMatch(s.nama, namaSiswaOpsional)) {
+                        s.lockedLat = fixedLat;
+                        s.lockedLng = fixedLng;
+                        s.gpsLocked = true;
+                        if (isCabangBaru && namaCabang) {
+                            s.cabangIndustri = namaCabang;
+                        }
+                    } else if (!isCabangBaru && s.industri && window.isIndustriMatch(s.industri, namaInd) && !s.gpsLocked) {
                         s.lockedLat = fixedLat;
                         s.lockedLng = fixedLng;
                         s.gpsLocked = true;
@@ -2074,33 +2129,70 @@
             try {
                 const mapStr = localStorage.getItem("SIP_PKL_LOCKED_GPS_MAP") || "{}";
                 const mapObj = JSON.parse(mapStr);
-                const key = window.normalizeTextCompact(namaInd);
-                if (key) {
-                    mapObj[key] = { lat: fixedLat, lng: fixedLng, radius: 100, lockedAt: Date.now() };
-                    localStorage.setItem("SIP_PKL_LOCKED_GPS_MAP", JSON.stringify(mapObj));
+                const indKey = window.normalizeTextCompact(namaInd);
+                const studentKey = namaSiswaOpsional ? `${indKey}__${window.normalizeTextCompact(namaSiswaOpsional)}` : "";
+                if (studentKey) {
+                    mapObj[studentKey] = {
+                        lat: fixedLat,
+                        lng: fixedLng,
+                        radius: 100,
+                        namaCabang: namaCabang || "",
+                        lockedAt: Date.now()
+                    };
                 }
+                if (indKey && (!isCabangBaru || !mapObj[indKey])) {
+                    mapObj[indKey] = { lat: fixedLat, lng: fixedLng, radius: 100, lockedAt: Date.now() };
+                }
+                localStorage.setItem("SIP_PKL_LOCKED_GPS_MAP", JSON.stringify(mapObj));
             } catch (e) {}
         };
 
         window.ambilKoordinatTerkunciIndustri = function(namaInd, dataIndObj, namaSiswaOpsional = "") {
-            // 1. Cek dari cache penguncian lokal perangkat terlebih dahulu
+            const indKey = window.normalizeTextCompact(namaInd);
+            const studentKey = (indKey && namaSiswaOpsional) ? `${indKey}__${window.normalizeTextCompact(namaSiswaOpsional)}` : "";
+
+            // 1. Prioritas Utama: Cek apakah siswa ini memiliki titik lokasi spesifik (termasuk jika dipindah ke Cabang Industri AB) di Master Siswa
+            if (namaSiswaOpsional && Array.isArray(window.cloudState.siswa)) {
+                const sMaster = window.cloudState.siswa.find(s => s && window.isNameMatch(s.nama, namaSiswaOpsional));
+                if (sMaster && sMaster.gpsLocked && sMaster.lockedLat && sMaster.lockedLng &&
+                    !window.isDefaultUncalibratedCoords(sMaster.lockedLat, sMaster.lockedLng, { gpsLocked: true })) {
+                    return {
+                        lat: parseFloat(sMaster.lockedLat),
+                        lng: parseFloat(sMaster.lockedLng),
+                        radius: (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100,
+                        isLocked: true,
+                        namaCabang: sMaster.cabangIndustri || ""
+                    };
+                }
+            }
+
+            // 2. Cek dari cache penguncian lokal perangkat (spesifik siswa maupun industri)
             try {
                 const mapStr = localStorage.getItem("SIP_PKL_LOCKED_GPS_MAP");
-                if (mapStr && namaInd) {
+                if (mapStr) {
                     const mapObj = JSON.parse(mapStr);
-                    const key = window.normalizeTextCompact(namaInd);
-                    if (key && mapObj[key] && mapObj[key].lat && mapObj[key].lng) {
+                    if (studentKey && mapObj[studentKey] && mapObj[studentKey].lat && mapObj[studentKey].lng) {
                         return {
-                            lat: parseFloat(mapObj[key].lat),
-                            lng: parseFloat(mapObj[key].lng),
-                            radius: parseInt(mapObj[key].radius) || 100,
-                            isLocked: true
+                            lat: parseFloat(mapObj[studentKey].lat),
+                            lng: parseFloat(mapObj[studentKey].lng),
+                            radius: parseInt(mapObj[studentKey].radius) || 100,
+                            isLocked: true,
+                            namaCabang: mapObj[studentKey].namaCabang || ""
+                        };
+                    }
+                    if (indKey && mapObj[indKey] && mapObj[indKey].lat && mapObj[indKey].lng) {
+                        return {
+                            lat: parseFloat(mapObj[indKey].lat),
+                            lng: parseFloat(mapObj[indKey].lng),
+                            radius: parseInt(mapObj[indKey].radius) || 100,
+                            isLocked: true,
+                            namaCabang: ""
                         };
                     }
                 }
             } catch (e) {}
 
-            // 2. Cek apakah di hari ini atau sebelumnya siswa sudah pernah Presensi Masuk dengan koordinat valid
+            // 3. Cek apakah siswa sudah pernah Presensi Masuk dengan koordinat valid
             if (namaSiswaOpsional || namaInd) {
                 const riwayatMasuk = (window.cloudState.absensi || []).find(a =>
                     a && a.latitude && a.longitude &&
@@ -2112,18 +2204,19 @@
                     const rLat = parseFloat(riwayatMasuk.latitude);
                     const rLng = parseFloat(riwayatMasuk.longitude);
                     if (!isNaN(rLat) && !isNaN(rLng)) {
-                        window.kunciKoordinatGpsIndustriPermanen(namaInd, rLat, rLng, namaSiswaOpsional);
+                        window.kunciKoordinatGpsIndustriPermanen(namaInd, rLat, rLng, namaSiswaOpsional, false);
                         return {
                             lat: rLat,
                             lng: rLng,
                             radius: (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100,
-                            isLocked: true
+                            isLocked: true,
+                            namaCabang: ""
                         };
                     }
                 }
             }
 
-            // 3. Cek dari Master Industri
+            // 4. Cek dari Master Industri
             const rawLat = parseFloat(dataIndObj?.lat) || 0.45612;
             const rawLng = parseFloat(dataIndObj?.lng) || 121.94210;
             const rawRadius = (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100;
@@ -2133,7 +2226,8 @@
                 lat: rawLat,
                 lng: rawLng,
                 radius: rawRadius,
-                isLocked: !uncalibrated
+                isLocked: !uncalibrated,
+                namaCabang: ""
             };
         };
 
@@ -3642,7 +3736,7 @@
                             🚀 AKSES CEPAT TANPA LOGIN ULANG & LAMAN VIDEO YOUTUBE:
                         </div>
                         <button type="button" onclick="window.generateKodeResetGpsAdmin()" class="btn-action btn-amber" style="width: 100%; padding: 11px 16px; font-size: 12px; font-weight: 900; border-radius: 12px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);">
-                            <span>🛰️ GENERATE KODE AKSES RESET GPS (2 JAM)</span>
+                            <span>🛰️ GENERATE KODE AKSES RESET / CABANG GPS (12 JAM)</span>
                             <span>➔</span>
                         </button>
                         <button type="button" onclick="window.masukPintasanPanitiaDariAdmin()" class="btn-action btn-emerald" style="width: 100%; padding: 13px 16px; font-size: 13px; font-weight: 950; border-radius: 14px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 6px 18px rgba(16, 185, 129, 0.3);">
@@ -5639,6 +5733,17 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- FITUR ALTERNATIF: PINDAH / GANTI TITIK KOORDINAT CABANG INDUSTRI (DENGAN KODE AKSES 12 JAM) -->
+                <div style="margin-top: 12px; padding-top: 10px; border-top: 1.5px dashed #bae6fd; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                    <div style="font-size: 10.5px; color: #334155; font-weight: 750; flex: 1; min-width: 180px;">
+                        🏢 Dipindahkan ke <b>Cabang Industri</b> atau titik GPS meleset?
+                        ${placementInfo.siswaObj && placementInfo.siswaObj.cabangIndustri ? `<div style="font-size:10px; color:#15803d; font-weight:850; margin-top:2px;">📍 Lokasi Aktif: ${placementInfo.siswaObj.cabangIndustri}</div>` : ''}
+                    </div>
+                    <button type="button" onclick="window.bukaModalAlternatifGantiTitikCabang('Masuk')" class="btn-action btn-amber" style="font-size: 10.5px; font-weight: 900; padding: 7px 12px; border-radius: 10px; box-shadow: 0 3px 8px rgba(245, 158, 11, 0.25);">
+                        🔄 Pindah / Ganti Titik Cabang Industri
+                    </button>
+                </div>
             </div>
 
             <!-- FITUR BARU DI DASHBOARD SISWA: UPLOAD DOKUMENTASI KEGIATAN (LINK G-DRIVE) -->
@@ -5818,12 +5923,13 @@
                         <div>📏 <b>Jarak Terdeteksi:</b> <span id="textJarakGpsNotif" style="color:#dc2626; font-weight:900;">-</span></div>
                     </div>
                     <div style="font-size:10px; color:#64748b; margin-top:10px; line-height:1.4;">
-                        <i>*Apabila titik lokasi industri sebelumnya salah atau pindah gedung, masukkan <b>Kode Akses Admin</b> di bawah untuk memperbarui titik lokasi industri.</i>
+                        <i>*Apabila Anda dipindahkan oleh pimpinan industri ke <b>Cabang Industri (Lokasi Ke-2)</b> atau titik lokasi sebelumnya meleset, masukkan <b>Kode Akses (Aktif 12 Jam)</b> di bawah untuk mengambil & mengunci titik lokasi baru:</i>
                     </div>
                     <div style="margin-top:10px; padding-top:10px; border-top:1.5px dashed #fca5a5; display:flex; flex-direction:column; gap:6px;">
-                        <input type="text" id="inputKodeResetGps" class="form-control" placeholder="Masukkan Kode Akses Admin (Jika Ingin Reset Titik)" style="font-size:11px; padding:8px; text-align:center; font-weight:800; letter-spacing:1px; text-transform:uppercase;">
+                        <input type="text" id="inputNamaCabangGps" class="form-control" placeholder="Nama Cabang / Lokasi Baru (Contoh: Cabang Industri AB)" style="font-size:11px; padding:8px; font-weight:750;">
+                        <input type="text" id="inputKodeResetGps" class="form-control" placeholder="Masukkan Kode Akses Admin (Aktif 12 Jam)" style="font-size:11px; padding:8px; text-align:center; font-weight:800; letter-spacing:1px; text-transform:uppercase;">
                         <button type="button" onclick="window.verifikasiKodeResetGpsSiswa('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${dataInd.nama.replace(/'/g, "\\'")}')" class="btn-action btn-blue" style="padding:8px 14px; font-size:11px; font-weight:800;">
-                            🔄 Cek & Perbarui Ulang Titik GPS Industri
+                            🔄 Kunci Titik Lokasi Cabang / Industri Baru
                         </button>
                     </div>
                 </div>
@@ -5846,6 +5952,13 @@
                         📁 Unggah
                         <input type="file" accept="image/*" capture="user" style="display:none;" onchange="window.handleUploadSelfieFallback(this)">
                     </label>
+                </div>
+
+                <!-- Pintasan Alternatif Ganti Titik Koordinat Cabang Industri -->
+                <div style="margin-bottom:10px; text-align:center;">
+                    <button type="button" onclick="window.bukaModalAlternatifGantiTitikCabang('${tipeAbsen}')" style="background:none; border:none; color:#0284c7; font-size:11px; font-weight:800; cursor:pointer; text-decoration:underline;">
+                        🔄 Pindah ke Cabang Industri (Lokasi Ke-2)? Klik untuk Ganti Titik Koordinat (Kode Akses)
+                    </button>
                 </div>
 
                 <div style="display:flex; justify-content:flex-end; gap:8px;">
@@ -5877,7 +5990,7 @@
             const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
             const namaSiswaResmi = placementInfo.namaSiswa || profile.nama;
 
-            // Ambil status koordinat terkunci paling mutakhir untuk industri ini
+            // Ambil status koordinat terkunci paling mutakhir untuk siswa/industri ini
             const latestLocked = window.ambilKoordinatTerkunciIndustri(targetNamaInd, placementInfo.industriObj, namaSiswaResmi);
             let activeTargetLat = latestLocked.lat || targetLat;
             let activeTargetLng = latestLocked.lng || targetLng;
@@ -5922,7 +6035,52 @@
                 return;
             }
 
-            // KONDISI HADIR DI LOKASI INDUSTRI
+            // KHUSUS PRESENSI PULANG:
+            // Karena titik lokasi sudah diambil & dikunci pada saat Presensi Masuk, untuk Presensi Pulang TIDAK PERLU lagi
+            // mengambil ulang titik lokasi GPS. Langsung gunakan titik koordinat yang sudah terkunci saat Presensi Masuk dan buka kamera selfie!
+            if (tipeAbsen === 'Pulang') {
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                const absenMasukHariIni = (window.cloudState.absensi || []).find(a =>
+                    a && a.tanggal === todayStr && a.tipe_absen === 'Masuk' &&
+                    (window.isNameMatch(a.nama, namaSiswaResmi) || window.isNameMatch(a.nama, profile.nama))
+                );
+
+                if (absenMasukHariIni || isAlreadyLocked) {
+                    const lockedPulangLat = (absenMasukHariIni && absenMasukHariIni.latitude) ? parseFloat(absenMasukHariIni.latitude) : activeTargetLat;
+                    const lockedPulangLng = (absenMasukHariIni && absenMasukHariIni.longitude) ? parseFloat(absenMasukHariIni.longitude) : activeTargetLng;
+
+                    window.currentSelfieLocation = {
+                        lat: lockedPulangLat,
+                        lng: lockedPulangLng,
+                        targetLat: lockedPulangLat,
+                        targetLng: lockedPulangLng,
+                        distance: 0,
+                        inRadius: true
+                    };
+
+                    if (notifBox) notifBox.style.display = 'none';
+                    if (cameraWrap) cameraWrap.style.display = 'flex';
+                    if (btnCamWrap) btnCamWrap.style.display = 'flex';
+                    if (btnSimpan) {
+                        btnSimpan.disabled = false;
+                        btnSimpan.style.opacity = '1';
+                    }
+                    if (badgeLock) {
+                        badgeLock.style.background = "#dcfce7";
+                        badgeLock.style.color = "#15803d";
+                        badgeLock.innerText = "🔒 Menggunakan Titik Lokasi Presensi Masuk";
+                    }
+                    if (badgeStatus) {
+                        badgeStatus.className = "badge-status badge-green";
+                        badgeStatus.innerText = "🟢 TITIK LOKASI TERKUNCI DARI ABSEN MASUK";
+                    }
+                    window.mulaiStreamKameraSelfie();
+                    return;
+                }
+            }
+
+            // KONDISI HADIR DI LOKASI INDUSTRI (PRESENSI MASUK)
             window.hentikanStreamKamera();
             if (cameraWrap) cameraWrap.style.display = 'none';
             if (btnCamWrap) btnCamWrap.style.display = 'none';
@@ -5939,39 +6097,36 @@
                         const curLat = pos.coords.latitude;
                         const curLng = pos.coords.longitude;
 
-                        // FITUR 1: JIKA INDUSTRI BELUM PERNAH DIKUNCI TITIK LOKASINYA (MASIH KOORDINAT DEFAULT),
-                        // OTOMATIS KUNCI TITIK LOKASI SAAT INI SEBAGAI TITIK AKURAT INDUSTRI TANPA PERLU KODE AKSES!
+                        // PENGAMBILAN TITIK LOKASI INDUSTRI UTAMA SECARA OTOMATIS (TANPA KODE AKSES):
+                        // Cukup berdiri di industri utama penempatan lalu menekan Presensi Masuk, maka titik koordinat
+                        // langsung tersimpan & terkunci otomatis dan kamera selfie langsung berfungsi!
                         if (!isAlreadyLocked) {
                             activeTargetLat = curLat;
                             activeTargetLng = curLng;
                             isAlreadyLocked = true;
-                            window.kunciKoordinatGpsIndustriPermanen(targetNamaInd, curLat, curLng, namaSiswaResmi);
+                            window.kunciKoordinatGpsIndustriPermanen(targetNamaInd, curLat, curLng, namaSiswaResmi, false);
                             window.simpanDatabasePersisten(true);
                             if (badgeLock) {
                                 badgeLock.style.background = "#dcfce7";
                                 badgeLock.style.color = "#15803d";
-                                badgeLock.innerText = "🔒 Titik Lokasi Industri Terkunci Otomatis";
+                                badgeLock.innerText = "🔒 Titik Lokasi Industri Utama Terkunci Otomatis";
                             }
                         }
 
                         let distance = window.hitungJarakMeterHaversine(curLat, curLng, activeTargetLat, activeTargetLng);
 
-                        // FITUR 2: UNTUK PRESENSI PULANG, JIKA SISWA SUDAH PRESENSI MASUK HARI INI DI INDUSTRI TERSEBUT,
-                        // CEK JUGA JARAK TERHADAP TITIK PRESENSI MASUK HARI INI AGAR TIDAK PERLU KODE AKSES LAGI
-                        if (tipeAbsen === 'Pulang' && distance > activeRadius) {
-                            const now = new Date();
-                            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                            const absenMasukHariIni = (window.cloudState.absensi || []).find(a =>
-                                a && a.tanggal === todayStr && a.tipe_absen === 'Masuk' &&
-                                (window.isNameMatch(a.nama, namaSiswaResmi) || window.isNameMatch(a.nama, profile.nama)) &&
-                                a.latitude && a.longitude
-                            );
-                            if (absenMasukHariIni) {
-                                const distFromMasuk = window.hitungJarakMeterHaversine(curLat, curLng, parseFloat(absenMasukHariIni.latitude), parseFloat(absenMasukHariIni.longitude));
-                                if (distFromMasuk <= activeRadius) {
-                                    distance = distFromMasuk;
-                                    activeTargetLat = parseFloat(absenMasukHariIni.latitude);
-                                    activeTargetLng = parseFloat(absenMasukHariIni.longitude);
+                        // Cek juga apakah siswa berada di salah satu titik Cabang Industri yang sudah terdaftar pada industri ini
+                        const indMasterObj = (window.cloudState.industri || []).find(i => i && window.isIndustriMatch(i.nama, targetNamaInd));
+                        if (distance > activeRadius && indMasterObj && Array.isArray(indMasterObj.cabangCoords)) {
+                            for (const cb of indMasterObj.cabangCoords) {
+                                if (cb && cb.lat && cb.lng) {
+                                    const dCabang = window.hitungJarakMeterHaversine(curLat, curLng, parseFloat(cb.lat), parseFloat(cb.lng));
+                                    if (dCabang <= (parseInt(cb.radius) || 100)) {
+                                        distance = dCabang;
+                                        activeTargetLat = parseFloat(cb.lat);
+                                        activeTargetLng = parseFloat(cb.lng);
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -5988,8 +6143,8 @@
                         };
 
                         if (isInRadius) {
-                            // Pastikan titik industri tetap terkunci kuat untuk Presensi Pulang nanti
-                            window.kunciKoordinatGpsIndustriPermanen(targetNamaInd, activeTargetLat, activeTargetLng, namaSiswaResmi);
+                            // Pastikan titik industri tetap terkunci untuk Presensi Pulang nanti
+                            window.kunciKoordinatGpsIndustriPermanen(targetNamaInd, activeTargetLat, activeTargetLng, namaSiswaResmi, false);
 
                             if (notifBox) notifBox.style.display = 'none';
                             if (cameraWrap) cameraWrap.style.display = 'flex';
@@ -6004,7 +6159,7 @@
                             }
                             window.mulaiStreamKameraSelfie();
                         } else {
-                            // Di luar radius 100m dari titik industri yang sudah terkunci: baru tampilkan opsi Kode Akses
+                            // Di luar radius 100m dari titik industri utama: tampilkan opsi Kode Akses untuk pindah ke Cabang Industri AB
                             window.hentikanStreamKamera();
                             if (cameraWrap) cameraWrap.style.display = 'none';
                             if (btnCamWrap) btnCamWrap.style.display = 'none';
@@ -6025,46 +6180,10 @@
                         }
                     },
                     err => {
-                        // Jika pada Presensi Pulang sinyal GPS HP sempat lambat padahal Presensi Masuk hari ini sudah mengunci titik lokasi,
-                        // gunakan titik terkunci dari Presensi Masuk hari ini agar siswa tidak terhambat
-                        const now = new Date();
-                        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                        const absenMasukHariIni = (window.cloudState.absensi || []).find(a =>
-                            a && a.tanggal === todayStr && a.tipe_absen === 'Masuk' &&
-                            (window.isNameMatch(a.nama, namaSiswaResmi) || window.isNameMatch(a.nama, profile.nama)) &&
-                            a.latitude && a.longitude
-                        );
-
-                        if (tipeAbsen === 'Pulang' && (absenMasukHariIni || isAlreadyLocked)) {
-                            const fallbackLat = absenMasukHariIni ? parseFloat(absenMasukHariIni.latitude) : activeTargetLat;
-                            const fallbackLng = absenMasukHariIni ? parseFloat(absenMasukHariIni.longitude) : activeTargetLng;
-                            window.currentSelfieLocation = {
-                                lat: fallbackLat,
-                                lng: fallbackLng,
-                                targetLat: fallbackLat,
-                                targetLng: fallbackLng,
-                                distance: 0,
-                                inRadius: true
-                            };
-                            if (notifBox) notifBox.style.display = 'none';
-                            if (cameraWrap) cameraWrap.style.display = 'flex';
-                            if (btnCamWrap) btnCamWrap.style.display = 'flex';
-                            if (btnSimpan) {
-                                btnSimpan.disabled = false;
-                                btnSimpan.style.opacity = '1';
-                            }
-                            if (badgeStatus) {
-                                badgeStatus.className = "badge-status badge-green";
-                                badgeStatus.innerText = `🟢 TITIK INDUSTRI TERKUNCI (SIAP PRESENSI PULANG)`;
-                            }
-                            window.mulaiStreamKameraSelfie();
-                            return;
-                        }
-
                         window.hentikanStreamKamera();
                         if (cameraWrap) cameraWrap.style.display = 'none';
                         if (btnCamWrap) btnCamWrap.style.display = 'none';
-                        if (textJarak) textJarak.innerText = "Satelit GPS belum merespons (Klik Refresh GPS atau masukkan Kode Akses)";
+                        if (textJarak) textJarak.innerText = "Satelit GPS belum merespons (Klik Refresh GPS atau gunakan Kode Akses Alternatif)";
                         if (notifBox) notifBox.style.display = 'block';
                         if (btnSimpan) {
                             btnSimpan.disabled = true;
@@ -6217,8 +6336,11 @@
             }
 
             // 1. Kompres otomatis & unggah file foto ke Supabase Storage Bucket (foto_presensi / berkas_pkl)
-            // agar database utama hanya menyimpan URL link gambar (bebas Base64 & anti-limit)
+            // dan HANYA simpan link URL publiknya di baris database (TANPA Base64 di database)
             const uploadedFotoUrl = await window.uploadFotoKeSupabaseStorage(window.tempSelfieBase64, `selfie_${tipeAbsen.toLowerCase()}`);
+            const cleanStorageLink = (uploadedFotoUrl && (uploadedFotoUrl.startsWith('http://') || uploadedFotoUrl.startsWith('https://')))
+                ? uploadedFotoUrl
+                : "";
 
             const itemAbsen = {
                 id: "abs_" + Date.now(),
@@ -6233,8 +6355,8 @@
                 jarak_meter: window.currentSelfieLocation ? window.currentSelfieLocation.distance : 0,
                 latitude: window.currentSelfieLocation ? window.currentSelfieLocation.lat : indLat,
                 longitude: window.currentSelfieLocation ? window.currentSelfieLocation.lng : indLng,
-                foto_url: uploadedFotoUrl,
-                foto_selfie: uploadedFotoUrl
+                foto_url: cleanStorageLink,
+                foto_selfie: cleanStorageLink
             };
 
             window.cloudState.absensi.unshift(itemAbsen);
@@ -6246,7 +6368,7 @@
             }
 
             window.tutupModalPresensiSelfie();
-            window.showModalInfo("Presensi Berhasil ✅", `Presensi <b>${tipeAbsen}</b> [${katText}] berhasil dicatat pukul <b>${jamStr} WITA</b>.<br><span style="font-size:11px; color:#16a34a; font-weight:800;">✓ Foto selfie telah dikompres otomatis & disimpan terpisah ke Storage Cloud.</span>`);
+            window.showModalInfo("Presensi Berhasil ✅", `Presensi <b>${tipeAbsen}</b> [${katText}] berhasil dicatat pukul <b>${jamStr} WITA</b>.<br><span style="font-size:11px; color:#16a34a; font-weight:800;">✓ File foto selfie telah disimpan di Supabase Storage & link gambar telah ditulis di baris database.</span>`);
             window.openFeature("dashboard", "Beranda");
         };
 
@@ -9723,9 +9845,10 @@
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">PRESENSI HARIAN &bull; ${namaResmi}${kls}</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📍 Riwayat Presensi Saya (${myAbsen.length} Catatan)</h3>
                     </div>
-                    <div style="display:flex; gap:6px;">
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Masuk')" class="btn-action btn-blue">📸 Absen Masuk</button>
                         <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang')" class="btn-action btn-emerald">🚪 Absen Pulang</button>
+                        <button onclick="window.bukaModalAlternatifGantiTitikCabang('Masuk')" class="btn-action btn-amber" title="Gunakan jika dipindahkan ke Cabang Industri">🔄 Pindah Titik Cabang</button>
                     </div>
                 </div>
 
@@ -11733,15 +11856,61 @@
             window.cloudState.gpsResetAccess = {
                 code: newCode,
                 createdAt: now,
-                expiresAt: now + (2 * 60 * 60 * 1000), // 2 Jam
+                expiresAt: now + (12 * 60 * 60 * 1000), // Masa aktif 12 Jam
                 createdBy: "Admin Utama"
             };
             window.simpanDatabasePersisten(true);
-            window.showModalInfo("Kode Akses Reset GPS Berhasil Dibuat 🛰️", `Kode Akses: <b style="font-size:18px; color:#0284c7;">${newCode}</b><br><br>Kode ini berlaku untuk seluruh siswa di semua industri selama <b>2 Jam</b> (hingga ${new Date(window.cloudState.gpsResetAccess.expiresAt).toLocaleTimeString('id-ID')} WITA).<br><br>Silakan bagikan kode ini kepada siswa yang membutuhkan untuk memperbaiki titik lokasi industri mereka melalui aplikasi.`);
+            window.showModalInfo(
+                "Kode Akses Titik GPS (12 Jam) Berhasil Dibuat 🛰️",
+                `Kode Akses: <b style="font-size:18px; color:#0284c7;">${newCode}</b><br><br>` +
+                `Masa Aktif: <b>12 Jam</b> (Berlaku hingga <b>${new Date(window.cloudState.gpsResetAccess.expiresAt).toLocaleString('id-ID')} WITA</b>).<br><br>` +
+                `<i>Catatan: Kode akses ini digunakan sebagai alternatif apabila siswa dipindahkan oleh pimpinan DUDI ke <b>Cabang Industri (Lokasi Ke-2)</b> atau jika titik lokasi tidak dapat dikumpulkan secara otomatis.</i>`
+            );
+        };
+
+        // Modal khusus alternatif di Dashboard Siswa untuk mengganti titik koordinat ke Cabang Industri (Lokasi Ke-2) menggunakan Kode Akses 12 Jam
+        window.bukaModalAlternatifGantiTitikCabang = function(tipeAbsen = 'Masuk') {
+            window.hentikanStreamKamera();
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+            const namaInd = (placementInfo.industri && placementInfo.industri !== 'Belum Ditentukan') ? placementInfo.industri : "Industri Penempatan";
+            const dataInd = placementInfo.industriObj || { nama: namaInd, lat: "0.45612", lng: "121.94210", radius: 100 };
+            const lockedInfo = window.ambilKoordinatTerkunciIndustri(namaInd, dataInd, placementInfo.namaSiswa || profile.nama);
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">🔄 Alternatif Ganti Titik Koordinat / Cabang Industri</h3>
+                <p style="font-size:11px; color:#475569; margin-bottom:12px; line-height:1.45;">
+                    Fitur ini digunakan apabila Anda dipindahkan oleh pimpinan DUDI dari <b>${namaInd}</b> ke <b>Cabang Industri (Lokasi Ke-2)</b>, atau jika titik lokasi gagal dikunci otomatis.
+                </p>
+
+                <div style="background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:12px; padding:10px; font-size:11px; color:#0f172a; margin-bottom:12px;">
+                    <div>🏢 <b>Industri Utama:</b> ${namaInd}</div>
+                    <div>📍 <b>Titik Terkunci Saat Ini:</b> ${lockedInfo.lat.toFixed(5)}, ${lockedInfo.lng.toFixed(5)} ${lockedInfo.namaCabang ? `(${lockedInfo.namaCabang})` : ''}</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Nama Cabang Industri / Lokasi Baru (Opsional):</label>
+                    <input type="text" id="inputNamaCabangGps" class="form-control" placeholder="Contoh: Cabang ${namaInd} (Unit 2)" value="${lockedInfo.namaCabang || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Kode Akses Otorisasi (Masa Aktif 12 Jam):</label>
+                    <input type="text" id="inputKodeResetGps" class="form-control" placeholder="Masukkan Kode Akses (Contoh: GPS-XXXXXX)" style="text-align:center; font-weight:900; letter-spacing:1px; text-transform:uppercase;">
+                    <div style="font-size:10px; color:#64748b; margin-top:4px;">Minta Kode Akses (aktif 12 jam) kepada Admin Utama / Panitia PKL.</div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button type="button" onclick="window.verifikasiKodeResetGpsSiswa('${tipeAbsen}', ${lockedInfo.lat}, ${lockedInfo.lng}, ${lockedInfo.radius}, '${namaInd.replace(/'/g, "\\'")}')" class="btn-action btn-blue" style="font-weight:900; padding:10px 16px;">
+                        🔓 Verifikasi & Ambil Titik Lokasi Baru
+                    </button>
+                </div>
+            `);
         };
 
         window.verifikasiKodeResetGpsSiswa = function(tipeAbsen, indLat, indLng, indRadius, namaInd) {
             const rawCode = document.getElementById("inputKodeResetGps")?.value.trim().toUpperCase();
+            const namaCabang = document.getElementById("inputNamaCabangGps")?.value.trim() || `Cabang ${namaInd}`;
             if (!rawCode) return window.showModalInfo("Kode Kosong", "Silakan masukkan kode akses dari Admin Utama.");
             
             const access = window.cloudState.gpsResetAccess;
@@ -11754,20 +11923,23 @@
             }
             
             if (Date.now() > access.expiresAt) {
-                return window.showModalInfo("Kode Kedaluwarsa ⏳", "Masa berlaku kode akses ini (2 jam) telah habis. Silakan minta Admin Utama untuk membuatkan kode baru.");
+                return window.showModalInfo("Kode Kedaluwarsa ⏳", "Masa berlaku kode akses ini (12 jam) telah habis. Silakan minta Admin Utama untuk membuatkan kode baru.");
             }
             
-            // Kode Valid, Lanjut ke Form Real GPS Reset
-            window.bukaFormRealGpsReset(tipeAbsen, indLat, indLng, indRadius, namaInd);
+            // Kode Valid, Lanjut ke Form Real GPS Reset / Pengambilan Titik Cabang Industri
+            window.bukaFormRealGpsReset(tipeAbsen, indLat, indLng, indRadius, namaInd, namaCabang);
         };
 
-        window.bukaFormRealGpsReset = function(tipeAbsen, indLat, indLng, indRadius, namaInd) {
+        window.bukaFormRealGpsReset = function(tipeAbsen, indLat, indLng, indRadius, namaInd, namaCabang = "") {
+            const labelLokasiBaru = namaCabang || `Cabang ${namaInd}`;
             window.openDynamicModal(`
-                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">🔄 Perbarui Titik GPS Secara Akurat</h3>
-                <p style="font-size:11px; color:#475569; margin-bottom:12px;">Pastikan Anda benar-benar berada di lokasi <b>${namaInd}</b> saat ini. Sistem akan mengunci satelit pada koordinat perangkat Anda dan menyimpannya ke pangkalan data industri.</p>
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">🛰️ Kunci Titik Koordinat Cabang / Lokasi Baru</h3>
+                <p style="font-size:11px; color:#475569; margin-bottom:12px;">
+                    Pastikan Anda sedang berdiri di <b>${labelLokasiBaru}</b> (${namaInd}). Sistem akan mengunci koordinat satelit perangkat Anda untuk Presensi Masuk & Pulang.
+                </p>
                 
                 <div style="background:#f8fafc; border:1px solid #bfdbfe; border-radius:12px; padding:10px; margin-bottom:12px;">
-                    <div style="font-size:10px; font-weight:800; color:#64748b; margin-bottom:4px;">KOORDINAT PERANGKAT SAAT INI:</div>
+                    <div style="font-size:10px; font-weight:800; color:#64748b; margin-bottom:4px;">KOORDINAT CABANG / LOKASI SAAT INI:</div>
                     <div id="displayRealGpsLat" style="font-size:14px; font-weight:900; color:#0f172a;">Lat: Mencari...</div>
                     <div id="displayRealGpsLng" style="font-size:14px; font-weight:900; color:#0f172a;">Lng: Mencari...</div>
                     <div id="displayRealGpsAkurasi" style="font-size:10px; color:#059669; margin-top:4px; font-weight:800;">Akurasi: -</div>
@@ -11775,10 +11947,11 @@
                 
                 <input type="hidden" id="hiddenNewLat" value="">
                 <input type="hidden" id="hiddenNewLng" value="">
+                <input type="hidden" id="hiddenNamaCabangBaru" value="${labelLokasiBaru.replace(/"/g, '&quot;')}">
 
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
                     <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button id="btnSimpanRealGps" onclick="window.simpanTitikGpsIndustriBaru('${tipeAbsen}', '${namaInd.replace(/'/g, "\\'")}')" class="btn-action btn-blue" disabled style="opacity:0.5;">🔒 Kunci & Simpan Titik Baru</button>
+                    <button id="btnSimpanRealGps" onclick="window.simpanTitikGpsIndustriBaru('${tipeAbsen}', '${namaInd.replace(/'/g, "\\'")}')" class="btn-action btn-blue" disabled style="opacity:0.5;">🔒 Kunci & Simpan Titik Cabang</button>
                 </div>
             `);
 
@@ -11822,6 +11995,7 @@
         window.simpanTitikGpsIndustriBaru = function(tipeAbsen, namaInd) {
             const newLat = document.getElementById("hiddenNewLat")?.value;
             const newLng = document.getElementById("hiddenNewLng")?.value;
+            const namaCabang = document.getElementById("hiddenNamaCabangBaru")?.value || `Cabang ${namaInd}`;
             
             if (!newLat || !newLng) return window.showModalInfo("Belum Ada Titik", "Tunggu hingga sinyal GPS perangkat terkunci.");
             
@@ -11829,13 +12003,18 @@
             const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
             const namaSiswaResmi = placementInfo.namaSiswa || profile.nama;
 
-            window.kunciKoordinatGpsIndustriPermanen(namaInd, newLat, newLng, namaSiswaResmi);
+            // Simpan sebagai titik cabang/lokasi kedua milik siswa ini tanpa merusak titik industri utama siswa lain
+            window.kunciKoordinatGpsIndustriPermanen(namaInd, newLat, newLng, namaSiswaResmi, true, namaCabang);
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
-            window.showModalInfo("Titik GPS Diperbarui & Terkunci 🔒", `Koordinat industri <b>${namaInd}</b> telah berhasil diperbarui dan dikunci permanen ke posisi Anda saat ini.<br><br>Untuk <b>Presensi Masuk</b> maupun <b>Presensi Pulang</b> selanjutnya, Anda tidak perlu lagi memasukkan kode akses.`);
+            window.showModalInfo(
+                "Titik Lokasi Cabang Berhasil Dikunci 🔒",
+                `Koordinat <b>${namaCabang}</b> (${namaInd}) telah berhasil disimpan dan dikunci untuk akun Anda.<br><br>` +
+                `Kamera selfie akan langsung terbuka untuk <b>Presensi Masuk</b>, dan saat <b>Presensi Pulang</b> Anda tidak perlu mengambil titik lokasi lagi.`
+            );
             setTimeout(() => {
                 window.bukaModalAmbilPresensiSelfieGPS(tipeAbsen);
-            }, 1200);
+            }, 1000);
         };
 
         window.toggleAllCheckboxes = function(type, isChecked) {
