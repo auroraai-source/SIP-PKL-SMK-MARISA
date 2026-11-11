@@ -1076,17 +1076,72 @@
         };
 
         const DEFAULT_BANNER_IMAGES = [
-            { 
-                url: "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80", 
-                slogan1: "SMK BISA! SMK HEBAT!", 
-                slogan2: "SIAP KERJA, SANTUN, MANDIRI, KREATIF" 
+            {
+                id: "ban_ak",
+                jurusan: "XII AK",
+                url: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1000&q=80",
+                slogan1: "AKUNTANSI & KEUANGAN LEMBAGA (AK)",
+                slogan2: "PROFESIONAL, TELITI, DAN AKUNTABEL DI DUNIA KERJA"
             },
-            { 
-                url: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1000&q=80", 
-                slogan1: "INTEGRITAS & DISIPLIN TINGGI", 
-                slogan2: "UNGGUL DI DUNIA USAHA & DUNIA INDUSTRI" 
+            {
+                id: "ban_bd",
+                jurusan: "XII BD",
+                url: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1000&q=80",
+                slogan1: "BISNIS DIGITAL (BD)",
+                slogan2: "INOVATIF MENGUASAI PEMASARAN & EKONOMI DIGITAL"
+            },
+            {
+                id: "ban_nkpi",
+                jurusan: "XII NKPI",
+                url: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1000&q=80",
+                slogan1: "NAUTIKA KAPAL PENANGKAP IKAN (NKPI)",
+                slogan2: "TANGGUH MENGARUNGI SAMUDERA & MARITIM NUSANTARA"
+            },
+            {
+                id: "ban_dpib",
+                jurusan: "XII DPIB",
+                url: "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1000&q=80",
+                slogan1: "DESAIN PEMODELAN & INFORMASI BANGUNAN (DPIB)",
+                slogan2: "MERANCANG ARSITEKTUR MASA DEPAN DENGAN PRESISI"
+            },
+            {
+                id: "ban_tsm",
+                jurusan: "XII TSM",
+                url: "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1000&q=80",
+                slogan1: "TEKNIK SEPEDA MOTOR (TSM)",
+                slogan2: "AHLI MEKANIK OTOMOTIF RODA DUA BERSTANDAR INDUSTRI"
+            },
+            {
+                id: "ban_tkr",
+                jurusan: "XII TKR",
+                url: "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=1000&q=80",
+                slogan1: "TEKNIK KENDARAAN RINGAN (TKR)",
+                slogan2: "KOMPETEN DALAM TEKNOLOGI OTOMOTIF MODERN"
+            },
+            {
+                id: "ban_tjkt",
+                jurusan: "XII TJKT",
+                url: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1000&q=80",
+                slogan1: "TEKNIK JARINGAN KOMPUTER & TELEKOMUNIKASI (TJKT)",
+                slogan2: "MENGHUBUNGKAN DUNIA DENGAN INFRASTRUKTUR DIGITAL"
+            },
+            {
+                id: "ban_tp",
+                jurusan: "XII TP",
+                url: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1000&q=80",
+                slogan1: "TEKNIK PEMESINAN (TP)",
+                slogan2: "PRESISI MANUFAKTUR & REKAYASA INDUSTRI"
+            },
+            {
+                id: "ban_tkp",
+                jurusan: "XII TKP",
+                url: "https://images.unsplash.com/photo-1541888946425-d09bb18086f6?auto=format&fit=crop&w=1000&q=80",
+                slogan1: "TEKNIK KONSTRUKSI & PERUMAHAN (TKP)",
+                slogan2: "MEMBANGUN INFRASTRUKTUR KOKOH & BERKUALITAS"
             }
         ];
+
+        const STORAGE_KEY_BANNERS = "SIP_PKL_MARISA_CUSTOM_BANNERS_V2";
 
         const DEFAULT_OBSERVASI_CONFIG = {
             judul: "Lembar Observasi PKL",
@@ -1201,6 +1256,19 @@
                 if (!Array.isArray(window.cloudState.disposisiKepsek)) window.cloudState.disposisiKepsek = [];
                 if (!Array.isArray(window.cloudState.dokumentasiKegiatan)) window.cloudState.dokumentasiKegiatan = [];
                 if (!Array.isArray(window.cloudState.videoPanduanYoutube)) window.cloudState.videoPanduanYoutube = [];
+            }
+            const savedBannersRaw = localStorage.getItem(STORAGE_KEY_BANNERS);
+            if (savedBannersRaw) {
+                const parsedBanners = JSON.parse(savedBannersRaw);
+                if (Array.isArray(parsedBanners) && parsedBanners.length > 0) {
+                    window.cloudState.bannerSliderImages = parsedBanners;
+                }
+            }
+            if (!Array.isArray(window.cloudState.bannerSliderImages) ||
+                (window.cloudState.bannerSliderImages.length === 2 &&
+                 window.cloudState.bannerSliderImages[0]?.slogan1 === "SMK BISA! SMK HEBAT!" &&
+                 !window.cloudState.customBannerUpdatedAt)) {
+                window.cloudState.bannerSliderImages = JSON.parse(JSON.stringify(DEFAULT_BANNER_IMAGES));
             }
         } catch(e) {}
 
@@ -1426,37 +1494,33 @@
 
         window.dataUrlToBlob = function(dataUrl) {
             try {
-                const parts = dataUrl.split(',');
-                const mimeMatch = parts[0].match(/:(.*?);/);
-                const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-                const bstr = atob(parts[1]);
-                let n = bstr.length;
-                const u8arr = new Uint8Array(n);
-                while (n--) {
-                    u8arr[n] = bstr.charCodeAt(n);
+                const parts = dataUrl.split(';base64,');
+                const contentType = parts[0].split(':')[1] || 'image/jpeg';
+                const raw = window.atob(parts[1]);
+                const uInt8Array = new Uint8Array(raw.length);
+                for (let i = 0; i < raw.length; ++i) {
+                    uInt8Array[i] = raw.charCodeAt(i);
                 }
-                return new Blob([u8arr], { type: mime });
+                return new Blob([uInt8Array], { type: contentType });
             } catch (e) {
                 return null;
             }
         };
 
-        window.uploadFotoKeSupabaseStorage = async function(dataUrl, prefix = 'presensi') {
-            if (!dataUrl || typeof dataUrl !== 'string') return "";
-            if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) return dataUrl;
-
-            const compressedDataUrl = await window.compressImageDataUrl(dataUrl, 360, 270, 0.55);
+        window.uploadFotoKeSupabaseStorage = async function(base64DataUrl, prefix = 'selfie') {
+            if (!base64DataUrl || !base64DataUrl.startsWith('data:image')) return base64DataUrl || "";
+            const compressedDataUrl = await window.compressImageDataUrl(base64DataUrl, 480, 360, 0.65);
             const blob = window.dataUrlToBlob(compressedDataUrl);
             if (!blob) return "";
 
-            const fileName = `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
+            const fileName = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}.jpg`;
             const bucketsToTry = ['foto_presensi', 'berkas_pkl', 'bukti_jurnal'];
-            const creds = window.getSupabaseCredentials ? window.getSupabaseCredentials() : null;
-            const baseUrl = creds && creds.url ? String(creds.url).trim().replace(/\/+$/, "") : "";
-            const apiKey = creds && creds.key ? String(creds.key).trim() : "";
+            const creds = typeof window.getSupabaseCredentials === 'function' ? window.getSupabaseCredentials() : null;
 
-            // 1. Jalur Utama: Direct REST Upload ke Supabase Storage (Tahan blokir & pastikan tersimpan sebagai file fisik)
-            if (baseUrl && apiKey) {
+            // 1. Jalur Utama: Direct REST Storage Upload
+            if (creds && creds.url && creds.key) {
+                const baseUrl = String(creds.url).trim().replace(/\/+$/, "");
+                const apiKey = String(creds.key).trim();
                 for (const bucketName of bucketsToTry) {
                     try {
                         const uploadEndpoint = `${baseUrl}/storage/v1/object/${bucketName}/${fileName}`;
@@ -1520,19 +1584,18 @@
                 return copy;
             });
 
-            const sanitizedBanners = (window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES).map((b, idx) => {
+            // JANGAN PERNAH MENGHEMPAS / MERESET GAMBAR BANNER YANG SUDAH DIUPLOAD ATAU DIEDIT OLEH USER!
+            const sanitizedBanners = (window.cloudState.bannerSliderImages && window.cloudState.bannerSliderImages.length > 0
+                ? window.cloudState.bannerSliderImages
+                : DEFAULT_BANNER_IMAGES).map((b) => {
                 if (!b) return b;
-                const copy = Object.assign({}, b);
-                if (copy.url && copy.url.startsWith('data:image') && copy.url.length > 25000) {
-                    copy.url = DEFAULT_BANNER_IMAGES[idx % DEFAULT_BANNER_IMAGES.length].url;
-                }
-                return copy;
+                return Object.assign({}, b);
             });
 
             const sanitizedPengaduan = (window.cloudState.pengaduan || []).map(ad => {
                 if (!ad) return ad;
                 const copy = Object.assign({}, ad);
-                if (copy.lampiran && copy.lampiran.startsWith('data:') && copy.lampiran.length > 25000) {
+                if (copy.lampiran && copy.lampiran.startsWith('data:') && copy.lampiran.length > 65000) {
                     copy.lampiran = null;
                 }
                 return copy;
@@ -1540,6 +1603,8 @@
 
             return {
                 lastUpdated: window.cloudState.lastUpdated || Date.now(),
+                customBannerUpdatedAt: window.cloudState.customBannerUpdatedAt || 0,
+                placementUpdatedAt: window.cloudState.placementUpdatedAt || 0,
                 registeredUsers: window.cloudState.registeredUsers || [],
                 siswa: window.cloudState.siswa || [],
                 guru: window.cloudState.guru || [],
@@ -1571,14 +1636,21 @@
             };
         };
 
+        window.lastLocalWriteTimestamp = 0;
+
         window.simpanDatabasePersisten = function(pushToCloud = true) {
-            window.cloudState.lastUpdated = Date.now();
+            const nowTs = Date.now();
+            window.cloudState.lastUpdated = nowTs;
+            window.lastLocalWriteTimestamp = nowTs;
             const payload = window.getSanitizedCloudPayload();
             try {
                 localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(payload));
                 localStorage.setItem(STORAGE_KEY_VAULT, JSON.stringify(payload));
                 if (Array.isArray(payload.penempatan)) {
                     localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(payload.penempatan));
+                }
+                if (Array.isArray(payload.bannerSliderImages) && payload.bannerSliderImages.length > 0) {
+                    localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(payload.bannerSliderImages));
                 }
             } catch(e) {}
 
@@ -2601,6 +2673,7 @@
                     dkLen: (dataObj.disposisiKepsek || []).length,
                     dokLen: (dataObj.dokumentasiKegiatan || []).length,
                     ytLen: (dataObj.videoPanduanYoutube || []).length,
+                    ban: dataObj.bannerSliderImages || [],
                     obs: dataObj.observasiConfig || {},
                     hl: dataObj.hotlineConfig || {},
                     pkl: dataObj.pklConfig || {},
@@ -2612,6 +2685,20 @@
             }
         };
         window.lastCloudDataSignature = window.computeCloudDataSignature(window.cloudState);
+
+        // Pelacak aktivitas pengguna (ketikan & scroll) agar sinkronisasi realtime TIDAK PERNAH memutus ketikan atau menggeser layar sendiri
+        window.lastUserActivityAt = 0;
+        window.lastUserScrollAt = 0;
+        (function() {
+            const markActivity = () => { window.lastUserActivityAt = Date.now(); };
+            const markScroll = () => { window.lastUserScrollAt = Date.now(); };
+            window.addEventListener('keydown', markActivity, { passive: true });
+            window.addEventListener('input', markActivity, { passive: true });
+            window.addEventListener('pointerdown', markActivity, { passive: true });
+            window.addEventListener('touchstart', markActivity, { passive: true });
+            window.addEventListener('touchmove', markScroll, { passive: true });
+            window.addEventListener('scroll', markScroll, { passive: true });
+        })();
 
         // Helper penggabungan array berdasarkan ID unik / kunci komposit agar presensi & jurnal dari banyak HP tidak pernah hilang/tertimpa
         window.mergeUniqueArrayById = function(localArr, cloudArr, keyFn) {
@@ -2652,6 +2739,37 @@
                             cInd.gpsLocked = true;
                             cInd.gpsLockedAt = localInd.gpsLockedAt;
                         }
+                        if (Array.isArray(localInd.cabangCoords) && localInd.cabangCoords.length > 0) {
+                            cInd.cabangCoords = window.mergeUniqueArrayById(
+                                localInd.cabangCoords,
+                                cInd.cabangCoords || [],
+                                (cb) => `${cb.lat}_${cb.lng}_${window.normalizeTextCompact(cb.siswa || cb.namaCabang)}`
+                            );
+                        }
+                    }
+                });
+            }
+
+            // Pertahankan plotting industri & guru pembimbing pada Master Siswa yang sudah diinput agar tidak pernah kembali ke "-" saat sinkron/redeploy
+            if (Array.isArray(cloudData.siswa) && Array.isArray(window.cloudState.siswa)) {
+                cloudData.siswa.forEach(cSiswa => {
+                    if (!cSiswa || !cSiswa.nama) return;
+                    const lSiswa = window.cloudState.siswa.find(l => l && window.isNameMatch(l.nama, cSiswa.nama));
+                    if (lSiswa) {
+                        const localHasInd = lSiswa.industri && lSiswa.industri !== '-' && lSiswa.industri !== 'Belum Ditentukan';
+                        const cloudHasInd = cSiswa.industri && cSiswa.industri !== '-' && cSiswa.industri !== 'Belum Ditentukan';
+                        if (localHasInd && !cloudHasInd) cSiswa.industri = lSiswa.industri;
+
+                        const localHasGuru = lSiswa.guru && lSiswa.guru !== '-' && lSiswa.guru !== 'Belum Ditentukan';
+                        const cloudHasGuru = cSiswa.guru && cSiswa.guru !== '-' && cSiswa.guru !== 'Belum Ditentukan';
+                        if (localHasGuru && !cloudHasGuru) cSiswa.guru = lSiswa.guru;
+
+                        if (lSiswa.gpsLocked && !cSiswa.gpsLocked) {
+                            cSiswa.lockedLat = lSiswa.lockedLat;
+                            cSiswa.lockedLng = lSiswa.lockedLng;
+                            cSiswa.gpsLocked = true;
+                            if (lSiswa.cabangIndustri) cSiswa.cabangIndustri = lSiswa.cabangIndustri;
+                        }
                     }
                 });
             }
@@ -2676,6 +2794,13 @@
                     window.cloudState.industri,
                     cloudData.industri,
                     (ind) => window.normalizeIndustriKey(ind.nama) || window.normalizeTextCompact(ind.nama)
+                );
+            }
+            if (Array.isArray(cloudData.penempatan) && Array.isArray(window.cloudState.penempatan)) {
+                window.cloudState.penempatan = window.mergeUniqueArrayById(
+                    window.cloudState.penempatan,
+                    cloudData.penempatan,
+                    (p) => window.normalizeTextCompact(p.guru)
                 );
             }
             if (Array.isArray(cloudData.registeredUsers) && Array.isArray(window.cloudState.registeredUsers)) {
@@ -2747,60 +2872,85 @@
             window.bersihkanDataDummyLama(cloudData);
             window.pastikanRadiusIndustri100Meter(cloudData);
 
-            // Tetap gabungkan log presensi, jurnal, dokumentasi terlebih dahulu agar tidak ada data siswa yang hilang
-            window.gabungkanDataCloudTanpaKehilangan(cloudData);
-
-            // Jika perangkat lokal baru saja menyimpan perubahan dalam 6 detik terakhir
-            // dan timestamp lokal lebih baru dari cloud, jangan timpa perubahan master lokal yang sedang diproses
+            // Jika perangkat lokal baru saja menyimpan perubahan dalam 15 detik terakhir,
+            // JANGAN biarkan paket cloud lama menimpa perubahan lokal (seperti upload banner, edit siswa, atau alokasi)
             const localTs = Number(window.cloudState.lastUpdated || 0);
             const cloudTs = Number(cloudData.lastUpdated || 0);
-            
-            // Paksa tarik data dari cloud jika lokal masih kosong (Mencegah PC kosong saat HP sudah input)
             const isLocalEmpty = (window.cloudState.siswa || []).length === 0 && (window.cloudState.guru || []).length === 0;
 
-            if (!isLocalEmpty && localTs > 0 && cloudTs > 0 && localTs > cloudTs && (Date.now() - localTs < 6000)) {
+            if (!isLocalEmpty && (Date.now() - (window.lastLocalWriteTimestamp || 0) < 15000)) {
+                // Tetap gabungkan absensi & jurnal masuk dari siswa lain tanpa menimpa pengaturan lokal
+                window.gabungkanDataCloudTanpaKehilangan(cloudData);
                 return;
             }
 
-            const incomingSignature = window.computeCloudDataSignature(cloudData);
-            const currentSignature = window.computeCloudDataSignature(window.cloudState);
-            const hasRealDataChange = (incomingSignature !== currentSignature);
+            if (!isLocalEmpty && localTs > 0 && cloudTs > 0 && localTs > cloudTs) {
+                window.gabungkanDataCloudTanpaKehilangan(cloudData);
+                return;
+            }
+
+            const prevSignature = window.computeCloudDataSignature(window.cloudState);
+
+            // Gabungkan seluruh data dengan perlindungan penuh terhadap plotting siswa, guru, industri, presensi, dan jurnal
+            window.gabungkanDataCloudTanpaKehilangan(cloudData);
 
             const myUser = window.cloudState.userProfile;
             const myRole = window.cloudState.activeRole;
             const myFeature = window.cloudState.currentFeature;
 
-            if (cloudData.lastUpdated) {
+            if (cloudData.lastUpdated && cloudTs > localTs) {
                 window.cloudState.lastUpdated = cloudData.lastUpdated;
             }
 
-            if (Array.isArray(cloudData.siswa) && (cloudData.siswa.length > 0 || isLocalEmpty)) {
-                window.cloudState.siswa = cloudData.siswa;
+            if (Array.isArray(cloudData.penugasanMonitoring) && (cloudData.penugasanMonitoring.length > 0 || (window.cloudState.penugasanMonitoring || []).length === 0)) {
+                window.cloudState.penugasanMonitoring = window.mergeUniqueArrayById(
+                    window.cloudState.penugasanMonitoring || [],
+                    cloudData.penugasanMonitoring,
+                    (m) => m.id || `${window.normalizeTextCompact(m.guru)}_${m.tanggalMulai}`
+                );
             }
-            if (Array.isArray(cloudData.guru) && (cloudData.guru.length > 0 || isLocalEmpty)) {
-                window.cloudState.guru = cloudData.guru;
+            if (Array.isArray(cloudData.dokumen) && cloudData.dokumen.length > 0) {
+                window.cloudState.dokumen = window.mergeUniqueArrayById(
+                    window.cloudState.dokumen || [],
+                    cloudData.dokumen,
+                    (d) => d.id || window.normalizeTextCompact(d.judul)
+                );
             }
-            if (Array.isArray(cloudData.industri) && (cloudData.industri.length > 0 || isLocalEmpty)) {
-                window.cloudState.industri = cloudData.industri;
-            }
-            if (Array.isArray(cloudData.penempatan) && (cloudData.penempatan.length > 0 || isLocalEmpty)) {
-                window.cloudState.penempatan = cloudData.penempatan;
-            }
-            if (Array.isArray(cloudData.registeredUsers) && cloudData.registeredUsers.length > 0) {
-                window.cloudState.registeredUsers = cloudData.registeredUsers;
-                window.pastikanAkunEkosistemDefault();
+            if (Array.isArray(cloudData.videoPanduanYoutube) && cloudData.videoPanduanYoutube.length > 0) {
+                window.cloudState.videoPanduanYoutube = window.mergeUniqueArrayById(
+                    window.cloudState.videoPanduanYoutube || [],
+                    cloudData.videoPanduanYoutube,
+                    (v) => v.id || v.url
+                );
             }
 
-            if (Array.isArray(cloudData.penugasanMonitoring)) window.cloudState.penugasanMonitoring = cloudData.penugasanMonitoring;
-            if (Array.isArray(cloudData.dokumen)) window.cloudState.dokumen = cloudData.dokumen;
-            if (Array.isArray(cloudData.agendaKunjungan)) window.cloudState.agendaKunjungan = cloudData.agendaKunjungan;
-            if (Array.isArray(cloudData.videoPanduanYoutube)) window.cloudState.videoPanduanYoutube = cloudData.videoPanduanYoutube;
-            if (Array.isArray(cloudData.bannerSliderImages)) window.cloudState.bannerSliderImages = cloudData.bannerSliderImages;
+            // PERLINDUNGAN BANNER ANTI-HEMPAS:
+            // Hanya gunakan banner dari Cloud jika timestamp banner Cloud lebih baru dari banner lokal
+            // dan jangan pernah mengganti 9 banner jurusan / banner kustom dengan 2 banner default lama
+            const localBanTs = Number(window.cloudState.customBannerUpdatedAt || 0);
+            const cloudBanTs = Number(cloudData.customBannerUpdatedAt || 0);
+            if (Array.isArray(cloudData.bannerSliderImages) && cloudData.bannerSliderImages.length > 0) {
+                const isCloudOldTwoDefault = (
+                    cloudData.bannerSliderImages.length === 2 &&
+                    cloudData.bannerSliderImages[0]?.slogan1 === "SMK BISA! SMK HEBAT!" &&
+                    cloudBanTs === 0
+                );
+                if (!isCloudOldTwoDefault && (cloudBanTs > localBanTs || (localBanTs === 0 && cloudData.bannerSliderImages.length >= (window.cloudState.bannerSliderImages || []).length))) {
+                    window.cloudState.bannerSliderImages = cloudData.bannerSliderImages;
+                    window.cloudState.customBannerUpdatedAt = cloudBanTs;
+                    try {
+                        localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(window.cloudState.bannerSliderImages));
+                    } catch(e) {}
+                }
+            }
+
             if (cloudData.pklConfig) window.cloudState.pklConfig = cloudData.pklConfig;
             if (cloudData.jamConfig) window.cloudState.jamConfig = cloudData.jamConfig;
             if (cloudData.observasiConfig) window.cloudState.observasiConfig = cloudData.observasiConfig;
             if (cloudData.hotlineConfig) window.cloudState.hotlineConfig = cloudData.hotlineConfig;
-            if (cloudData.gpsResetAccess) window.cloudState.gpsResetAccess = cloudData.gpsResetAccess;
+            if (cloudData.gpsResetAccess && Number(cloudData.gpsResetAccess.createdAt || 0) >= Number(window.cloudState.gpsResetAccess?.createdAt || 0)) {
+                window.cloudState.gpsResetAccess = cloudData.gpsResetAccess;
+            }
 
             window.bersihkanDataDummyLama(window.cloudState);
             window.pastikanRadiusIndustri100Meter(window.cloudState);
@@ -2812,7 +2962,9 @@
             window.cloudState.activeRole = myRole;
             window.cloudState.currentFeature = myFeature;
 
-            window.lastCloudDataSignature = window.computeCloudDataSignature(window.cloudState);
+            const newSignature = window.computeCloudDataSignature(window.cloudState);
+            const hasRealDataChange = (newSignature !== prevSignature);
+            window.lastCloudDataSignature = newSignature;
 
             try {
                 const cleanSnap = window.getSanitizedCloudPayload();
@@ -2823,23 +2975,36 @@
                 }
             } catch(e) {}
 
-            // HANYA render ulang tampilan jika BENAR-BENAR ada perubahan data dari perangkat lain
-            // dan pengguna sedang tidak membuka modal / tidak mengetik / tidak mencentang checkbox
+            // PROTEKSI ANTI-GESER & ANTI-HAPUS KETIKAN:
+            // Jangan pernah merender ulang tampilan jika:
+            // 1. Tidak ada perubahan data nyata
+            // 2. Pengguna baru saja menyentuh layar / mengetik / menggulir (scroll) dalam 12 detik terakhir
+            // 3. Ada modal terbuka, sedang fokus di input/textarea, atau sedang membuka form pengaturan
             if (!hasRealDataChange) return;
+
+            const now = Date.now();
+            const isRecentlyTypingOrTouching = (now - (window.lastUserActivityAt || 0) < 12000);
+            const isRecentlyScrolling = (now - (window.lastUserScrollAt || 0) < 8000);
 
             const activeEl = document.activeElement;
             const isInteracting = activeEl && (
                 activeEl.tagName === 'INPUT' ||
                 activeEl.tagName === 'TEXTAREA' ||
                 activeEl.tagName === 'SELECT' ||
-                activeEl.tagName === 'BUTTON'
+                activeEl.tagName === 'BUTTON' ||
+                activeEl.isContentEditable
             );
             const hasCheckedBoxes = document.querySelectorAll('input[type="checkbox"]:checked').length > 0;
             const isModalOpen = (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex') ||
                                 (document.getElementById('modalInfoBackdrop')?.style.display === 'flex') ||
                                 (document.getElementById('modalConfirmBackdrop')?.style.display === 'flex');
+            const isDrawerOpen = document.getElementById('appSidebar')?.classList.contains('open');
 
-            if (!isInteracting && !hasCheckedBoxes && !isModalOpen && window.cloudState.userProfile && window.cloudState.currentFeature) {
+            // Halaman-halaman yang berisi form input langsung (jangan di-refresh otomatis oleh background sync)
+            const formFeatures = ['banner-jadwal', 'jam-geofence', 'periode-pkl', 'lembar-observasi', 'database-cloud', 'kelola-akun'];
+            const isOnFormFeature = formFeatures.includes(window.cloudState.currentFeature);
+
+            if (!isInteracting && !isRecentlyTypingOrTouching && !isRecentlyScrolling && !hasCheckedBoxes && !isModalOpen && !isDrawerOpen && !isOnFormFeature && window.cloudState.userProfile && window.cloudState.currentFeature) {
                 const scrollX = window.scrollX || window.pageXOffset || 0;
                 const scrollY = window.scrollY || window.pageYOffset || 0;
                 window.openFeature(window.cloudState.currentFeature, undefined, true);
@@ -9732,18 +9897,29 @@
         };
 
         window.renderBannerJadwalPKL = function() {
-            const banners = window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES;
+            const banners = (window.cloudState.bannerSliderImages && window.cloudState.bannerSliderImages.length > 0)
+                ? window.cloudState.bannerSliderImages
+                : DEFAULT_BANNER_IMAGES;
 
             let bannerList = "";
             banners.forEach((b, idx) => {
+                const jurBadge = b.jurusan ? `<span class="badge-status badge-blue" style="font-size:9.5px; margin-bottom:3px;">🎓 ${b.jurusan}</span>` : '';
                 bannerList += `
-                <div style="background:#ffffff; border:1px solid #bae6fd; border-radius:14px; padding:10px; margin-bottom:8px; display:flex; gap:10px; align-items:center;">
-                    <img src="${b.url}" alt="Banner" style="width:70px; height:50px; object-fit:cover; border-radius:8px;">
-                    <div style="flex:1;">
-                        <div style="font-size:12px; font-weight:900;">${b.slogan1}</div>
-                        <div style="font-size:10px; color:#0284c7;">${b.slogan2}</div>
+                <div style="background:#ffffff; border:1.5px solid #bae6fd; border-radius:14px; padding:10px 12px; margin-bottom:8px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <img src="${b.url}" alt="Banner ${idx + 1}" style="width:82px; height:56px; object-fit:cover; border-radius:10px; border:1px solid #93c5fd; flex-shrink:0;" onerror="this.src='https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80'">
+                    <div style="flex:1; min-width:150px;">
+                        ${jurBadge}
+                        <div style="font-size:12px; font-weight:900; color:#0f172a; line-height:1.25;">${idx + 1}. ${b.slogan1 || '-'}</div>
+                        <div style="font-size:10.5px; color:#0284c7; font-weight:750; margin-top:2px;">${b.slogan2 || '-'}</div>
                     </div>
-                    <button onclick="window.hapusBannerSlide(${idx})" class="btn-action btn-red" style="padding:4px 8px; font-size:10px;">Hapus</button>
+                    <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
+                        <button type="button" onclick="window.bukaModalEditBannerSlide(${idx})" class="btn-action btn-amber" style="padding:6px 10px; font-size:10.5px; font-weight:850;">
+                            ✏️ Edit
+                        </button>
+                        <button type="button" onclick="window.hapusBannerSlide(${idx})" class="btn-action btn-red" style="padding:6px 10px; font-size:10.5px; font-weight:850;">
+                            🗑️ Hapus
+                        </button>
+                    </div>
                 </div>`;
             });
 
@@ -9751,10 +9927,20 @@
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
-                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MEDIA BERANDA</div>
-                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🖼️ Banner Gambar Slider</h3>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MEDIA BERANDA &bull; 9 KONSENTRASI KEAHLIAN</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">🖼️ Banner Gambar Slider (${banners.length} Slide Aktif)</h3>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">
+                            Gambar banner yang Anda unggah atau edit dikunci permanen di penyimpanan lokal & Supabase Storage sehingga tidak akan terhempas oleh sinkronisasi.
+                        </p>
                     </div>
-                    <button onclick="window.bukaModalUploadBannerBaru()" class="btn-action btn-emerald">+ Upload Gambar Banner</button>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button type="button" onclick="window.pulihkan9BannerJurusanDefault()" class="btn-action btn-blue" style="font-size:11px;">
+                            🔄 Muat 9 Banner Jurusan
+                        </button>
+                        <button type="button" onclick="window.bukaModalUploadBannerBaru()" class="btn-action btn-emerald" style="font-size:11px; font-weight:900;">
+                            + Upload Gambar Banner
+                        </button>
+                    </div>
                 </div>
 
                 <div style="background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:16px; padding:12px;">
@@ -9763,25 +9949,105 @@
             </div>`;
         };
 
+        window.pulihkan9BannerJurusanDefault = function() {
+            window.showConfirmDialog(
+                "Muat 9 Banner Jurusan",
+                "Kembalikan daftar slide menjadi <b>9 Banner Jurusan SMK Negeri 1 Marisa</b> (AK, BD, NKPI, DPIB, TSM, TKR, TJKT, TP, TKP)?<br><br><i>Setelah dimuat, Anda tetap dapat menekan tombol <b>✏️ Edit</b> pada masing-masing jurusan untuk mengganti fotonya.</i>",
+                () => {
+                    window.cloudState.bannerSliderImages = JSON.parse(JSON.stringify(DEFAULT_BANNER_IMAGES));
+                    window.cloudState.customBannerUpdatedAt = Date.now();
+                    try {
+                        localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(window.cloudState.bannerSliderImages));
+                    } catch(e) {}
+                    window.simpanDatabasePersisten(true);
+                    window.showModalInfo("9 Banner Jurusan Aktif ✅", "Kesembilan banner jurusan SMK Negeri 1 Marisa berhasil dimuat dan dikunci. Gunakan tombol <b>✏️ Edit</b> di samping setiap banner jika ingin mengganti gambar per jurusan.");
+                    window.openFeature("banner-jadwal", "Banner Gambar Slider");
+                }
+            );
+        };
+
         window.bukaModalUploadBannerBaru = function() {
             window.tempBannerBase64 = null;
+            let jurOpts = `<option value="">-- Umum / Semua Jurusan --</option>`;
+            DAFTAR_JURUSAN_SMKN1.forEach(j => {
+                jurOpts += `<option value="${j}">${j}</option>`;
+            });
+
             window.openDynamicModal(`
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:12px;">📸 Unggah Gambar Banner Baru</h3>
                 <div class="form-group">
-                    <label class="form-label">Pilih Berkas Foto Banner:</label>
-                    <input type="file" id="fileBannerInput" class="form-control" accept="image/*" onchange="window.handlePreviewBannerUpload(this)">
+                    <label class="form-label">Label Jurusan (Opsional):</label>
+                    <select id="banJurusan" class="form-control" style="font-weight:750; color:#0284c7;">
+                        ${jurOpts}
+                    </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Slogan Baris 1:</label>
+                    <label class="form-label">Pilih Berkas Foto Banner dari HP / Laptop:</label>
+                    <input type="file" id="fileBannerInput" class="form-control" accept="image/*" onchange="window.handlePreviewBannerUpload(this)">
+                    <div id="previewBoxUploadBanner" style="display:none; margin-top:8px;">
+                        <img id="imgPreviewUploadBanner" src="" alt="Preview" style="width:100%; height:130px; object-fit:cover; border-radius:12px; border:1.5px solid #38bdf8;">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Atau Tempel Link URL Gambar Langsung (Opsional):</label>
+                    <input type="url" id="banUrlDirect" class="form-control" placeholder="https://...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Judul / Slogan Baris 1:</label>
                     <input type="text" id="banSlogan1" class="form-control" value="SMK BISA! SMK HEBAT!">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Slogan Baris 2:</label>
+                    <label class="form-label">Sub-Judul / Slogan Baris 2:</label>
                     <input type="text" id="banSlogan2" class="form-control" value="SIAP KERJA, SANTUN, MANDIRI, KREATIF">
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-                    <button onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button onclick="window.prosesSimpanUploadBanner()" class="btn-action btn-blue">💾 Simpan Banner</button>
+                    <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button type="button" id="btnSimpanBannerModal" onclick="window.prosesSimpanUploadBanner()" class="btn-action btn-blue" style="font-weight:900;">💾 Simpan & Kunci Banner</button>
+                </div>
+            `);
+        };
+
+        window.bukaModalEditBannerSlide = function(idx) {
+            const banners = window.cloudState.bannerSliderImages || DEFAULT_BANNER_IMAGES;
+            const b = banners[idx];
+            if (!b) return;
+
+            window.tempBannerBase64 = null;
+            let jurOpts = `<option value="">-- Umum / Semua Jurusan --</option>`;
+            DAFTAR_JURUSAN_SMKN1.forEach(j => {
+                jurOpts += `<option value="${j}" ${b.jurusan === j ? 'selected' : ''}>${j}</option>`;
+            });
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:10px;">✏️ Edit Slide Banner #${idx + 1}</h3>
+                <div style="margin-bottom:10px;">
+                    <img id="imgPreviewUploadBanner" src="${b.url}" alt="Banner Saat Ini" style="width:100%; height:140px; object-fit:cover; border-radius:12px; border:2px solid #38bdf8;" onerror="this.src='https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80'">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Label Jurusan:</label>
+                    <select id="editBanJurusan" class="form-control" style="font-weight:750; color:#0284c7;">
+                        ${jurOpts}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Ganti Foto Banner (Pilih File Gambar Baru):</label>
+                    <input type="file" id="fileBannerEditInput" class="form-control" accept="image/*" onchange="window.handlePreviewBannerUpload(this)">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Atau Edit Link URL Gambar:</label>
+                    <input type="url" id="editBanUrlDirect" class="form-control" value="${(b.url && !b.url.startsWith('data:')) ? b.url : ''}" placeholder="Biarkan jika menggunakan foto yang diunggah">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Judul / Slogan Baris 1:</label>
+                    <input type="text" id="editBanSlogan1" class="form-control" value="${(b.slogan1 || '').replace(/"/g, '&quot;')}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Sub-Judul / Slogan Baris 2:</label>
+                    <input type="text" id="editBanSlogan2" class="form-control" value="${(b.slogan2 || '').replace(/"/g, '&quot;')}">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                    <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button type="button" id="btnUpdateBannerModal" onclick="window.simpanEditBannerSlide(${idx})" class="btn-action btn-emerald" style="font-weight:900;">💾 Simpan Perubahan Banner</button>
                 </div>
             `);
         };
@@ -9789,27 +10055,125 @@
         window.handlePreviewBannerUpload = function(inputEl) {
             if (inputEl.files && inputEl.files[0]) {
                 const reader = new FileReader();
-                reader.onload = function(e) { window.tempBannerBase64 = e.target.result; };
+                reader.onload = async function(e) {
+                    // Kompres gambar banner pada resolusi 800x450 agar tajam namun tetap ringan disinkronkan
+                    const compressed = await window.compressImageDataUrl(e.target.result, 800, 450, 0.72);
+                    window.tempBannerBase64 = compressed;
+                    const prevImg = document.getElementById("imgPreviewUploadBanner");
+                    const prevBox = document.getElementById("previewBoxUploadBanner");
+                    if (prevImg) prevImg.src = compressed;
+                    if (prevBox) prevBox.style.display = "block";
+                };
                 reader.readAsDataURL(inputEl.files[0]);
             }
         };
 
-        window.prosesSimpanUploadBanner = function() {
-            if (!window.tempBannerBase64) return window.showModalInfo("Pilih Foto", "Silakan pilih foto banner terlebih dahulu!");
-            const s1 = document.getElementById("banSlogan1")?.value || "SMK BISA!";
-            const s2 = document.getElementById("banSlogan2")?.value || "SMK HEBAT!";
+        window.prosesSimpanUploadBanner = async function() {
+            const directUrl = document.getElementById("banUrlDirect")?.value.trim();
+            if (!window.tempBannerBase64 && !directUrl) {
+                return window.showModalInfo("Pilih Foto", "Silakan pilih berkas foto banner atau masukkan link URL gambar terlebih dahulu!");
+            }
 
-            window.cloudState.bannerSliderImages.unshift({ url: window.tempBannerBase64, slogan1: s1, slogan2: s2 });
+            const btn = document.getElementById("btnSimpanBannerModal");
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = "⏳ Mengunggah & Mengunci Banner...";
+            }
+
+            let finalUrl = directUrl || window.tempBannerBase64;
+            if (window.tempBannerBase64) {
+                const uploadedUrl = await window.uploadFotoKeSupabaseStorage(window.tempBannerBase64, "banner_pkl");
+                if (uploadedUrl && (uploadedUrl.startsWith("http://") || uploadedUrl.startsWith("https://"))) {
+                    finalUrl = uploadedUrl;
+                }
+            }
+
+            const jur = document.getElementById("banJurusan")?.value || "";
+            const s1 = document.getElementById("banSlogan1")?.value.trim() || "SMK BISA! SMK HEBAT!";
+            const s2 = document.getElementById("banSlogan2")?.value.trim() || "SIAP KERJA, SANTUN, MANDIRI, KREATIF";
+
+            if (!Array.isArray(window.cloudState.bannerSliderImages)) {
+                window.cloudState.bannerSliderImages = JSON.parse(JSON.stringify(DEFAULT_BANNER_IMAGES));
+            }
+
+            window.cloudState.bannerSliderImages.unshift({
+                id: "ban_" + Date.now(),
+                jurusan: jur,
+                url: finalUrl,
+                slogan1: s1,
+                slogan2: s2
+            });
+            window.cloudState.customBannerUpdatedAt = Date.now();
+            try {
+                localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(window.cloudState.bannerSliderImages));
+            } catch(e) {}
+
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
+            window.showModalInfo("Banner Berhasil Disimpan 🖼️", "Gambar banner baru berhasil disimpan dan dikunci permanen agar tidak terganti saat sinkronisasi.");
+            window.openFeature("banner-jadwal", "Banner Gambar Slider");
+        };
+
+        window.simpanEditBannerSlide = async function(idx) {
+            const banners = window.cloudState.bannerSliderImages || [];
+            const oldItem = banners[idx];
+            if (!oldItem) return;
+
+            const btn = document.getElementById("btnUpdateBannerModal");
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = "⏳ Menyimpan Perubahan...";
+            }
+
+            const directUrl = document.getElementById("editBanUrlDirect")?.value.trim();
+            let finalUrl = oldItem.url;
+
+            if (window.tempBannerBase64) {
+                const uploadedUrl = await window.uploadFotoKeSupabaseStorage(window.tempBannerBase64, "banner_pkl");
+                if (uploadedUrl && (uploadedUrl.startsWith("http://") || uploadedUrl.startsWith("https://"))) {
+                    finalUrl = uploadedUrl;
+                } else {
+                    finalUrl = window.tempBannerBase64;
+                }
+            } else if (directUrl) {
+                finalUrl = directUrl;
+            }
+
+            const jur = document.getElementById("editBanJurusan")?.value || oldItem.jurusan || "";
+            const s1 = document.getElementById("editBanSlogan1")?.value.trim() || oldItem.slogan1 || "SMK BISA! SMK HEBAT!";
+            const s2 = document.getElementById("editBanSlogan2")?.value.trim() || oldItem.slogan2 || "SIAP KERJA, SANTUN, MANDIRI, KREATIF";
+
+            window.cloudState.bannerSliderImages[idx] = {
+                ...oldItem,
+                jurusan: jur,
+                url: finalUrl,
+                slogan1: s1,
+                slogan2: s2
+            };
+            window.cloudState.customBannerUpdatedAt = Date.now();
+            try {
+                localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(window.cloudState.bannerSliderImages));
+            } catch(e) {}
+
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Banner Diperbarui ✅", `Slide banner <b>#${idx + 1} (${s1})</b> berhasil diperbarui dan dikunci permanen.`);
             window.openFeature("banner-jadwal", "Banner Gambar Slider");
         };
 
         window.hapusBannerSlide = function(idx) {
-            window.cloudState.bannerSliderImages.splice(idx, 1);
-            if (window.cloudState.bannerSliderImages.length === 0) window.cloudState.bannerSliderImages = DEFAULT_BANNER_IMAGES;
-            window.simpanDatabasePersisten(true);
-            window.openFeature("banner-jadwal", "Banner Gambar Slider");
+            window.showConfirmDialog("Hapus Slide Banner", "Yakin ingin menghapus slide banner ini?", () => {
+                window.cloudState.bannerSliderImages.splice(idx, 1);
+                if (window.cloudState.bannerSliderImages.length === 0) {
+                    window.cloudState.bannerSliderImages = JSON.parse(JSON.stringify(DEFAULT_BANNER_IMAGES));
+                }
+                window.cloudState.customBannerUpdatedAt = Date.now();
+                try {
+                    localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(window.cloudState.bannerSliderImages));
+                } catch(e) {}
+                window.simpanDatabasePersisten(true);
+                window.openFeature("banner-jadwal", "Banner Gambar Slider");
+            });
         };
 
         window.renderPresensiGPS = function() {
@@ -12035,28 +12399,38 @@
             if (window.supabaseClient) {
                 await window.tarikDataDariCloud(true);
 
-                // Sinkronisasi Realtime Halus di Belakang Layar (Tanpa Kedipan / Tanpa Mengganggu Operasi)
+                // Sinkronisasi Realtime Halus di Belakang Layar (Tanpa Mengganggu Ketikan & Tanpa Menggeser Layar)
                 setInterval(async () => {
+                    const now = Date.now();
+                    const isRecentlyTypingOrTouching = (now - (window.lastUserActivityAt || 0) < 12000);
+                    const isRecentlyScrolling = (now - (window.lastUserScrollAt || 0) < 8000);
+                    const isRecentlyWriting = (now - (window.lastLocalWriteTimestamp || 0) < 15000);
+
                     const activeEl = document.activeElement;
                     const isInteracting = activeEl && (
                         activeEl.tagName === 'INPUT' ||
                         activeEl.tagName === 'TEXTAREA' ||
                         activeEl.tagName === 'SELECT' ||
-                        activeEl.tagName === 'BUTTON'
+                        activeEl.tagName === 'BUTTON' ||
+                        activeEl.isContentEditable
                     );
                     const isModalOpen = (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex') ||
                                         (document.getElementById('modalInfoBackdrop')?.style.display === 'flex') ||
                                         (document.getElementById('modalConfirmBackdrop')?.style.display === 'flex');
-                    if (!isInteracting && !isModalOpen && !document.hidden) {
+                    const isDrawerOpen = document.getElementById('appSidebar')?.classList.contains('open');
+
+                    if (!isInteracting && !isRecentlyTypingOrTouching && !isRecentlyScrolling && !isRecentlyWriting && !isModalOpen && !isDrawerOpen && !document.hidden) {
                         await window.tarikDataDariCloud(true);
                     }
-                }, 10000); // Sinkronisasi dipercepat menjadi 10 detik
+                }, 20000); // Interval tenang 20 detik dan hanya jalan saat layar benar-benar idle (tidak sedang dipakai mengetik/scroll)
 
-                // Tarik data secara hening saat tab kembali aktif (dengan jeda anti-agresif)
+                // Tarik data secara hening saat tab kembali aktif (dengan jeda aman)
                 let lastFocusSync = 0;
                 const triggerGentleSync = () => {
                     const now = Date.now();
-                    if (now - lastFocusSync < 15000) return;
+                    if (now - lastFocusSync < 25000) return;
+                    if (now - (window.lastUserActivityAt || 0) < 10000) return;
+                    if (now - (window.lastLocalWriteTimestamp || 0) < 15000) return;
                     const isModalOpen = (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex');
                     if (!isModalOpen && !document.hidden) {
                         lastFocusSync = now;
@@ -12064,7 +12438,7 @@
                     }
                 };
                 window.addEventListener('focus', triggerGentleSync);
-                document.addEventListener('visibilitychange', () => {
+                window.addEventListener('visibilitychange', () => {
                     if (!document.hidden) triggerGentleSync();
                 });
             }
