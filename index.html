@@ -1946,17 +1946,42 @@
             if (!specificGuru || specificGuru === '-') specificGuru = "Belum Ditentukan";
 
             // 4. Cari objek detail Industri (koordinat GPS, jam kerja, radius) dari Master Industri
-            const dataIndustriObj = (window.cloudState.industri || []).find(i =>
+            let dataIndustriObj = (window.cloudState.industri || []).find(i =>
                 window.isIndustriMatch ? window.isIndustriMatch(i.nama, specificIndustri) : (String(i.nama).toLowerCase().trim() === specificIndustri.toLowerCase())
-            ) || {
-                nama: specificIndustri,
-                alamat: "-",
-                lat: "0.45612",
-                lng: "121.94210",
-                radius: 100,
-                masuk: "08:00",
-                pulang: "16:00"
-            };
+            );
+
+            // Jika belum ada di Master Industri, cek apakah ada riwayat koordinat dari presensi masuk siswa di industri ini atau dari profil siswa
+            if (!dataIndustriObj) {
+                let savedLat = (sMaster && sMaster.lockedLat) ? sMaster.lockedLat : "0.45612";
+                let savedLng = (sMaster && sMaster.lockedLng) ? sMaster.lockedLng : "121.94210";
+                let isLocked = !!(sMaster && sMaster.gpsLocked);
+
+                if (!isLocked) {
+                    const prevAbsen = (window.cloudState.absensi || []).find(a =>
+                        a && a.latitude && a.longitude &&
+                        (window.isNameMatch(a.nama, canonicalName) || (specificIndustri !== "Belum Ditentukan" && window.isIndustriMatch(a.industri, specificIndustri))) &&
+                        !(String(a.latitude).startsWith("0.4561") && String(a.longitude).startsWith("121.9421"))
+                    );
+                    if (prevAbsen) {
+                        savedLat = String(prevAbsen.latitude);
+                        savedLng = String(prevAbsen.longitude);
+                        isLocked = true;
+                    }
+                }
+
+                dataIndustriObj = {
+                    nama: specificIndustri,
+                    alamat: "-",
+                    lat: savedLat,
+                    lng: savedLng,
+                    radius: 100,
+                    masuk: "08:00",
+                    pulang: "16:00",
+                    gpsLocked: isLocked
+                };
+            } else if (!dataIndustriObj.radius || parseInt(dataIndustriObj.radius) < 100) {
+                dataIndustriObj.radius = 100;
+            }
 
             return {
                 namaSiswa: canonicalName,
@@ -1966,6 +1991,130 @@
                 guru: specificGuru,
                 industriObj: dataIndustriObj,
                 siswaObj: sMaster
+            };
+        };
+
+        // Helper untuk mengecek apakah koordinat industri masih berupa koordinat placeholder/default (belum dikunci di lokasi asli)
+        window.isDefaultUncalibratedCoords = function(lat, lng, indObj) {
+            if (indObj && indObj.gpsLocked === true) return false;
+            const nLat = parseFloat(lat);
+            const nLng = parseFloat(lng);
+            if (isNaN(nLat) || isNaN(nLng)) return true;
+            if (Math.abs(nLat - 0.45612) < 0.00025 && Math.abs(nLng - 121.94210) < 0.00025) return true;
+            return false;
+        };
+
+        // Helper untuk mengunci permanen koordinat GPS Industri ke Master Industri, Master Siswa & Cache Lokal
+        window.kunciKoordinatGpsIndustriPermanen = function(namaInd, latVal, lngVal, namaSiswaOpsional = "") {
+            const fixedLat = parseFloat(latVal).toFixed(6).toString();
+            const fixedLng = parseFloat(lngVal).toFixed(6).toString();
+            if (!Array.isArray(window.cloudState.industri)) window.cloudState.industri = [];
+
+            let foundInd = false;
+            window.cloudState.industri.forEach(ind => {
+                if (ind && window.isIndustriMatch(ind.nama, namaInd)) {
+                    ind.lat = fixedLat;
+                    ind.lng = fixedLng;
+                    ind.radius = (ind.radius && parseInt(ind.radius) >= 100) ? parseInt(ind.radius) : 100;
+                    ind.gpsLocked = true;
+                    ind.gpsLockedAt = Date.now();
+                    foundInd = true;
+                }
+            });
+
+            if (!foundInd && namaInd && namaInd !== "Belum Ditentukan" && namaInd !== "-") {
+                window.cloudState.industri.push({
+                    id: "ind_" + Date.now(),
+                    nama: namaInd,
+                    alamat: "-",
+                    pimpinan: "-",
+                    noWa: "-",
+                    radius: 100,
+                    masuk: "08:00",
+                    pulang: "16:00",
+                    lat: fixedLat,
+                    lng: fixedLng,
+                    gpsLocked: true,
+                    gpsLockedAt: Date.now()
+                });
+            }
+
+            // Simpan juga di objek siswa terkait agar saat Presensi Pulang selalu terbaca terkunci
+            if (Array.isArray(window.cloudState.siswa)) {
+                window.cloudState.siswa.forEach(s => {
+                    if (!s) return;
+                    if ((namaSiswaOpsional && window.isNameMatch(s.nama, namaSiswaOpsional)) ||
+                        (s.industri && window.isIndustriMatch(s.industri, namaInd))) {
+                        s.lockedLat = fixedLat;
+                        s.lockedLng = fixedLng;
+                        s.gpsLocked = true;
+                    }
+                });
+            }
+
+            try {
+                const mapStr = localStorage.getItem("SIP_PKL_LOCKED_GPS_MAP") || "{}";
+                const mapObj = JSON.parse(mapStr);
+                const key = window.normalizeTextCompact(namaInd);
+                if (key) {
+                    mapObj[key] = { lat: fixedLat, lng: fixedLng, radius: 100, lockedAt: Date.now() };
+                    localStorage.setItem("SIP_PKL_LOCKED_GPS_MAP", JSON.stringify(mapObj));
+                }
+            } catch (e) {}
+        };
+
+        window.ambilKoordinatTerkunciIndustri = function(namaInd, dataIndObj, namaSiswaOpsional = "") {
+            // 1. Cek dari cache penguncian lokal perangkat terlebih dahulu
+            try {
+                const mapStr = localStorage.getItem("SIP_PKL_LOCKED_GPS_MAP");
+                if (mapStr && namaInd) {
+                    const mapObj = JSON.parse(mapStr);
+                    const key = window.normalizeTextCompact(namaInd);
+                    if (key && mapObj[key] && mapObj[key].lat && mapObj[key].lng) {
+                        return {
+                            lat: parseFloat(mapObj[key].lat),
+                            lng: parseFloat(mapObj[key].lng),
+                            radius: parseInt(mapObj[key].radius) || 100,
+                            isLocked: true
+                        };
+                    }
+                }
+            } catch (e) {}
+
+            // 2. Cek apakah di hari ini atau sebelumnya siswa sudah pernah Presensi Masuk dengan koordinat valid
+            if (namaSiswaOpsional || namaInd) {
+                const riwayatMasuk = (window.cloudState.absensi || []).find(a =>
+                    a && a.latitude && a.longitude &&
+                    ((namaSiswaOpsional && window.isNameMatch(a.nama, namaSiswaOpsional)) ||
+                     (namaInd && namaInd !== 'Belum Ditentukan' && window.isIndustriMatch(a.industri, namaInd))) &&
+                    !window.isDefaultUncalibratedCoords(a.latitude, a.longitude, { gpsLocked: true })
+                );
+                if (riwayatMasuk && window.isDefaultUncalibratedCoords(dataIndObj?.lat, dataIndObj?.lng, dataIndObj)) {
+                    const rLat = parseFloat(riwayatMasuk.latitude);
+                    const rLng = parseFloat(riwayatMasuk.longitude);
+                    if (!isNaN(rLat) && !isNaN(rLng)) {
+                        window.kunciKoordinatGpsIndustriPermanen(namaInd, rLat, rLng, namaSiswaOpsional);
+                        return {
+                            lat: rLat,
+                            lng: rLng,
+                            radius: (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100,
+                            isLocked: true
+                        };
+                    }
+                }
+            }
+
+            // 3. Cek dari Master Industri
+            const rawLat = parseFloat(dataIndObj?.lat) || 0.45612;
+            const rawLng = parseFloat(dataIndObj?.lng) || 121.94210;
+            const rawRadius = (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100;
+            const uncalibrated = window.isDefaultUncalibratedCoords(rawLat, rawLng, dataIndObj);
+
+            return {
+                lat: rawLat,
+                lng: rawLng,
+                radius: rawRadius,
+                isLocked: !uncalibrated
             };
         };
 
@@ -2226,6 +2375,58 @@
             if (!cloudData || typeof cloudData !== 'object') return;
             window.bersihkanDataDummyLama(cloudData);
             window.pastikanRadiusIndustri100Meter(cloudData);
+
+            // Pertahankan koordinat GPS industri yang sudah terkunci di perangkat lokal maupun cloud agar tidak pernah ter-reset ke default
+            if (Array.isArray(cloudData.industri) && Array.isArray(window.cloudState.industri)) {
+                cloudData.industri.forEach(cInd => {
+                    if (!cInd || !cInd.nama) return;
+                    const localInd = window.cloudState.industri.find(l => l && window.isIndustriMatch(l.nama, cInd.nama));
+                    if (localInd) {
+                        const localCalibrated = !window.isDefaultUncalibratedCoords(localInd.lat, localInd.lng, localInd);
+                        const cloudCalibrated = !window.isDefaultUncalibratedCoords(cInd.lat, cInd.lng, cInd);
+                        if (localCalibrated && !cloudCalibrated) {
+                            cInd.lat = localInd.lat;
+                            cInd.lng = localInd.lng;
+                            cInd.gpsLocked = true;
+                        } else if (localCalibrated && cloudCalibrated && Number(localInd.gpsLockedAt || 0) > Number(cInd.gpsLockedAt || 0)) {
+                            cInd.lat = localInd.lat;
+                            cInd.lng = localInd.lng;
+                            cInd.gpsLocked = true;
+                            cInd.gpsLockedAt = localInd.gpsLockedAt;
+                        }
+                    }
+                });
+            }
+
+            // Gabungkan Master Siswa, Guru, Industri, dan Penempatan tanpa menghapus data yang sudah diinput di lokal maupun cloud
+            if (Array.isArray(cloudData.siswa) && Array.isArray(window.cloudState.siswa)) {
+                window.cloudState.siswa = window.mergeUniqueArrayById(
+                    window.cloudState.siswa,
+                    cloudData.siswa,
+                    (s) => window.normalizeTextCompact(s.nama) || window.normalizeTextCompact(s.nis)
+                );
+            }
+            if (Array.isArray(cloudData.guru) && Array.isArray(window.cloudState.guru)) {
+                window.cloudState.guru = window.mergeUniqueArrayById(
+                    window.cloudState.guru,
+                    cloudData.guru,
+                    (g) => window.normalizeTextCompact(g.nama) || window.normalizeTextCompact(g.nip)
+                );
+            }
+            if (Array.isArray(cloudData.industri) && Array.isArray(window.cloudState.industri)) {
+                window.cloudState.industri = window.mergeUniqueArrayById(
+                    window.cloudState.industri,
+                    cloudData.industri,
+                    (ind) => window.normalizeIndustriKey(ind.nama) || window.normalizeTextCompact(ind.nama)
+                );
+            }
+            if (Array.isArray(cloudData.registeredUsers) && Array.isArray(window.cloudState.registeredUsers)) {
+                window.cloudState.registeredUsers = window.mergeUniqueArrayById(
+                    window.cloudState.registeredUsers,
+                    cloudData.registeredUsers,
+                    (u) => `${u.role}_${window.normalizeTextCompact(u.username || u.nama)}`
+                );
+            }
 
             // Gabungkan Absensi (Presensi Masuk & Pulang dari seluruh siswa di lapangan)
             if (Array.isArray(cloudData.absensi)) {
@@ -5392,6 +5593,7 @@
             }
 
             // Deteksi industri penempatan spesifik untuk siswa pemilik akun ini
+            const namaSiswaResmi = placementInfo.namaSiswa || profile.nama;
             const namaInd = (placementInfo.industri && placementInfo.industri !== 'Belum Ditentukan')
                 ? placementInfo.industri
                 : "Belum Ditentukan";
@@ -5402,9 +5604,10 @@
                 radius: 100
             };
 
-            const indLat = parseFloat(dataInd.lat) || 0.45612;
-            const indLng = parseFloat(dataInd.lng) || 121.94210;
-            const indRadius = parseInt(dataInd.radius) && parseInt(dataInd.radius) > 50 ? parseInt(dataInd.radius) : 100;
+            const lockedInfo = window.ambilKoordinatTerkunciIndustri(dataInd.nama, dataInd, namaSiswaResmi);
+            const indLat = lockedInfo.lat;
+            const indLng = lockedInfo.lng;
+            const indRadius = lockedInfo.radius;
 
             window.tempSelfieBase64 = null;
             window.currentSelfieLocation = null;
@@ -5412,7 +5615,12 @@
 
             window.openDynamicModal(`
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">📷 Presensi ${tipeAbsen}: Selfie & GPS</h3>
-                <div style="font-size:11px; color:#475569; margin-bottom:10px;">Lokasi Magang: <b>${dataInd.nama}</b></div>
+                <div style="font-size:11px; color:#475569; margin-bottom:10px;">
+                    Lokasi Magang: <b>${dataInd.nama}</b>
+                    <span id="badgeGpsLockState" style="display:inline-block; margin-left:4px; font-size:9.5px; font-weight:850; padding:1.5px 6px; border-radius:6px; background:${lockedInfo.isLocked ? '#dcfce7' : '#e0f2fe'}; color:${lockedInfo.isLocked ? '#15803d' : '#0369a1'};">
+                        ${lockedInfo.isLocked ? '🔒 Titik Lokasi Terkunci' : '🛰️ Siap Kunci Otomatis di Industri'}
+                    </span>
+                </div>
 
                 <div class="form-group" style="margin-bottom:10px;">
                     <label class="form-label" style="font-weight:800; color:#0f172a;">Kategori Kehadiran:</label>
@@ -5424,36 +5632,39 @@
                 </div>
 
                 <!-- Indikator Status Geofence GPS -->
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:#f8fafc; border:1px solid #bfdbfe; border-radius:12px; padding:7px 12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:#f8fafc; border:1px solid #bfdbfe; border-radius:12px; padding:7px 12px; gap:6px; flex-wrap:wrap;">
                     <span style="font-size:11px; font-weight:800; color:#334155;">📍 Status Lokasi:</span>
-                    <span id="badgeGpsPresensiStatus" class="badge-status badge-amber">Memeriksa GPS...</span>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span id="badgeGpsPresensiStatus" class="badge-status badge-amber">Memeriksa GPS...</span>
+                        <button type="button" onclick="window.evaluasiLokasiDanKamera('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${dataInd.nama.replace(/'/g, "\\'")}')" class="btn-action btn-blue" style="padding:3px 8px; font-size:10px;" title="Segarkan Sinyal GPS">🔄 Refresh GPS</button>
+                    </div>
                 </div>
 
                 <!-- Notifikasi Peringatan Jika di Luar Area Industri (Kamera Tidak Terbuka) -->
                 <div id="gpsNotifOutsideBox" style="display:none; background:#fee2e2; border:2px solid #ef4444; border-radius:18px; padding:16px 14px; text-align:center; color:#991b1b; margin-bottom:12px;">
                     <div style="font-size:34px; margin-bottom:6px;">📍🚫</div>
-                    <div style="font-size:13.5px; font-weight:900; color:#b91c1c; text-transform:uppercase;">Anda Tidak Berada di Area Industri!</div>
+                    <div style="font-size:13.5px; font-weight:900; color:#b91c1c; text-transform:uppercase;">Anda Berada di Luar Titik Lokasi Industri!</div>
                     <div style="font-size:11.5px; color:#475569; margin:8px 0; line-height:1.45;">
-                        Kamera <b>tidak dapat dibuka</b> karena posisi Anda terdeteksi di luar radius lokasi industri yang telah ditentukan.
+                        Kamera <b>tidak dapat dibuka</b> karena posisi Anda saat ini berada di luar radius titik lokasi industri yang telah terkunci.
                     </div>
                     <div style="background:#ffffff; border:1px solid #fca5a5; border-radius:12px; padding:10px; font-size:11px; text-align:left; color:#1e293b; margin-top:8px;">
                         <div>🏢 <b>Nama Industri:</b> ${dataInd.nama}</div>
-                        <div>🌐 <b>Koordinat DUDI:</b> Lat ${indLat.toFixed(5)}, Lng ${indLng.toFixed(5)}</div>
+                        <div>🌐 <b>Koordinat Terkunci:</b> Lat <span id="textLatTerkunciNotif">${indLat.toFixed(5)}</span>, Lng <span id="textLngTerkunciNotif">${indLng.toFixed(5)}</span></div>
                         <div>🎯 <b>Radius Izin:</b> ${indRadius} Meter</div>
                         <div>📏 <b>Jarak Terdeteksi:</b> <span id="textJarakGpsNotif" style="color:#dc2626; font-weight:900;">-</span></div>
                     </div>
                     <div style="font-size:10px; color:#64748b; margin-top:10px; line-height:1.4;">
-                        <i>*Jika Anda sedang menjalankan dinas luar atau izin/sakit resmi, silakan ubah pilihan <b>Kategori Kehadiran</b> di atas.</i>
+                        <i>*Apabila titik lokasi industri sebelumnya salah atau pindah gedung, masukkan <b>Kode Akses Admin</b> di bawah untuk memperbarui titik lokasi industri.</i>
                     </div>
                     <div style="margin-top:10px; padding-top:10px; border-top:1.5px dashed #fca5a5; display:flex; flex-direction:column; gap:6px;">
-                        <input type="text" id="inputKodeResetGps" class="form-control" placeholder="Masukkan Kode Akses Admin" style="font-size:11px; padding:8px; text-align:center; font-weight:800; letter-spacing:1px; text-transform:uppercase;">
+                        <input type="text" id="inputKodeResetGps" class="form-control" placeholder="Masukkan Kode Akses Admin (Jika Ingin Reset Titik)" style="font-size:11px; padding:8px; text-align:center; font-weight:800; letter-spacing:1px; text-transform:uppercase;">
                         <button type="button" onclick="window.verifikasiKodeResetGpsSiswa('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${dataInd.nama.replace(/'/g, "\\'")}')" class="btn-action btn-blue" style="padding:8px 14px; font-size:11px; font-weight:800;">
-                            🔄 Cek & Perbarui Ulang Titik GPS
+                            🔄 Cek & Perbarui Ulang Titik GPS Industri
                         </button>
                     </div>
                 </div>
 
-                <!-- Wadah Kamera (Hanya terbuka jika dalam radius 50m atau memilih Dinas Luar/Izin/Sakit) -->
+                <!-- Wadah Kamera (Terbuka otomatis saat di dalam radius / saat titik dikunci otomatis di industri) -->
                 <div id="cameraPreviewWrap" style="display:none; position:relative; width:100%; height:200px; background:#0f172a; border-radius:18px; overflow:hidden; border:2px solid #38bdf8; align-items:center; justify-content:center; margin-bottom:10px;">
                     <video id="selfieVideoElement" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
                     <img id="selfieCapturedPreview" src="" alt="Selfie" style="display:none; width:100%; height:100%; object-fit:cover;">
@@ -5491,11 +5702,23 @@
             window.selectedKategoriKehadiran = kat;
 
             const badgeStatus = document.getElementById("badgeGpsPresensiStatus");
+            const badgeLock = document.getElementById("badgeGpsLockState");
             const notifBox = document.getElementById("gpsNotifOutsideBox");
             const cameraWrap = document.getElementById("cameraPreviewWrap");
             const btnCamWrap = document.getElementById("cameraActionButtonsWrap");
             const btnSimpan = document.getElementById("btnSimpanPresensiAction");
             const textJarak = document.getElementById("textJarakGpsNotif");
+
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+            const namaSiswaResmi = placementInfo.namaSiswa || profile.nama;
+
+            // Ambil status koordinat terkunci paling mutakhir untuk industri ini
+            const latestLocked = window.ambilKoordinatTerkunciIndustri(targetNamaInd, placementInfo.industriObj, namaSiswaResmi);
+            let activeTargetLat = latestLocked.lat || targetLat;
+            let activeTargetLng = latestLocked.lng || targetLng;
+            let activeRadius = latestLocked.radius || targetRadius || 100;
+            let isAlreadyLocked = latestLocked.isLocked;
 
             // KONDISI PENGECUALIAN: Dinas Luar atau Izin/Sakit
             if (kat === 'tugas_luar' || kat === 'izin_sakit') {
@@ -5514,7 +5737,6 @@
                     badgeStatus.innerText = (kat === 'tugas_luar') ? "🚗 DINAS LUAR (KAMERA TERBUKA)" : "📋 IZIN/SAKIT (KAMERA TERBUKA)";
                 }
 
-                // Ambil koordinat siswa opsional untuk catatan presensi tugas luar/izin
                 if ("geolocation" in navigator) {
                     navigator.geolocation.getCurrentPosition(
                         pos => {
@@ -5526,7 +5748,7 @@
                             };
                         },
                         () => {
-                            window.currentSelfieLocation = { lat: targetLat, lng: targetLng, distance: 0, inRadius: true };
+                            window.currentSelfieLocation = { lat: activeTargetLat, lng: activeTargetLng, distance: 0, inRadius: true };
                         },
                         { enableHighAccuracy: true, timeout: 8000 }
                     );
@@ -5536,7 +5758,7 @@
                 return;
             }
 
-            // KONDISI HADIR DI LOKASI: Wajib GPS dalam radius 50 meter
+            // KONDISI HADIR DI LOKASI INDUSTRI
             window.hentikanStreamKamera();
             if (cameraWrap) cameraWrap.style.display = 'none';
             if (btnCamWrap) btnCamWrap.style.display = 'none';
@@ -5544,7 +5766,7 @@
 
             if (badgeStatus) {
                 badgeStatus.className = "badge-status badge-amber";
-                badgeStatus.innerText = "🛰️ Memeriksa Titik GPS...";
+                badgeStatus.innerText = "🛰️ Mengunci Titik GPS Industri...";
             }
 
             if ("geolocation" in navigator) {
@@ -5552,18 +5774,59 @@
                     pos => {
                         const curLat = pos.coords.latitude;
                         const curLng = pos.coords.longitude;
-                        const distance = window.hitungJarakMeterHaversine(curLat, curLng, targetLat, targetLng);
-                        const isInRadius = (distance <= targetRadius);
+
+                        // FITUR 1: JIKA INDUSTRI BELUM PERNAH DIKUNCI TITIK LOKASINYA (MASIH KOORDINAT DEFAULT),
+                        // OTOMATIS KUNCI TITIK LOKASI SAAT INI SEBAGAI TITIK AKURAT INDUSTRI TANPA PERLU KODE AKSES!
+                        if (!isAlreadyLocked) {
+                            activeTargetLat = curLat;
+                            activeTargetLng = curLng;
+                            isAlreadyLocked = true;
+                            window.kunciKoordinatGpsIndustriPermanen(targetNamaInd, curLat, curLng, namaSiswaResmi);
+                            window.simpanDatabasePersisten(true);
+                            if (badgeLock) {
+                                badgeLock.style.background = "#dcfce7";
+                                badgeLock.style.color = "#15803d";
+                                badgeLock.innerText = "🔒 Titik Lokasi Industri Terkunci Otomatis";
+                            }
+                        }
+
+                        let distance = window.hitungJarakMeterHaversine(curLat, curLng, activeTargetLat, activeTargetLng);
+
+                        // FITUR 2: UNTUK PRESENSI PULANG, JIKA SISWA SUDAH PRESENSI MASUK HARI INI DI INDUSTRI TERSEBUT,
+                        // CEK JUGA JARAK TERHADAP TITIK PRESENSI MASUK HARI INI AGAR TIDAK PERLU KODE AKSES LAGI
+                        if (tipeAbsen === 'Pulang' && distance > activeRadius) {
+                            const now = new Date();
+                            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                            const absenMasukHariIni = (window.cloudState.absensi || []).find(a =>
+                                a && a.tanggal === todayStr && a.tipe_absen === 'Masuk' &&
+                                (window.isNameMatch(a.nama, namaSiswaResmi) || window.isNameMatch(a.nama, profile.nama)) &&
+                                a.latitude && a.longitude
+                            );
+                            if (absenMasukHariIni) {
+                                const distFromMasuk = window.hitungJarakMeterHaversine(curLat, curLng, parseFloat(absenMasukHariIni.latitude), parseFloat(absenMasukHariIni.longitude));
+                                if (distFromMasuk <= activeRadius) {
+                                    distance = distFromMasuk;
+                                    activeTargetLat = parseFloat(absenMasukHariIni.latitude);
+                                    activeTargetLng = parseFloat(absenMasukHariIni.longitude);
+                                }
+                            }
+                        }
+
+                        const isInRadius = (distance <= activeRadius);
 
                         window.currentSelfieLocation = {
                             lat: curLat,
                             lng: curLng,
+                            targetLat: activeTargetLat,
+                            targetLng: activeTargetLng,
                             distance: distance,
                             inRadius: isInRadius
                         };
 
                         if (isInRadius) {
-                            // Berada di dalam radius 50m: Kamera dibuka
+                            // Pastikan titik industri tetap terkunci kuat untuk Presensi Pulang nanti
+                            window.kunciKoordinatGpsIndustriPermanen(targetNamaInd, activeTargetLat, activeTargetLng, namaSiswaResmi);
+
                             if (notifBox) notifBox.style.display = 'none';
                             if (cameraWrap) cameraWrap.style.display = 'flex';
                             if (btnCamWrap) btnCamWrap.style.display = 'flex';
@@ -5573,15 +5836,19 @@
                             }
                             if (badgeStatus) {
                                 badgeStatus.className = "badge-status badge-green";
-                                badgeStatus.innerText = `🟢 DI AREA INDUSTRI (${distance}m <= ${targetRadius}m)`;
+                                badgeStatus.innerText = `🟢 DI AREA INDUSTRI (${distance}m <= ${activeRadius}m)`;
                             }
                             window.mulaiStreamKameraSelfie();
                         } else {
-                            // Di luar radius 50m: Kamera tetap terkunci dan tampilkan notifikasi
+                            // Di luar radius 100m dari titik industri yang sudah terkunci: baru tampilkan opsi Kode Akses
                             window.hentikanStreamKamera();
                             if (cameraWrap) cameraWrap.style.display = 'none';
                             if (btnCamWrap) btnCamWrap.style.display = 'none';
-                            if (textJarak) textJarak.innerText = `${distance} Meter (${distance - targetRadius}m di luar batas)`;
+                            const elLatNotif = document.getElementById("textLatTerkunciNotif");
+                            const elLngNotif = document.getElementById("textLngTerkunciNotif");
+                            if (elLatNotif) elLatNotif.innerText = activeTargetLat.toFixed(5);
+                            if (elLngNotif) elLngNotif.innerText = activeTargetLng.toFixed(5);
+                            if (textJarak) textJarak.innerText = `${distance} Meter (${distance - activeRadius}m di luar batas radius ${activeRadius}m)`;
                             if (notifBox) notifBox.style.display = 'block';
                             if (btnSimpan) {
                                 btnSimpan.disabled = true;
@@ -5589,16 +5856,51 @@
                             }
                             if (badgeStatus) {
                                 badgeStatus.className = "badge-status badge-red";
-                                badgeStatus.innerText = `🔴 DI LUAR RADIUS (${distance}m > ${targetRadius}m)`;
+                                badgeStatus.innerText = `🔴 DI LUAR RADIUS (${distance}m > ${activeRadius}m)`;
                             }
                         }
                     },
                     err => {
-                        // GPS ditolak atau error
+                        // Jika pada Presensi Pulang sinyal GPS HP sempat lambat padahal Presensi Masuk hari ini sudah mengunci titik lokasi,
+                        // gunakan titik terkunci dari Presensi Masuk hari ini agar siswa tidak terhambat
+                        const now = new Date();
+                        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                        const absenMasukHariIni = (window.cloudState.absensi || []).find(a =>
+                            a && a.tanggal === todayStr && a.tipe_absen === 'Masuk' &&
+                            (window.isNameMatch(a.nama, namaSiswaResmi) || window.isNameMatch(a.nama, profile.nama)) &&
+                            a.latitude && a.longitude
+                        );
+
+                        if (tipeAbsen === 'Pulang' && (absenMasukHariIni || isAlreadyLocked)) {
+                            const fallbackLat = absenMasukHariIni ? parseFloat(absenMasukHariIni.latitude) : activeTargetLat;
+                            const fallbackLng = absenMasukHariIni ? parseFloat(absenMasukHariIni.longitude) : activeTargetLng;
+                            window.currentSelfieLocation = {
+                                lat: fallbackLat,
+                                lng: fallbackLng,
+                                targetLat: fallbackLat,
+                                targetLng: fallbackLng,
+                                distance: 0,
+                                inRadius: true
+                            };
+                            if (notifBox) notifBox.style.display = 'none';
+                            if (cameraWrap) cameraWrap.style.display = 'flex';
+                            if (btnCamWrap) btnCamWrap.style.display = 'flex';
+                            if (btnSimpan) {
+                                btnSimpan.disabled = false;
+                                btnSimpan.style.opacity = '1';
+                            }
+                            if (badgeStatus) {
+                                badgeStatus.className = "badge-status badge-green";
+                                badgeStatus.innerText = `🟢 TITIK INDUSTRI TERKUNCI (SIAP PRESENSI PULANG)`;
+                            }
+                            window.mulaiStreamKameraSelfie();
+                            return;
+                        }
+
                         window.hentikanStreamKamera();
                         if (cameraWrap) cameraWrap.style.display = 'none';
                         if (btnCamWrap) btnCamWrap.style.display = 'none';
-                        if (textJarak) textJarak.innerText = "Satelit GPS tidak terdeteksi";
+                        if (textJarak) textJarak.innerText = "Satelit GPS belum merespons (Klik Refresh GPS atau masukkan Kode Akses)";
                         if (notifBox) notifBox.style.display = 'block';
                         if (btnSimpan) {
                             btnSimpan.disabled = true;
@@ -5606,10 +5908,10 @@
                         }
                         if (badgeStatus) {
                             badgeStatus.className = "badge-status badge-red";
-                            badgeStatus.innerText = "🔴 IZIN GPS DITOLAK";
+                            badgeStatus.innerText = "🔴 SINYAL GPS BELUM TERBACA";
                         }
                     },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                    { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 }
                 );
             } else {
                 window.hentikanStreamKamera();
@@ -5741,6 +6043,14 @@
             let katText = "Hadir di Lokasi Industri";
             if (kat === 'tugas_luar') katText = "Dinas Luar / Lapangan";
             else if (kat === 'izin_sakit') katText = "Izin / Sakit";
+
+            // Kunci permanen titik koordinat industri saat Presensi Masuk/Pulang berhasil disimpan
+            // sehingga untuk Presensi Pulang maupun hari berikutnya titik lokasi sudah terkunci akurat tanpa perlu Kode Akses
+            if (kat === 'hadir_lokasi' && window.currentSelfieLocation) {
+                const lockLat = window.currentSelfieLocation.targetLat || window.currentSelfieLocation.lat || indLat;
+                const lockLng = window.currentSelfieLocation.targetLng || window.currentSelfieLocation.lng || indLng;
+                window.kunciKoordinatGpsIndustriPermanen(industriNama, lockLat, lockLng, namaResmiSiswa);
+            }
 
             // 1. Kompres otomatis & unggah file foto ke Supabase Storage Bucket (foto_presensi / berkas_pkl)
             // agar database utama hanya menyimpan URL link gambar (bebas Base64 & anti-limit)
@@ -11351,26 +11661,17 @@
             
             if (!newLat || !newLng) return window.showModalInfo("Belum Ada Titik", "Tunggu hingga sinyal GPS perangkat terkunci.");
             
-            let indUpdated = false;
-            (window.cloudState.industri || []).forEach(ind => {
-                if (window.isIndustriMatch(ind.nama, namaInd)) {
-                    ind.lat = parseFloat(newLat).toFixed(6).toString();
-                    ind.lng = parseFloat(newLng).toFixed(6).toString();
-                    ind.radius = ind.radius && ind.radius > 50 ? ind.radius : 100;
-                    indUpdated = true;
-                }
-            });
-            
-            if (indUpdated) {
-                window.simpanDatabasePersisten(true);
-                window.closeDynamicModal();
-                window.showModalInfo("Titik GPS Diperbarui ✅", `Koordinat industri <b>${namaInd}</b> telah berhasil diperbarui ke posisi Anda saat ini.<br><br>Silakan lanjutkan proses presensi.`);
-                setTimeout(() => {
-                    window.bukaModalAmbilPresensiSelfieGPS(tipeAbsen);
-                }, 1500);
-            } else {
-                window.showModalInfo("Gagal Memperbarui", "Data industri tidak ditemukan di pangkalan data.");
-            }
+            const profile = window.cloudState.userProfile || { nama: "Siswa" };
+            const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+            const namaSiswaResmi = placementInfo.namaSiswa || profile.nama;
+
+            window.kunciKoordinatGpsIndustriPermanen(namaInd, newLat, newLng, namaSiswaResmi);
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Titik GPS Diperbarui & Terkunci 🔒", `Koordinat industri <b>${namaInd}</b> telah berhasil diperbarui dan dikunci permanen ke posisi Anda saat ini.<br><br>Untuk <b>Presensi Masuk</b> maupun <b>Presensi Pulang</b> selanjutnya, Anda tidak perlu lagi memasukkan kode akses.`);
+            setTimeout(() => {
+                window.bukaModalAmbilPresensiSelfieGPS(tipeAbsen);
+            }, 1200);
         };
 
         window.toggleAllCheckboxes = function(type, isChecked) {
