@@ -2209,7 +2209,8 @@
 
         // Helper untuk mengecek apakah koordinat industri masih berupa koordinat placeholder/default (belum dikunci di lokasi asli)
         window.isDefaultUncalibratedCoords = function(lat, lng, indObj) {
-            if (indObj && indObj.gpsLocked === true) return false;
+            if (indObj && (indObj.gpsLocked === true || indObj.is_locked === true)) return false;
+            if (lat === null || lat === undefined || lat === "" || lng === null || lng === undefined || lng === "") return true;
             const nLat = parseFloat(lat);
             const nLng = parseFloat(lng);
             if (isNaN(nLat) || isNaN(nLng)) return true;
@@ -2227,7 +2228,7 @@
             window.cloudState.industri.forEach(ind => {
                 if (ind && window.isIndustriMatch(ind.nama, namaInd)) {
                     foundInd = true;
-                    ind.radius = (ind.radius && parseInt(ind.radius) >= 100) ? parseInt(ind.radius) : 100;
+                    ind.radius = (ind.radius && parseInt(ind.radius) > 0) ? parseInt(ind.radius) : 50;
                     if (isCabangBaru) {
                         // Simpan sebagai titik cabang tambahan agar titik industri utama siswa lain tidak terganggu
                         if (!Array.isArray(ind.cabangCoords)) ind.cabangCoords = [];
@@ -2235,21 +2236,30 @@
                             namaCabang: namaCabang || `Cabang ${ind.nama}`,
                             lat: fixedLat,
                             lng: fixedLng,
-                            radius: 100,
+                            latitude: fixedLat,
+                            longitude: fixedLng,
+                            is_locked: true,
+                            radius: ind.radius || 50,
                             siswa: namaSiswaOpsional || "",
                             lockedAt: Date.now()
                         });
                         // Jika industri utama belum pernah dikunci sama sekali, isi juga titik utamanya
-                        if (window.isDefaultUncalibratedCoords(ind.lat, ind.lng, ind)) {
+                        if (window.isDefaultUncalibratedCoords(ind.lat || ind.latitude, ind.lng || ind.longitude, ind)) {
                             ind.lat = fixedLat;
                             ind.lng = fixedLng;
+                            ind.latitude = fixedLat;
+                            ind.longitude = fixedLng;
                             ind.gpsLocked = true;
+                            ind.is_locked = true;
                             ind.gpsLockedAt = Date.now();
                         }
                     } else {
                         ind.lat = fixedLat;
                         ind.lng = fixedLng;
+                        ind.latitude = fixedLat;
+                        ind.longitude = fixedLng;
                         ind.gpsLocked = true;
+                        ind.is_locked = true;
                         ind.gpsLockedAt = Date.now();
                     }
                 }
@@ -2262,18 +2272,24 @@
                     alamat: "-",
                     pimpinan: "-",
                     noWa: "-",
-                    radius: 100,
+                    radius: 50,
                     masuk: "08:00",
                     pulang: "16:00",
                     lat: fixedLat,
                     lng: fixedLng,
+                    latitude: fixedLat,
+                    longitude: fixedLng,
                     gpsLocked: true,
+                    is_locked: true,
                     gpsLockedAt: Date.now(),
                     cabangCoords: isCabangBaru ? [{
                         namaCabang: namaCabang || `Cabang ${namaInd}`,
                         lat: fixedLat,
                         lng: fixedLng,
-                        radius: 100,
+                        latitude: fixedLat,
+                        longitude: fixedLng,
+                        is_locked: true,
+                        radius: 50,
                         siswa: namaSiswaOpsional || "",
                         lockedAt: Date.now()
                     }] : []
@@ -2287,14 +2303,20 @@
                     if (namaSiswaOpsional && window.isNameMatch(s.nama, namaSiswaOpsional)) {
                         s.lockedLat = fixedLat;
                         s.lockedLng = fixedLng;
+                        s.latitude = fixedLat;
+                        s.longitude = fixedLng;
                         s.gpsLocked = true;
+                        s.is_locked = true;
                         if (isCabangBaru && namaCabang) {
                             s.cabangIndustri = namaCabang;
                         }
-                    } else if (!isCabangBaru && s.industri && window.isIndustriMatch(s.industri, namaInd) && !s.gpsLocked) {
+                    } else if (!isCabangBaru && s.industri && window.isIndustriMatch(s.industri, namaInd) && !s.gpsLocked && !s.is_locked) {
                         s.lockedLat = fixedLat;
                         s.lockedLng = fixedLng;
+                        s.latitude = fixedLat;
+                        s.longitude = fixedLng;
                         s.gpsLocked = true;
+                        s.is_locked = true;
                     }
                 });
             }
@@ -2308,13 +2330,16 @@
                     mapObj[studentKey] = {
                         lat: fixedLat,
                         lng: fixedLng,
-                        radius: 100,
+                        latitude: fixedLat,
+                        longitude: fixedLng,
+                        is_locked: true,
+                        radius: 50,
                         namaCabang: namaCabang || "",
                         lockedAt: Date.now()
                     };
                 }
                 if (indKey && (!isCabangBaru || !mapObj[indKey])) {
-                    mapObj[indKey] = { lat: fixedLat, lng: fixedLng, radius: 100, lockedAt: Date.now() };
+                    mapObj[indKey] = { lat: fixedLat, lng: fixedLng, latitude: fixedLat, longitude: fixedLng, is_locked: true, radius: 50, lockedAt: Date.now() };
                 }
                 localStorage.setItem("SIP_PKL_LOCKED_GPS_MAP", JSON.stringify(mapObj));
             } catch (e) {}
@@ -4044,17 +4069,21 @@
         window.cekApakahSiswaSudahKunciLokasi = function(namaInd, dataIndObj, namaSiswa) {
             const indKey = window.normalizeTextCompact(namaInd);
             const studentKey = (indKey && namaSiswa) ? `${indKey}__${window.normalizeTextCompact(namaSiswa)}` : "";
+            const defaultTolerance = (dataIndObj && parseInt(dataIndObj.radius) > 0) ? parseInt(dataIndObj.radius) : 50;
 
             // 1. Cek di profil Master Siswa
             if (namaSiswa && Array.isArray(window.cloudState.siswa)) {
                 const sMaster = window.cloudState.siswa.find(s => s && window.isNameMatch(s.nama, namaSiswa));
-                if (sMaster && sMaster.gpsLocked && sMaster.lockedLat && sMaster.lockedLng &&
-                    !window.isDefaultUncalibratedCoords(sMaster.lockedLat, sMaster.lockedLng, { gpsLocked: true })) {
+                const sLat = sMaster ? (sMaster.lockedLat || sMaster.latitude) : "";
+                const sLng = sMaster ? (sMaster.lockedLng || sMaster.longitude) : "";
+                if (sMaster && (sMaster.gpsLocked || sMaster.is_locked) && sLat && sLng &&
+                    !window.isDefaultUncalibratedCoords(sLat, sLng, { gpsLocked: true, is_locked: true })) {
                     return {
                         locked: true,
-                        lat: parseFloat(sMaster.lockedLat),
-                        lng: parseFloat(sMaster.lockedLng),
-                        radius: (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100,
+                        is_locked: true,
+                        lat: parseFloat(sLat),
+                        lng: parseFloat(sLng),
+                        radius: defaultTolerance,
                         sumber: sMaster.cabangIndustri || namaInd
                     };
                 }
@@ -4068,10 +4097,21 @@
                     if (studentKey && mapObj[studentKey] && mapObj[studentKey].lat && mapObj[studentKey].lng) {
                         return {
                             locked: true,
+                            is_locked: true,
                             lat: parseFloat(mapObj[studentKey].lat),
                             lng: parseFloat(mapObj[studentKey].lng),
-                            radius: parseInt(mapObj[studentKey].radius) || 100,
+                            radius: parseInt(mapObj[studentKey].radius) || defaultTolerance,
                             sumber: mapObj[studentKey].namaCabang || namaInd
+                        };
+                    }
+                    if (indKey && mapObj[indKey] && mapObj[indKey].lat && mapObj[indKey].lng) {
+                        return {
+                            locked: true,
+                            is_locked: true,
+                            lat: parseFloat(mapObj[indKey].lat),
+                            lng: parseFloat(mapObj[indKey].lng),
+                            radius: parseInt(mapObj[indKey].radius) || defaultTolerance,
+                            sumber: namaInd
                         };
                     }
                 }
@@ -4082,35 +4122,40 @@
                 const prevAbsenSiswa = (window.cloudState.absensi || []).find(a =>
                     a && a.latitude && a.longitude &&
                     window.isNameMatch(a.nama, namaSiswa) &&
-                    !window.isDefaultUncalibratedCoords(a.latitude, a.longitude, { gpsLocked: true })
+                    !window.isDefaultUncalibratedCoords(a.latitude, a.longitude, { gpsLocked: true, is_locked: true })
                 );
                 if (prevAbsenSiswa) {
                     return {
                         locked: true,
+                        is_locked: true,
                         lat: parseFloat(prevAbsenSiswa.latitude),
                         lng: parseFloat(prevAbsenSiswa.longitude),
-                        radius: (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100,
+                        radius: defaultTolerance,
                         sumber: prevAbsenSiswa.industri || namaInd
                     };
                 }
             }
 
-            // 4. Cek apakah Master Industri sudah dikunci koordinatnya (bukan koordinat default 0.45612, 121.94210)
-            if (dataIndObj && !window.isDefaultUncalibratedCoords(dataIndObj.lat, dataIndObj.lng, dataIndObj)) {
+            // 4. Cek apakah Master Industri sudah dikunci koordinatnya (kolom latitude/longitude/lat/lng & is_locked/gpsLocked)
+            const indLatVal = dataIndObj ? (dataIndObj.latitude || dataIndObj.lat) : "";
+            const indLngVal = dataIndObj ? (dataIndObj.longitude || dataIndObj.lng) : "";
+            if (dataIndObj && !window.isDefaultUncalibratedCoords(indLatVal, indLngVal, dataIndObj)) {
                 return {
                     locked: true,
-                    lat: parseFloat(dataIndObj.lat),
-                    lng: parseFloat(dataIndObj.lng),
-                    radius: parseInt(dataIndObj.radius) >= 100 ? parseInt(dataIndObj.radius) : 100,
+                    is_locked: true,
+                    lat: parseFloat(indLatVal),
+                    lng: parseFloat(indLngVal),
+                    radius: defaultTolerance,
                     sumber: dataIndObj.nama || namaInd
                 };
             }
 
             return {
                 locked: false,
-                lat: parseFloat(dataIndObj?.lat) || 0.45612,
-                lng: parseFloat(dataIndObj?.lng) || 121.94210,
-                radius: 100,
+                is_locked: false,
+                lat: null,
+                lng: null,
+                radius: 50,
                 sumber: namaInd
             };
         };
@@ -6135,6 +6180,51 @@
                 recentJournals.forEach(j => {
                     const originalIdx = (window.cloudState.jurnal || []).indexOf(j);
                     const sInfo = myStudentMap.get(window.normalizeTextCompact(j.siswa));
+                    const isApproved = (j.status === 'Disetujui');
+                    aktivitasJurnalHtml += `
+                    <div style="background:#ffffff; border:1.5px solid #e2e8f0; border-radius:16px; padding:14px; margin-bottom:10px; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+                            <div>
+                                <div style="font-size:13.5px; font-weight:900; color:#0f172a;">👨‍🎓 ${j.siswa}</div>
+                                <div style="font-size:10.5px; color:#0284c7; font-weight:800; margin-top:1px;">📚 ${sInfo ? sInfo.kelas : '-'} &bull; 📅 ${j.tanggal || todayStr}</div>
+                            </div>
+                            <span class="badge-status ${isApproved ? 'badge-green' : 'badge-amber'}" style="font-size:10px;">
+                                ${isApproved ? '✓ Disahkan' : '⏳ Menunggu'}
+                            </span>
+                        </div>
+                        <div style="font-size:11.5px; color:#334155; line-height:1.45; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:8px 10px; margin:6px 0;">
+                            ${j.kegiatan || '-'}
+                        </div>
+                        <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:8px;">
+                            ${!isApproved ? `
+                                <button onclick="window.sahkanJurnalSiswa(${originalIdx})" class="btn-action btn-emerald" style="padding:6px 12px; font-size:11px; font-weight:900;">
+                                    ✓ Sahkan Jurnal
+                                </button>
+                            ` : ''}
+                            <button onclick="window.openFeature('validasi-jurnal', 'Pengesahan Jurnal')" class="btn-action btn-blue" style="padding:6px 12px; font-size:11px; font-weight:800;">
+                                Periksa ➔
+                            </button>
+                        </div>
+                    </div>`;
+                });
+            } else {
+                aktivitasJurnalHtml = `
+                <div style="text-align:center; padding:22px 14px; background:#f8fafc; border-radius:14px; border:1.5px dashed #cbd5e1; color:#94a3b8; font-size:12px; font-weight:700;">
+                    Belum ada aktivitas pengisian jurnal terbaru dari siswa magang di tempat Anda.
+                </div>`;
+            }
+
+            let warningJurnalHtml = "";
+            if (belumIsiJurnalList.length > 0) {
+                belumIsiJurnalList.forEach(s => {
+                    warningJurnalHtml += `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 12px; background:#ffffff; border:1px solid #fecaca; border-radius:12px; margin-bottom:6px;">
+                        <div>
+                            <div style="font-size:12px; font-weight:850; color:#0f172a;">👨‍🎓 ${s.nama}</div>
+                            <div style="font-size:10px; color:#64748b;">📚 ${s.kelas}</div>
+                        </div>
+                        <span class="badge-status badge-red" style="font-size:9.5px;">Belum Mengisi Jurnal</span>
+                    </div>`;
                 });
             } else {
                 warningJurnalHtml = `
@@ -6409,6 +6499,8 @@
                 ? 'LENGKAP HARI INI ✅'
                 : (absenMasuk ? 'SUDAH ABSEN MASUK' : 'BELUM ABSEN HARI INI');
 
+            const statusLockIndustri = window.cekApakahSiswaSudahKunciLokasi(industriName, placementInfo.industriObj, placementInfo.namaSiswa || profile.nama);
+
             return `
             ${bannerHtml}
 
@@ -6421,14 +6513,17 @@
                         <div style="font-size: 10px; color: #0284c7; font-weight: 800; margin-top: 2px;">
                             ⏰ Masuk: ${jc.masukMulai} - ${jc.masukBatasAkhir} WITA &bull; Pulang: ${jc.pulangMulai} - ${jc.pulangBatasAkhir} WITA
                         </div>
+                        <div style="margin-top: 6px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 8px; font-size: 10px; font-weight: 850; background: ${statusLockIndustri.is_locked ? '#dcfce7' : '#fef3c7'}; color: ${statusLockIndustri.is_locked ? '#15803d' : '#b45309'}; border: 1px solid ${statusLockIndustri.is_locked ? '#86efac' : '#fde68a'};">
+                            <span>${statusLockIndustri.is_locked ? '🔒 Status Lokasi Industri: Sudah Terkunci (' + statusLockIndustri.lat.toFixed(5) + ', ' + statusLockIndustri.lng.toFixed(5) + ')' : '🛰️ Status Lokasi Industri: Menunggu Pengambilan Titik Pertama (Auto-Capture <= 50m)'}</span>
+                        </div>
                     </div>
                     <div class="absensi-status-badge" style="color:${absenMasuk ? '#15803d' : '#b45309'}; font-weight:900;">${statusBadgeHariIni}</div>
                 </div>
                 <div class="absensi-btn-grid">
-                    <div class="btn-absensi-box ${absenMasuk ? 'done-card' : ''}" onclick="window.bukaModalAmbilPresensiSelfieGPS('Masuk')">
+                    <div id="btnTriggerPresensiMasuk" class="btn-absensi-box ${absenMasuk ? 'done-card' : ''}" onclick="window.bukaModalAmbilPresensiSelfieGPS('Masuk', this)">
                         <div class="btn-absensi-icon-wrap" style="${absenMasuk ? 'background:#dcfce7; border-color:#22c55e;' : ''}">${absenMasuk ? '✅' : '📷'}</div>
                         <div style="flex:1;">
-                            <div class="btn-absensi-text">PRESENSI MASUK</div>
+                            <div class="btn-absensi-text" id="labelBtnPresensiMasuk">PRESENSI MASUK</div>
                             <div style="font-size: 10px; color: #475569; font-weight: 800; margin-top: 2px;">
                                 ${absenMasuk ? `Tercatat: ${absenMasuk.jam} WITA` : `Jadwal: ${jc.masukMulai} - ${jc.masukBatasAkhir}`}
                             </div>
@@ -6437,10 +6532,10 @@
                             </div>
                         </div>
                     </div>
-                    <div class="btn-absensi-box ${absenPulang ? 'done-card' : ''}" onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang')">
+                    <div id="btnTriggerPresensiPulang" class="btn-absensi-box ${absenPulang ? 'done-card' : ''}" onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang', this)">
                         <div class="btn-absensi-icon-wrap" style="${absenPulang ? 'background:#dcfce7; border-color:#22c55e;' : ''}">${absenPulang ? '✅' : '🚪'}</div>
                         <div style="flex:1;">
-                            <div class="btn-absensi-text">PRESENSI PULANG</div>
+                            <div class="btn-absensi-text" id="labelBtnPresensiPulang">PRESENSI PULANG</div>
                             <div style="font-size: 10px; color: #475569; font-weight: 800; margin-top: 2px;">
                                 ${absenPulang ? `Tercatat: ${absenPulang.jam} WITA` : `Jadwal: ${jc.pulangMulai} - ${jc.pulangBatasAkhir}`}
                             </div>
@@ -6452,19 +6547,18 @@
                 </div>
 
                 <!-- FITUR ALTERNATIF: PINDAH / GANTI TITIK KOORDINAT CABANG INDUSTRI (DENGAN KODE AKSES 12 JAM) -->
-                <div style="margin-top: 12px; padding-top: 10px; border-top: 1.5px dashed #bae6fd; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                    <div style="font-size: 10.5px; color: #334155; font-weight: 750; flex: 1; min-width: 180px;">
+                <div style="margin-top: 12px; padding-top: 10px; border-top: 1.5px dashed #bae6fd; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <div style="font-size: 10.5px; color: #475569; font-weight: 750; line-height: 1.35;">
                         🏢 Dipindahkan ke <b>Cabang Industri</b> atau titik GPS meleset?
-                        ${placementInfo.siswaObj && placementInfo.siswaObj.cabangIndustri ? `<div style="font-size:10px; color:#15803d; font-weight:850; margin-top:2px;">📍 Lokasi Aktif: ${placementInfo.siswaObj.cabangIndustri}</div>` : ''}
                     </div>
-                    <button type="button" onclick="window.bukaModalAlternatifGantiTitikCabang('Masuk')" class="btn-action btn-amber" style="font-size: 10.5px; font-weight: 900; padding: 7px 12px; border-radius: 10px; box-shadow: 0 3px 8px rgba(245, 158, 11, 0.25);">
+                    <button type="button" onclick="window.bukaModalAlternatifGantiTitikCabang('Masuk')" class="btn-action btn-amber" style="font-size: 10.5px; font-weight: 900; padding: 6px 12px; border-radius: 10px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25);">
                         🔄 Pindah / Ganti Titik Cabang Industri
                     </button>
                 </div>
             </div>
 
-            <!-- FITUR BARU DI DASHBOARD SISWA: UPLOAD DOKUMENTASI KEGIATAN (LINK G-DRIVE) -->
-            <div class="card" style="border: 2px solid #38bdf8; background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);">
+            <!-- KARTU PINTASAN CEPAT: UPLOAD DOKUMENTASI KEGIATAN SISWA (GOOGLE DRIVE) -->
+            <div class="card" style="background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%); border: 2px solid #38bdf8;">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
                     <div>
                         <div style="font-size:10.5px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">DOKUMENTASI FOTO KEGIATAN PKL (GOOGLE DRIVE)</div>
@@ -6473,11 +6567,11 @@
                             Kirim link Google Drive berisi foto dokumentasi kegiatan PKL Anda kepada <b>Guru Pembimbing, Panitia PKL, dan Kepala Sekolah</b>.
                         </p>
                     </div>
-                    <div style="display:flex; gap:6px; width:100%; margin-top:8px;">
-                        <button type="button" onclick="window.bukaModalUploadDokumentasiKegiatan()" class="btn-action btn-blue" style="flex:1; padding:11px; font-size:12px; font-weight:900;">
+                    <div style="display:flex; gap:6px; width:100%; margin-top:6px;">
+                        <button type="button" onclick="window.bukaModalUploadDokumentasiKegiatan()" class="btn-action btn-blue" style="flex:1; padding:10px; font-size:12px; font-weight:900;">
                             📸 + Upload Dokumentasi Kegiatan
                         </button>
-                        <button type="button" onclick="window.openFeature('dokumentasi-kegiatan', 'Upload Dokumentasi Kegiatan')" class="btn-action btn-emerald" style="padding:11px 14px; font-size:11.5px; font-weight:900;">
+                        <button type="button" onclick="window.openFeature('dokumentasi-kegiatan', 'Upload Dokumentasi Kegiatan')" class="btn-action btn-emerald" style="padding:10px 14px; font-size:11.5px; font-weight:900;">
                             Lihat Riwayat ➔
                         </button>
                     </div>
@@ -6486,14 +6580,12 @@
 
             <div class="mentor-info-card">
                 <div class="mentor-label">NAMA GURU PEMBIMBING:</div>
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:4px; flex-wrap:wrap;">
-                    <div class="mentor-name" style="margin-top:0; flex:1;">${guruName}</div>
-                    ${(guruName && guruName !== 'Belum Ditentukan' && guruName !== '-') ? `
-                    <button type="button" onclick="window.hubungiWaGuruDariSiswa('${guruName.replace(/'/g, "\\'")}', '${(placementInfo.namaSiswa || profile.nama).replace(/'/g, "\\'")}', '${industriName.replace(/'/g, "\\'")}')" title="Konsultasi via WhatsApp dengan Guru Pembimbing" style="background:linear-gradient(135deg, #25D366 0%, #128C7E 100%); color:#ffffff; border:1.5px solid #ffffff; border-radius:14px; padding:7px 12px; font-size:11.5px; font-weight:900; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 12px rgba(22,163,74,0.35); flex-shrink:0;">
-                        ${window.getWhatsappSvgIcon(16)}
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:2px; flex-wrap:wrap;">
+                    <div class="mentor-name" style="margin-top:0;">${guruName}</div>
+                    <button type="button" onclick="window.hubungiWaGuruDariSiswa('${(guruName || '').replace(/'/g, "\\'")}', '${(placementInfo.namaSiswa || profile.nama || '').replace(/'/g, "\\'")}', '${(industriName || '').replace(/'/g, "\\'")}')" title="Konsultasi langsung dengan Guru Pembimbing via WhatsApp" style="background:linear-gradient(135deg, #25D366 0%, #128C7E 100%); color:#ffffff; border:1.5px solid #ffffff; border-radius:12px; padding:6px 12px; font-size:11px; font-weight:900; display:inline-flex; align-items:center; gap:5px; cursor:pointer; box-shadow:0 4px 12px rgba(37,211,102,0.4); flex-shrink:0;">
+                        ${window.getWhatsappSvgIcon(15)}
                         <span>Chat WA</span>
                     </button>
-                    ` : ''}
                 </div>
 
                 <div class="details-white-sheet">
@@ -6513,8 +6605,8 @@
                         <div class="detail-left"><div class="detail-icon-round">🏢</div> TEMPAT PKL</div>
                         <div class="detail-right">${industriName}</div>
                     </div>
-                    <div style="margin-top:6px; text-align:right;">
-                        <button onclick="window.openFeature('jurnal', 'Jurnal PKL')" class="btn-action btn-blue" style="width:100%; padding:10px; font-size:12px;">
+                    <div style="margin-top: 4px; padding-top: 10px; border-top: 1.5px dashed #e2e8f0;">
+                        <button onclick="window.openFeature('jurnal', 'Jurnal Harian PKL')" class="btn-action btn-blue" style="width: 100%; padding: 11px; font-size: 12px; font-weight: 900; border-radius: 12px;">
                             📖 Buka & Isi Jurnal Harian PKL
                         </button>
                     </div>
@@ -6523,27 +6615,33 @@
         };
 
         window.hitungJarakMeterHaversine = function(lat1, lon1, lat2, lon2) {
-            const R = 6371000; // Radius bumi dalam meter
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = 
-                Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-                Math.sin(dLon/2) * Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const R = 6371e3;
+            const toRad = x => x * Math.PI / 180;
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
             return Math.round(R * c);
         };
 
+        window.liveCameraStream = null;
+        window.tempSelfieBase64 = null;
+        window.currentSelfieLocation = null;
+        window.selectedKategoriKehadiran = "hadir_lokasi";
+
         window.hentikanStreamKamera = function() {
             if (window.liveCameraStream) {
-                window.liveCameraStream.getTracks().forEach(t => t.stop());
+                window.liveCameraStream.getTracks().forEach(track => track.stop());
                 window.liveCameraStream = null;
             }
-            const video = document.getElementById("selfieVideoElement");
-            if (video) video.srcObject = null;
         };
 
-        window.bukaModalAmbilPresensiSelfieGPS = function(tipeAbsen) {
+        window.bukaModalAmbilPresensiSelfieGPS = function(tipeAbsen, btnTriggerEl = null) {
+            // Cegah klik ganda (double-click) saat proses pengambilan GPS berlangsung
+            if (window.isFetchingPresensiGps) return;
+
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
             const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
 
@@ -6552,7 +6650,7 @@
                 const todayStr = window.getTodayLocalWitaStr();
                 const sudahIsiJurnal = (window.cloudState.jurnal || []).some(j => 
                     (window.isNameMatch(j.siswa, profile.nama) || window.isNameMatch(j.siswa, placementInfo.namaSiswa) || j.user_id === (profile.identitas || profile.nama)) &&
-                    j.tanggal === todayStr
+                    window.normalizeDateToYMD(j.tanggal, j.id) === todayStr
                 );
 
                 if (!sudahIsiJurnal) {
@@ -6578,6 +6676,38 @@
                 }
             }
 
+            // Tampilkan status loading pada tombol presensi ("Mengambil titik GPS...") agar tidak ditekan berkali-kali
+            window.isFetchingPresensiGps = true;
+            const targetBtn = btnTriggerEl || document.getElementById(tipeAbsen === 'Masuk' ? 'btnTriggerPresensiMasuk' : 'btnTriggerPresensiPulang');
+            const labelEl = document.getElementById(tipeAbsen === 'Masuk' ? 'labelBtnPresensiMasuk' : 'labelBtnPresensiPulang');
+            const originalBtnHtml = (targetBtn && !labelEl) ? targetBtn.innerHTML : "";
+            const originalLabelText = labelEl ? labelEl.innerText : "";
+
+            if (targetBtn) {
+                targetBtn.style.pointerEvents = "none";
+                targetBtn.style.opacity = "0.75";
+            }
+            if (labelEl) {
+                labelEl.innerText = "⏳ Mengambil titik GPS...";
+            } else if (targetBtn) {
+                targetBtn.innerHTML = "⏳ Mengambil titik GPS...";
+            }
+
+            const restoreTriggerButton = () => {
+                window.isFetchingPresensiGps = false;
+                if (targetBtn) {
+                    targetBtn.style.pointerEvents = "auto";
+                    targetBtn.style.opacity = "1";
+                }
+                if (labelEl && originalLabelText) {
+                    labelEl.innerText = originalLabelText;
+                } else if (targetBtn && originalBtnHtml) {
+                    targetBtn.innerHTML = originalBtnHtml;
+                }
+            };
+
+            setTimeout(restoreTriggerButton, 1200);
+
             // Deteksi industri penempatan spesifik untuk siswa pemilik akun ini
             const namaSiswaResmi = placementInfo.namaSiswa || profile.nama;
             const namaInd = (placementInfo.industri && placementInfo.industri !== 'Belum Ditentukan')
@@ -6585,26 +6715,27 @@
                 : "Belum Ditentukan";
             const dataInd = placementInfo.industriObj || {
                 nama: namaInd,
-                lat: "0.45612",
-                lng: "121.94210",
-                radius: 100
+                lat: "",
+                lng: "",
+                radius: 50
             };
 
-            const lockedInfo = window.ambilKoordinatTerkunciIndustri(dataInd.nama, dataInd, namaSiswaResmi);
-            const indLat = lockedInfo.lat;
-            const indLng = lockedInfo.lng;
-            const indRadius = lockedInfo.radius;
+            const lockStatus = window.cekApakahSiswaSudahKunciLokasi(dataInd.nama, dataInd, namaSiswaResmi);
+            const indLat = lockStatus.lat || 0.45612;
+            const indLng = lockStatus.lng || 121.94210;
+            const indRadius = lockStatus.radius || 50;
 
             window.tempSelfieBase64 = null;
             window.currentSelfieLocation = null;
+            window.justAutoCapturedFirstLocation = false;
             window.selectedKategoriKehadiran = "hadir_lokasi";
 
             window.openDynamicModal(`
                 <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">📷 Presensi ${tipeAbsen}: Selfie & GPS</h3>
-                <div style="font-size:11px; color:#475569; margin-bottom:10px;">
-                    Lokasi Magang: <b>${dataInd.nama}</b>
-                    <span id="badgeGpsLockState" style="display:inline-block; margin-left:4px; font-size:9.5px; font-weight:850; padding:1.5px 6px; border-radius:6px; background:${lockedInfo.isLocked ? '#dcfce7' : '#e0f2fe'}; color:${lockedInfo.isLocked ? '#15803d' : '#0369a1'};">
-                        ${lockedInfo.isLocked ? '🔒 Titik Lokasi Terkunci' : '🛰️ Siap Kunci Otomatis di Industri'}
+                <div style="font-size:11px; color:#475569; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px;">
+                    <span>Lokasi Magang: <b>${dataInd.nama}</b></span>
+                    <span id="badgeGpsLockState" style="display:inline-block; font-size:9.5px; font-weight:850; padding:2.5px 8px; border-radius:6px; background:${lockStatus.is_locked ? '#dcfce7' : '#fef3c7'}; color:${lockStatus.is_locked ? '#15803d' : '#b45309'}; border:1px solid ${lockStatus.is_locked ? '#86efac' : '#fde68a'};">
+                        ${lockStatus.is_locked ? '🔒 Lokasi Industri Sudah Terkunci' : '🛰️ Menunggu Pengambilan Titik Pertama'}
                     </span>
                 </div>
 
@@ -6619,17 +6750,29 @@
 
                 <!-- Indikator Status Geofence GPS -->
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:#f8fafc; border:1px solid #bfdbfe; border-radius:12px; padding:7px 12px; gap:6px; flex-wrap:wrap;">
-                    <span style="font-size:11px; font-weight:800; color:#334155;">📍 Status Lokasi:</span>
+                    <span style="font-size:11px; font-weight:800; color:#334155;">📍 Status GPS:</span>
                     <div style="display:flex; align-items:center; gap:6px;">
-                        <span id="badgeGpsPresensiStatus" class="badge-status badge-amber">Memeriksa GPS...</span>
-                        <button type="button" onclick="window.evaluasiLokasiDanKamera('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${dataInd.nama.replace(/'/g, "\\'")}')" class="btn-action btn-blue" style="padding:3px 8px; font-size:10px;" title="Segarkan Sinyal GPS">🔄 Refresh GPS</button>
+                        <span id="badgeGpsPresensiStatus" class="badge-status badge-amber">⏳ Mengambil titik GPS...</span>
+                        <button type="button" id="btnRefreshGpsModal" onclick="window.evaluasiLokasiDanKamera('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${dataInd.nama.replace(/'/g, "\\'")}')" class="btn-action btn-blue" style="padding:3px 8px; font-size:10px;" title="Segarkan Sinyal GPS">🔄 Refresh GPS</button>
                     </div>
+                </div>
+
+                <!-- KOTAK PERINGATAN SINYAL GPS BELUM STABIL SAAT AUTO-CAPTURE PERTAMA (AKURASI > 50M) -->
+                <div id="gpsAccuracyWarningBox" style="display:none; background:#fffbeb; border:2px solid #f59e0b; border-radius:18px; padding:16px 14px; text-align:center; color:#92400e; margin-bottom:12px;">
+                    <div style="font-size:32px; margin-bottom:4px;">📡⚠️</div>
+                    <div style="font-size:13px; font-weight:950; color:#b45309; text-transform:uppercase;">Sinyal GPS Belum Stabil (Akurasi &gt; 50m)</div>
+                    <div id="gpsAccuracyDetailText" style="font-size:11.5px; color:#78350f; margin:6px 0 12px; line-height:1.5; font-weight:700;">
+                        Sinyal GPS belum stabil (akurasi &gt; 50m). Silakan keluar ruangan sebentar lalu tekan Presensi Masuk kembali untuk mengunci titik lokasi industri.
+                    </div>
+                    <button type="button" onclick="window.evaluasiLokasiDanKamera('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${dataInd.nama.replace(/'/g, "\\'")}')" class="btn-action btn-amber" style="padding:10px 16px; font-size:12px; font-weight:900; border-radius:12px;">
+                        🔄 Ambil Ulang Titik GPS Sekarang
+                    </button>
                 </div>
 
                 <!-- KOTAK PERINGATAN JIKA BERADA DI LUAR TITIK LOKASI YANG SUDAH TERKUNCI (KAMERA TIDAK AKAN TERBUKA) -->
                 <div id="gpsOutOfRangeLockedBox" style="display:none; background:#fef2f2; border:2px solid #ef4444; border-radius:18px; padding:16px 14px; text-align:center; color:#991b1b; margin-bottom:12px;">
                     <div style="font-size:32px; margin-bottom:4px;">🚫📍</div>
-                    <div style="font-size:13px; font-weight:950; color:#dc2626; text-transform:uppercase;">Kamera Terkunci: Lokasi Tidak Sesuai!</div>
+                    <div style="font-size:13px; font-weight:950; color:#dc2626; text-transform:uppercase;">Presensi Ditolak: Di Luar Radius Lokasi Industri!</div>
                     <div id="gpsOutOfRangeDetailText" style="font-size:11.5px; color:#7f1d1d; margin:6px 0 10px; line-height:1.45;">
                         Anda terdeteksi berada di luar radius titik lokasi industri yang sudah tersimpan. Kamera hanya akan terbuka apabila Anda berada di titik lokasi industri yang telah dikunci.
                     </div>
@@ -6656,6 +6799,11 @@
                             🔒 Kunci Titik Lokasi
                         </button>
                     </div>
+                </div>
+
+                <!-- Notifikasi Sukses Auto-Capture Lokasi Pertama -->
+                <div id="autoCaptureSuccessBanner" style="display:none; background:#f0fdf4; border:1.5px solid #4ade80; border-radius:12px; padding:10px 12px; margin-bottom:10px; font-size:11px; font-weight:850; color:#15803d; text-align:center;">
+                    ✅ Titik koordinat lokasi PKL Anda berhasil didaftarkan & dikunci secara otomatis! Silakan ambil foto selfie untuk menyelesaikan presensi.
                 </div>
 
                 <!-- Wadah Kamera (Hanya terbuka jika berada di titik lokasi yang sesuai) -->
@@ -6708,27 +6856,33 @@
             const badgeStatus = document.getElementById("badgeGpsPresensiStatus");
             const badgeLock = document.getElementById("badgeGpsLockState");
             const notifBox = document.getElementById("gpsNotifOutsideBox");
+            const accWarnBox = document.getElementById("gpsAccuracyWarningBox");
+            const accDetailText = document.getElementById("gpsAccuracyDetailText");
             const outOfRangeBox = document.getElementById("gpsOutOfRangeLockedBox");
             const outOfRangeDetail = document.getElementById("gpsOutOfRangeDetailText");
+            const autoCaptureBanner = document.getElementById("autoCaptureSuccessBanner");
             const cameraWrap = document.getElementById("cameraPreviewWrap");
             const btnCamWrap = document.getElementById("cameraActionButtonsWrap");
             const btnSimpan = document.getElementById("btnSimpanPresensiAction");
+            const btnRefreshGps = document.getElementById("btnRefreshGpsModal");
 
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
             const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
             const namaSiswaResmi = placementInfo.namaSiswa || profile.nama;
 
-            // Cek apakah siswa/industri ini SUDAH PERNAH mengunci titik lokasi sebelumnya
+            // Cek apakah industri/penempatan siswa ini SUDAH TERKUNCI (is_locked = true) atau MASIH KOSONG
             const lockStatus = window.cekApakahSiswaSudahKunciLokasi(targetNamaInd, placementInfo.industriObj, namaSiswaResmi);
             let activeTargetLat = lockStatus.lat || targetLat || 0.45612;
             let activeTargetLng = lockStatus.lng || targetLng || 121.94210;
-            let activeRadius = lockStatus.radius || targetRadius || 100;
-            const sudahPernahKunciTitik = lockStatus.locked;
+            let activeRadius = lockStatus.radius || targetRadius || 50;
+            const sudahPernahKunciTitik = !!lockStatus.is_locked;
 
             // KONDISI PENGECUALIAN: Dinas Luar atau Izin/Sakit
             if (kat === 'tugas_luar' || kat === 'izin_sakit') {
                 if (notifBox) notifBox.style.display = 'none';
+                if (accWarnBox) accWarnBox.style.display = 'none';
                 if (outOfRangeBox) outOfRangeBox.style.display = 'none';
+                if (autoCaptureBanner) autoCaptureBanner.style.display = 'none';
                 if (cameraWrap) cameraWrap.style.display = 'flex';
                 if (btnCamWrap) btnCamWrap.style.display = 'flex';
                 if (btnSimpan) {
@@ -6747,6 +6901,7 @@
                             window.currentSelfieLocation = {
                                 lat: pos.coords.latitude,
                                 lng: pos.coords.longitude,
+                                accuracy: Math.round(pos.coords.accuracy || 0),
                                 targetLat: pos.coords.latitude,
                                 targetLng: pos.coords.longitude,
                                 distance: 0,
@@ -6754,12 +6909,12 @@
                             };
                         },
                         () => {
-                            window.currentSelfieLocation = { lat: activeTargetLat, lng: activeTargetLng, targetLat: activeTargetLat, targetLng: activeTargetLng, distance: 0, inRadius: true };
+                            window.currentSelfieLocation = { lat: activeTargetLat, lng: activeTargetLng, accuracy: 0, targetLat: activeTargetLat, targetLng: activeTargetLng, distance: 0, inRadius: true };
                         },
-                        { enableHighAccuracy: true, timeout: 8000 }
+                        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
                     );
                 } else {
-                    window.currentSelfieLocation = { lat: activeTargetLat, lng: activeTargetLng, targetLat: activeTargetLat, targetLng: activeTargetLng, distance: 0, inRadius: true };
+                    window.currentSelfieLocation = { lat: activeTargetLat, lng: activeTargetLng, accuracy: 0, targetLat: activeTargetLat, targetLng: activeTargetLng, distance: 0, inRadius: true };
                 }
 
                 window.mulaiStreamKameraSelfie();
@@ -6771,47 +6926,89 @@
             if (cameraWrap) cameraWrap.style.display = 'none';
             if (btnCamWrap) btnCamWrap.style.display = 'none';
             if (notifBox) notifBox.style.display = 'none';
+            if (accWarnBox) accWarnBox.style.display = 'none';
             if (outOfRangeBox) outOfRangeBox.style.display = 'none';
+            if (autoCaptureBanner) autoCaptureBanner.style.display = 'none';
             if (btnSimpan) {
                 btnSimpan.disabled = true;
                 btnSimpan.style.opacity = '0.5';
             }
+            if (btnRefreshGps) {
+                btnRefreshGps.disabled = true;
+                btnRefreshGps.innerText = "⏳ Mengambil titik GPS...";
+            }
 
             if (badgeStatus) {
                 badgeStatus.className = "badge-status badge-amber";
-                badgeStatus.innerText = sudahPernahKunciTitik
-                    ? "🛰️ Memverifikasi Kesesuaian Titik Lokasi..."
-                    : "🛰️ Menangkap & Mengunci Titik GPS Industri...";
+                badgeStatus.innerText = "⏳ Mengambil titik GPS...";
             }
 
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition(
                     pos => {
+                        if (btnRefreshGps) {
+                            btnRefreshGps.disabled = false;
+                            btnRefreshGps.innerText = "🔄 Refresh GPS";
+                        }
+
                         const curLat = pos.coords.latitude;
                         const curLng = pos.coords.longitude;
+                        const curAccuracy = Math.round(pos.coords.accuracy || 0);
 
-                        // KASUS 1: BELUM PERNAH MENGUNCI TITIK LOKASI (Pengambilan Pertama Kali di Industri)
-                        // Otomatis kunci dan simpan permanen titik lokasi industri saat itu, lalu buka kamera
+                        // =========================================================================
+                        // KONDISI A: JIKA TITIK KOORDINAT INDUSTRI MASIH KOSONG (BELUM PERNAH DIATUR)
+                        // =========================================================================
                         if (!sudahPernahKunciTitik) {
+                            // 1. Validasi akurasi GPS perangkat siswa (position.coords.accuracy) maksimal 50 meter
+                            if (curAccuracy > 50) {
+                                window.hentikanStreamKamera();
+                                if (cameraWrap) cameraWrap.style.display = 'none';
+                                if (btnCamWrap) btnCamWrap.style.display = 'none';
+                                if (accWarnBox) accWarnBox.style.display = 'block';
+                                if (accDetailText) {
+                                    accDetailText.innerHTML = `Sinyal GPS belum stabil (akurasi <b>${curAccuracy}m</b> &gt; 50m). Silakan keluar ruangan sebentar lalu tekan Presensi Masuk kembali untuk mengunci titik lokasi industri.`;
+                                }
+                                if (badgeLock) {
+                                    badgeLock.style.background = "#fef3c7";
+                                    badgeLock.style.color = "#b45309";
+                                    badgeLock.innerText = `🛰️ Menunggu Pengambilan Titik Pertama (Akurasi ${curAccuracy}m > 50m)`;
+                                }
+                                if (badgeStatus) {
+                                    badgeStatus.className = "badge-status badge-amber";
+                                    badgeStatus.innerText = `⚠️ SINYAL GPS BELUM STABIL (Akurasi ${curAccuracy}m > 50m)`;
+                                }
+                                window.showModalInfo(
+                                    "Sinyal GPS Belum Stabil ⚠️",
+                                    "Sinyal GPS belum stabil (akurasi > 50m). Silakan keluar ruangan sebentar lalu tekan Presensi Masuk kembali untuk mengunci titik lokasi industri."
+                                );
+                                return;
+                            }
+
+                            // 2. Jika akurasi sudah bagus (<= 50 meter), OTOMATIS SIMPAN koordinat siswa ke database
+                            // sebagai titik koordinat resmi industri tersebut dan ubah statusnya menjadi terkunci (is_locked = true)
                             activeTargetLat = curLat;
                             activeTargetLng = curLng;
+                            window.justAutoCapturedFirstLocation = true;
                             window.kunciKoordinatGpsIndustriPermanen(targetNamaInd, curLat, curLng, namaSiswaResmi, false);
                             window.simpanDatabasePersisten(true);
 
                             window.currentSelfieLocation = {
                                 lat: curLat,
                                 lng: curLng,
+                                accuracy: curAccuracy,
                                 targetLat: curLat,
                                 targetLng: curLng,
                                 distance: 0,
-                                inRadius: true
+                                inRadius: true,
+                                autoCapturedFirstTime: true
                             };
 
                             if (badgeLock) {
                                 badgeLock.style.background = "#dcfce7";
                                 badgeLock.style.color = "#15803d";
-                                badgeLock.innerText = `🔒 Terkunci Otomatis (${curLat.toFixed(5)}, ${curLng.toFixed(5)})`;
+                                badgeLock.innerText = `🔒 Lokasi Industri Terkunci Otomatis (Akurasi ${curAccuracy}m)`;
                             }
+                            if (autoCaptureBanner) autoCaptureBanner.style.display = 'block';
                             if (cameraWrap) cameraWrap.style.display = 'flex';
                             if (btnCamWrap) btnCamWrap.style.display = 'flex';
                             if (btnSimpan) {
@@ -6820,14 +7017,17 @@
                             }
                             if (badgeStatus) {
                                 badgeStatus.className = "badge-status badge-green";
-                                badgeStatus.innerText = "🟢 TITIK LOKASI DIKUNCI & KAMERA AKTIF";
+                                badgeStatus.innerText = `🟢 TITIK INDUSTRI DIKUNCI (Akurasi ${curAccuracy}m) & KAMERA AKTIF`;
                             }
                             window.mulaiStreamKameraSelfie();
                             return;
                         }
 
-                        // KASUS 2: SUDAH PERNAH MENGUNCI TITIK LOKASI DI INDUSTRI
-                        // Wajib periksa apakah posisi GPS saat ini sesuai dengan titik yang sudah tersimpan (dan juga cek daftar titik cabang resmi jika ada)
+                        // =========================================================================
+                        // KONDISI B: JIKA TITIK KOORDINAT INDUSTRI SUDAH ADA (SUDAH TERKUNCI / is_locked = true)
+                        // Jangan timpa koordinat industri yang sudah tersimpan di database.
+                        // Hitung jarak dengan rumus Haversine.
+                        // =========================================================================
                         let minDistance = window.hitungJarakMeterHaversine(curLat, curLng, activeTargetLat, activeTargetLng);
                         let matchedLat = activeTargetLat;
                         let matchedLng = activeTargetLng;
@@ -6851,21 +7051,24 @@
                         window.currentSelfieLocation = {
                             lat: curLat,
                             lng: curLng,
+                            accuracy: curAccuracy,
                             targetLat: matchedLat,
                             targetLng: matchedLng,
                             distance: minDistance,
-                            inRadius: isInsideLockedRadius
+                            inRadius: isInsideLockedRadius,
+                            autoCapturedFirstTime: false
                         };
 
                         if (isInsideLockedRadius) {
-                            // BERADA DI TITIK GPS LOKASI YANG SUDAH TERSIMPAN -> BUKA KAMERA!
+                            // Jarak <= radius toleransi: Izinkan presensi & buka kamera
                             if (badgeLock) {
                                 badgeLock.style.background = "#dcfce7";
                                 badgeLock.style.color = "#15803d";
-                                badgeLock.innerText = `🔒 Lokasi Sesuai (Jarak ${minDistance}m dari Titik Terkunci)`;
+                                badgeLock.innerText = `🔒 Lokasi Industri Terkunci (Jarak ${minDistance}m)`;
                             }
                             if (outOfRangeBox) outOfRangeBox.style.display = 'none';
                             if (notifBox) notifBox.style.display = 'none';
+                            if (accWarnBox) accWarnBox.style.display = 'none';
                             if (cameraWrap) cameraWrap.style.display = 'flex';
                             if (btnCamWrap) btnCamWrap.style.display = 'flex';
                             if (btnSimpan) {
@@ -6878,31 +7081,35 @@
                             }
                             window.mulaiStreamKameraSelfie();
                         } else {
-                            // TITIK LOKASI BERBEDA DARI YANG SUDAH TERSIMPAN -> KAMERA DILARANG TERBUKA!
+                            // Jarak > radius toleransi: Tolak presensi dan tampilkan jarak siswa dari lokasi industri saat ini
                             window.hentikanStreamKamera();
                             if (cameraWrap) cameraWrap.style.display = 'none';
                             if (btnCamWrap) btnCamWrap.style.display = 'none';
                             if (notifBox) notifBox.style.display = 'none';
+                            if (accWarnBox) accWarnBox.style.display = 'none';
                             if (outOfRangeBox) outOfRangeBox.style.display = 'block';
                             if (outOfRangeDetail) {
                                 outOfRangeDetail.innerHTML = `
-                                    Posisi Anda saat ini berjarak <b>${minDistance} meter</b> dari titik lokasi <b>${targetNamaInd}</b> yang sudah dikunci (Batas radius: <b>${activeRadius} meter</b>).<br><br>
-                                    <b>Kamera tidak akan terbuka</b> di luar lokasi magang. Silakan menuju ke titik lokasi industri Anda lalu klik <b>"Cek Ulang Posisi Saya"</b>.
+                                    Presensi ditolak! Jarak Anda saat ini adalah <b>${minDistance} meter</b> dari titik lokasi industri <b>${targetNamaInd}</b> yang telah terkunci (Batas toleransi: <b>${activeRadius} meter</b>).<br><br>
+                                    Silakan mendekat ke area lokasi industri Anda lalu tekan <b>"Cek Ulang Posisi Saya Sekarang"</b>.
                                 `;
                             }
                             if (badgeLock) {
                                 badgeLock.style.background = "#fee2e2";
                                 badgeLock.style.color = "#b91c1c";
-                                badgeLock.innerText = `🚫 Di Luar Titik Terkunci (${minDistance}m)`;
+                                badgeLock.innerText = `🔒 Lokasi Terkunci • Anda Di Luar Radius (${minDistance}m)`;
                             }
                             if (badgeStatus) {
                                 badgeStatus.className = "badge-status badge-red";
-                                badgeStatus.innerText = `🔴 LOKASI BERBEDA (${minDistance}m > ${activeRadius}m) - KAMERA DIKUNCI`;
+                                badgeStatus.innerText = `🔴 DITOLAK: JARAK ${minDistance}m (MAKS ${activeRadius}m)`;
                             }
                         }
                     },
                     err => {
-                        // JIKA SINYAL GPS GAGAL TERBACA OTOMATIS:
+                        if (btnRefreshGps) {
+                            btnRefreshGps.disabled = false;
+                            btnRefreshGps.innerText = "🔄 Refresh GPS";
+                        }
                         window.hentikanStreamKamera();
                         if (cameraWrap) cameraWrap.style.display = 'none';
                         if (btnCamWrap) btnCamWrap.style.display = 'none';
@@ -6919,6 +7126,10 @@
                     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
                 );
             } else {
+                if (btnRefreshGps) {
+                    btnRefreshGps.disabled = false;
+                    btnRefreshGps.innerText = "🔄 Refresh GPS";
+                }
                 window.hentikanStreamKamera();
                 if (cameraWrap) cameraWrap.style.display = 'none';
                 if (btnCamWrap) btnCamWrap.style.display = 'none';
@@ -7049,9 +7260,11 @@
             if (kat === 'tugas_luar') katText = "Dinas Luar / Lapangan";
             else if (kat === 'izin_sakit') katText = "Izin / Sakit";
 
-            // Kunci permanen titik koordinat industri saat Presensi Masuk/Pulang berhasil disimpan
-            // sehingga untuk Presensi Pulang maupun hari berikutnya titik lokasi sudah terkunci akurat tanpa perlu Kode Akses
-            if (kat === 'hadir_lokasi' && window.currentSelfieLocation) {
+            // Catatan Penting Sesuai Kondisi B:
+            // Jika koordinat industri SUDAH TERKUNCI sebelumnya, JANGAN timpa koordinat industri yang sudah ada di database!
+            // Hanya kunci jika ini adalah pengambilan titik pertama kali (autoCapturedFirstTime).
+            const wasFirstAutoCapture = !!(window.justAutoCapturedFirstLocation || (window.currentSelfieLocation && window.currentSelfieLocation.autoCapturedFirstTime));
+            if (kat === 'hadir_lokasi' && wasFirstAutoCapture && window.currentSelfieLocation) {
                 const lockLat = window.currentSelfieLocation.targetLat || window.currentSelfieLocation.lat || indLat;
                 const lockLng = window.currentSelfieLocation.targetLng || window.currentSelfieLocation.lng || indLng;
                 window.kunciKoordinatGpsIndustriPermanen(industriNama, lockLat, lockLng, namaResmiSiswa);
@@ -7105,7 +7318,16 @@
             }
 
             window.tutupModalPresensiSelfie();
-            window.showModalInfo("Presensi Berhasil ✅", `Presensi <b>${tipeAbsen}</b> [${katText}] berhasil dicatat pukul <b>${jamStr} WITA</b>.<br><span style="font-size:11px; color:#16a34a; font-weight:800;">✓ Tercatat di Dashboard Siswa, Guru Pembimbing, Mitra Industri, Orang Tua, dan Panel Admin.</span>`);
+            if (wasFirstAutoCapture) {
+                window.justAutoCapturedFirstLocation = false;
+                window.showModalInfo(
+                    "Presensi & Auto-Capture Lokasi Berhasil! 🎉📍",
+                    `<b>Presensi berhasil! Titik koordinat lokasi PKL Anda berhasil didaftarkan secara otomatis.</b><br><br>` +
+                    `Presensi <b>${tipeAbsen}</b> [${katText}] tercatat pukul <b>${jamStr} WITA</b> dan lokasi <b>${industriNama}</b> kini telah terkunci permanen.`
+                );
+            } else {
+                window.showModalInfo("Presensi Berhasil ✅", `Presensi <b>${tipeAbsen}</b> [${katText}] berhasil dicatat pukul <b>${jamStr} WITA</b>.<br><span style="font-size:11px; color:#16a34a; font-weight:800;">✓ Tercatat di Dashboard Siswa, Guru Pembimbing, Mitra Industri, Orang Tua, dan Panel Admin.</span>`);
+            }
             window.openFeature("dashboard", "Beranda");
         };
 
@@ -11182,6 +11404,7 @@
             });
 
             const todayStr = window.getTodayLocalWitaStr();
+            const statusLockSiswaPage = window.cekApakahSiswaSudahKunciLokasi(placementInfo.industri, placementInfo.industriObj, namaResmi);
 
             return `
             <div class="card">
@@ -11189,10 +11412,13 @@
                     <div>
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">PRESENSI HARIAN &bull; ${namaResmi}${kls}</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📍 Riwayat Presensi Saya (${myAbsen.length} Catatan)</h3>
+                        <div style="margin-top:4px; display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:8px; font-size:10px; font-weight:850; background:${statusLockSiswaPage.is_locked ? '#dcfce7' : '#fef3c7'}; color:${statusLockSiswaPage.is_locked ? '#15803d' : '#b45309'}; border:1px solid ${statusLockSiswaPage.is_locked ? '#86efac' : '#fde68a'};">
+                            ${statusLockSiswaPage.is_locked ? '🔒 Lokasi Industri Sudah Terkunci (' + statusLockSiswaPage.lat.toFixed(5) + ', ' + statusLockSiswaPage.lng.toFixed(5) + ')' : '🛰️ Menunggu Pengambilan Titik Pertama (Auto-Capture <= 50m)'}
+                        </div>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                        <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Masuk')" class="btn-action btn-blue">📸 Absen Masuk</button>
-                        <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang')" class="btn-action btn-emerald">🚪 Absen Pulang</button>
+                        <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Masuk', this)" class="btn-action btn-blue">📸 Absen Masuk</button>
+                        <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang', this)" class="btn-action btn-emerald">🚪 Absen Pulang</button>
                         <button onclick="window.segarkanDataPresensiDariCloud(this)" class="btn-action btn-blue">🔄 Segarkan Cloud</button>
                     </div>
                 </div>
