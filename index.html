@@ -1676,15 +1676,70 @@
 
         // Helper Tanggal Lokal WITA (YYYY-MM-DD) yang Konsisten di Semua Fitur (Anti-Meleset Zona Waktu UTC)
         window.getTodayLocalWitaStr = function() {
+            // Paksa konversi ke WITA (UTC+8) agar perangkat dengan zona waktu berbeda tetap akurat
             const now = new Date();
-            const yyyy = now.getFullYear();
-            const mm = String(now.getMonth() + 1).padStart(2, '0');
-            const dd = String(now.getDate()).padStart(2, '0');
+            const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const witaDate = new Date(utcMs + (8 * 3600000));
+            const yyyy = witaDate.getFullYear();
+            const mm = String(witaDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(witaDate.getDate()).padStart(2, '0');
             return `${yyyy}-${mm}-${dd}`;
         };
 
         window.getCurrentMonthLocalWitaStr = function() {
             return window.getTodayLocalWitaStr().substring(0, 7);
+        };
+
+        // Normalisasi segala format tanggal (DD/MM/YYYY, DD-MM-YYYY, ISO UTC, atau ekstraksi dari ID abs_17629...) menjadi YYYY-MM-DD WITA
+        window.normalizeDateToYMD = function(rawDate, recordId = "") {
+            // 1. Jika ada timestamp milidetik di ID (contoh: abs_1762908000000), gunakan untuk memvalidasi tanggal WITA (UTC+8)
+            if (recordId && typeof recordId === 'string') {
+                const matchTs = recordId.match(/(?:abs|jur|dokkeg|disp)_(\d{12,14})/);
+                if (matchTs && matchTs[1]) {
+                    const tsNum = parseInt(matchTs[1], 10);
+                    if (!isNaN(tsNum) && tsNum > 1700000000000) {
+                        const dObj = new Date(tsNum);
+                        const utcMs = dObj.getTime() + (dObj.getTimezoneOffset() * 60000);
+                        const witaObj = new Date(utcMs + (8 * 3600000));
+                        const y = witaObj.getFullYear();
+                        const m = String(witaObj.getMonth() + 1).padStart(2, '0');
+                        const d = String(witaObj.getDate()).padStart(2, '0');
+                        const witaYmd = `${y}-${m}-${d}`;
+                        // Jika rawDate kosong atau hanya selisih 1 hari akibat bug UTC pagi hari, prioritaskan tanggal WITA dari timestamp asli
+                        if (!rawDate) return witaYmd;
+                        const cleanRaw = String(rawDate).trim().substring(0, 10);
+                        if (cleanRaw !== witaYmd && Math.abs(new Date(witaYmd).getTime() - new Date(cleanRaw).getTime()) <= 86400000) {
+                            return witaYmd;
+                        }
+                    }
+                }
+            }
+
+            if (!rawDate) return "";
+            const s = String(rawDate).trim();
+
+            // Format YYYY-MM-DD atau ISO string
+            const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+            if (isoMatch) {
+                return `${isoMatch[1]}-${String(isoMatch[2]).padStart(2, '0')}-${String(isoMatch[3]).padStart(2, '0')}`;
+            }
+
+            // Format DD/MM/YYYY atau DD-MM-YYYY
+            const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+            if (dmyMatch) {
+                return `${dmyMatch[3]}-${String(dmyMatch[2]).padStart(2, '0')}-${String(dmyMatch[1]).padStart(2, '0')}`;
+            }
+
+            return s;
+        };
+
+        window.getAbsensiNormalizedDate = function(ab) {
+            if (!ab) return "";
+            const norm = window.normalizeDateToYMD(ab.tanggal, ab.id);
+            if (norm && ab.tanggal !== norm) {
+                ab.tanggal = norm;
+            }
+            return norm;
         };
 
         window.formatTanggalIndoLengkap = function(ymdStr) {
@@ -2595,157 +2650,7 @@
             return false;
         };
 
-        window.kirimSnapshotKeSupabase = async function(payload, silent = false) {
-            const creds = window.getSupabaseCredentials();
-            if (!creds || !creds.url || !creds.key) {
-                if (!silent) {
-                    window.showModalInfo("Kredensial Kosong ⚠️", "URL atau Key Supabase belum diisi di menu Database Cloud.");
-                }
-                return false;
-            }
-
-            try {
-                const activeRole = window.cloudState.activeRole || "siswa";
-                const isAdminOrPanitia = (activeRole === 'admin' || activeRole === 'panitia');
-
-                // 1. SINKRONISASI PINTAR (PRE-FETCH MERGE): Tarik data terbaru dari Cloud dan gabungkan
-                // sebelum mengunggah agar presensi >50 siswa tidak saling menimpa
-                // SERTA MENCEGAH HP SISWA/GURU MENIMPA GAMBAR BANNER YANG SUDAH DIGANTI ADMIN!
-                let latestRemote = null;
-                try {
-                    const [rowState, rowCloud, rowBanner, rowAbsLog] = await Promise.all([
-                        window.directRestFetchRow('app_state', 'id', 1).catch(() => null),
-                        window.directRestFetchRow('app_cloud_db', 'id', 'master').catch(() => null),
-                        window.directRestFetchRow('app_cloud_db', 'id', 'banners_master').catch(() => null),
-                        window.directRestFetchRow('app_cloud_db', 'id', 'absensi_master_log').catch(() => null)
-                    ]);
-                    const p1 = rowState?.payload;
-                    const p2 = rowCloud?.payload;
-                    latestRemote = (p1 && p2) ? ((Number(p1.lastUpdated || 0) >= Number(p2.lastUpdated || 0)) ? p1 : p2) : (p1 || p2);
-
-                    if (rowAbsLog && rowAbsLog.payload && Array.isArray(rowAbsLog.payload.absensi)) {
-                        window.cloudState.absensi = window.mergeUniqueArrayById(
-                            window.cloudState.absensi || [],
-                            rowAbsLog.payload.absensi,
-                            (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${a.tanggal}_${a.tipe_absen}`
-                        );
-                    }
-
-                    if (!isAdminOrPanitia && rowBanner && rowBanner.payload && Array.isArray(rowBanner.payload.bannerSliderImages) && rowBanner.payload.bannerSliderImages.length > 0) {
-                        window.cloudState.bannerSliderImages = JSON.parse(JSON.stringify(rowBanner.payload.bannerSliderImages));
-                        window.cloudState.customBannerUpdatedAt = Number(rowBanner.payload.updatedAt || Date.now());
-                    }
-
-                    if (latestRemote && typeof latestRemote === 'object') {
-                        if (!isAdminOrPanitia && Array.isArray(latestRemote.bannerSliderImages) && latestRemote.bannerSliderImages.length > 0 && (!rowBanner || !rowBanner.payload)) {
-                            window.cloudState.bannerSliderImages = JSON.parse(JSON.stringify(latestRemote.bannerSliderImages));
-                            window.cloudState.customBannerUpdatedAt = Number(latestRemote.customBannerUpdatedAt || Date.now());
-                        }
-                        // Pertahankan Kode Akses GPS terbaru dari Admin Utama agar tidak pernah tertimpa
-                        if (latestRemote.gpsResetAccess && latestRemote.gpsResetAccess.code && (!window.cloudState.gpsResetAccess || !window.cloudState.gpsResetAccess.code || Number(latestRemote.gpsResetAccess.createdAt || 0) >= Number(window.cloudState.gpsResetAccess.createdAt || 0))) {
-                            window.cloudState.gpsResetAccess = latestRemote.gpsResetAccess;
-                        }
-                        window.gabungkanDataCloudTanpaKehilangan(latestRemote);
-                    }
-                } catch(e) {}
-
-                const cleanData = window.getSanitizedCloudPayload();
-                let okState = false;
-                let okCloud = false;
-                let errMsg = "";
-
-                // Simpan juga seluruh daftar absensi ke saluran khusus absensi_master_log agar tidak ada presensi yang tercecer
-                if (Array.isArray(cleanData.absensi) && cleanData.absensi.length > 0) {
-                    await window.directRestUpsertRow('app_cloud_db', {
-                        id: 'absensi_master_log',
-                        payload: { updatedAt: Date.now(), absensi: cleanData.absensi }
-                    }, 'id').catch(() => {});
-                }
-
-                // Jika Admin atau Panitia yang menyimpan, kunci juga ke baris khusus banners_master
-                if (isAdminOrPanitia && Array.isArray(cleanData.bannerSliderImages) && cleanData.bannerSliderImages.length > 0) {
-                    await window.simpanBannerMasterKeSupabase(cleanData.bannerSliderImages).catch(() => {});
-                }
-
-                // 2. Unggah ke app_state (Gunakan Direct REST Upsert + Fallback SDK)
-                try {
-                    await window.directRestUpsertRow('app_state', { id: 1, payload: cleanData }, 'id');
-                    okState = true;
-                } catch (restErr1) {
-                    if (window.supabaseClient) {
-                        try {
-                            const resState = await window.supabaseClient.from('app_state').upsert({ id: 1, payload: cleanData }, { onConflict: 'id' });
-                            if (!resState.error) okState = true;
-                            else errMsg += "app_state: " + resState.error.message + "; ";
-                        } catch (sdkErr1) {
-                            errMsg += "app_state: " + (restErr1.message || sdkErr1.message) + "; ";
-                        }
-                    } else {
-                        errMsg += "app_state: " + restErr1.message + "; ";
-                    }
-                }
-
-                // 3. Unggah ke app_cloud_db (Gunakan Direct REST Upsert + Fallback SDK)
-                try {
-                    await window.directRestUpsertRow('app_cloud_db', { id: 'master', payload: cleanData }, 'id');
-                    okCloud = true;
-                } catch (restErr2) {
-                    if (window.supabaseClient) {
-                        try {
-                            const resCloud = await window.supabaseClient.from('app_cloud_db').upsert({ id: 'master', payload: cleanData }, { onConflict: 'id' });
-                            if (!resCloud.error) okCloud = true;
-                            else errMsg += "app_cloud_db: " + resCloud.error.message + "; ";
-                        } catch (sdkErr2) {
-                            errMsg += "app_cloud_db: " + (restErr2.message || sdkErr2.message) + "; ";
-                        }
-                    } else {
-                        errMsg += "app_cloud_db: " + restErr2.message + "; ";
-                    }
-                }
-
-                if (okState || okCloud) {
-                    window.isCloudConnected = true;
-                    if (!silent) {
-                        const now = new Date();
-                        const timeStr = now.toLocaleDateString('id-ID') + " " + now.toLocaleTimeString('it-IT') + " WITA";
-                        window.showModalInfo("Berhasil Unggah ke Cloud! ⚡", `
-                            Seluruh database sistem berhasil diunggah dan disimpan permanen ke server Supabase Cloud pada <b>${timeStr}</b>.<br><br>
-                            <b>Ringkasan Data yang Disimpan ke Cloud:</b><br>
-                            &bull; 👨‍🎓 Data Siswa Master: <b>${cleanData.siswa.length}</b> siswa<br>
-                            &bull; 👩‍🏫 Data Guru Master: <b>${cleanData.guru.length}</b> guru<br>
-                            &bull; 🏭 Mitra Industri DUDI: <b>${cleanData.industri.length}</b> industri<br>
-                            &bull; 🔄 Alokasi Guru & Siswa: <b>${cleanData.penempatan.length}</b> kelompok penempatan<br>
-                            &bull; 🚗 Alokasi Guru Monitoring: <b>${cleanData.penugasanMonitoring.length}</b> surat tugas<br>
-                            &bull; 📍 Rekaman Presensi: <b>${cleanData.absensi.length}</b> data log<br>
-                            &bull; 📖 Jurnal Kegiatan: <b>${cleanData.jurnal.length}</b> catatan jurnal<br>
-                            &bull; 🔑 Akun & Kredensial: <b>${cleanData.registeredUsers.length}</b> akun<br><br>
-                            <span style="color:#16a34a; font-weight:800;">✓ Data tersinkronisasi aman dan siap diakses di seluruh perangkat (HP / Laptop)!</span>
-                        `);
-                    }
-                    return true;
-                } else {
-                    window.isCloudConnected = false;
-                    if (!silent) {
-                        const isFetchFailed = errMsg.toLowerCase().includes("failed to fetch") || errMsg.toLowerCase().includes("networkerror");
-                        const panduanPerbaikan = isFetchFailed
-                            ? `<div style="background:#fff7ed; border:1.5px solid #fdba74; border-radius:12px; padding:10px; text-align:left; font-size:11.5px; color:#9a3412; margin-top:10px; line-height:1.45;">
-                                <b>💡 Cara Mengatasi "Failed to fetch" dengan Cepat:</b><br>
-                                1. Pastikan proyek Supabase Anda tidak sedang berstatus <i>Paused</i> di dashboard Supabase.<br>
-                                2. Pastikan Anda sudah menekan tombol <b>RUN</b> pada skrip SQL di menu <b>SQL Editor Supabase</b>.<br>
-                                3. Di menu <b>Database Cloud [Supabase]</b> di bawah, pastikan <b>Project URL</b> dan <b>Anon / Public Key</b> sesuai dengan yang ada di <i>Supabase Project Settings ➔ API</i>.
-                               </div>`
-                            : "";
-                        window.showModalInfo("Gagal Mengunggah ke Cloud ❌", "Terjadi kendala saat menyimpan ke Supabase:<br><code>" + (errMsg || "Tabel tidak merespons.") + "</code>" + panduanPerbaikan + "<br><i>Catatan: Seluruh data Anda tetap tersimpan aman di penyimpanan internal perangkat ini.</i>");
-                    }
-                    return false;
-                }
-            } catch (err) {
-                if (!silent) window.showModalInfo("Galat Pengunggahan ❌", err.message);
-                return false;
-            }
-        };
-
-        window.tarikDataDariCloud = async function(silent = true) {
+        window.tarikDataDariCloud = async function(silent = true, forceRefresh = false) {
             const creds = window.getSupabaseCredentials();
             if (!creds || !creds.url || !creds.key) {
                 if (!silent) {
@@ -2798,7 +2703,7 @@
                     const combinedRemoteAbs = window.mergeUniqueArrayById(
                         statePayload.absensi || [],
                         cloudDbPayload.absensi || [],
-                        (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${a.tanggal}_${a.tipe_absen}`
+                        (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
                     );
                     cloudPayload.absensi = combinedRemoteAbs;
 
@@ -2822,8 +2727,13 @@
                     cloudPayload.absensi = window.mergeUniqueArrayById(
                         cloudPayload.absensi || [],
                         absensiLogPayload.absensi,
-                        (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${a.tanggal}_${a.tipe_absen}`
+                        (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
                     );
+                }
+
+                // Normalkan seluruh tanggal absensi yang ditarik dari Cloud
+                if (cloudPayload && Array.isArray(cloudPayload.absensi)) {
+                    cloudPayload.absensi.forEach(a => window.getAbsensiNormalizedDate(a));
                 }
 
                 // Prioritas Mutlak Saluran Khusus Banner Admin (banners_master)
@@ -2837,7 +2747,7 @@
                 }
 
                 if (cloudPayload && Object.keys(cloudPayload).length > 0) {
-                    window.terapkanDataRealtime(cloudPayload);
+                    window.terapkanDataRealtime(cloudPayload, forceRefresh);
                     if (typeof window.perbaruiDomBannerCarouselLangsung === 'function') {
                         window.perbaruiDomBannerCarouselLangsung();
                     }
@@ -2877,7 +2787,7 @@
 
         window.handleManualDownloadCloud = async function() {
             window.showModalInfo("⏳ Menarik Data Cloud...", "Sedang mengunduh dan menyinkronkan database dari server Supabase Cloud. Mohon tunggu sebentar...");
-            const ok = await window.tarikDataDariCloud(false);
+            const ok = await window.tarikDataDariCloud(false, true);
             if (ok && window.cloudState.currentFeature) {
                 window.openFeature(window.cloudState.currentFeature, undefined, true);
             }
@@ -3194,10 +3104,12 @@
 
             // Gabungkan Absensi (Presensi Masuk & Pulang dari seluruh siswa di lapangan)
             if (Array.isArray(cloudData.absensi)) {
+                cloudData.absensi.forEach(a => window.getAbsensiNormalizedDate(a));
+                (window.cloudState.absensi || []).forEach(a => window.getAbsensiNormalizedDate(a));
                 window.cloudState.absensi = window.mergeUniqueArrayById(
                     window.cloudState.absensi,
                     cloudData.absensi,
-                    (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${a.tanggal}_${a.tipe_absen}`
+                    (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
                 );
             }
             // Gabungkan Jurnal Harian Siswa
@@ -3246,26 +3158,26 @@
             }
         };
 
-        window.terapkanDataRealtime = function(cloudData) {
+        window.terapkanDataRealtime = function(cloudData, forceRefresh = false) {
             if (!cloudData || typeof cloudData !== 'object') return;
 
             // Bersihkan data dummy lama dari paket cloud sebelum dibandingkan atau diterapkan
             window.bersihkanDataDummyLama(cloudData);
             window.pastikanRadiusIndustri100Meter(cloudData);
 
-            // Jika perangkat lokal baru saja menyimpan perubahan dalam 15 detik terakhir,
+            // Jika perangkat lokal baru saja menyimpan perubahan dalam 15 detik terakhir (dan bukan klik Segarkan Manual),
             // JANGAN biarkan paket cloud lama menimpa perubahan lokal (seperti upload banner, edit siswa, atau alokasi)
             const localTs = Number(window.cloudState.lastUpdated || 0);
             const cloudTs = Number(cloudData.lastUpdated || 0);
             const isLocalEmpty = (window.cloudState.siswa || []).length === 0 && (window.cloudState.guru || []).length === 0;
 
-            if (!isLocalEmpty && (Date.now() - (window.lastLocalWriteTimestamp || 0) < 15000)) {
+            if (!forceRefresh && !isLocalEmpty && (Date.now() - (window.lastLocalWriteTimestamp || 0) < 15000)) {
                 // Tetap gabungkan absensi & jurnal masuk dari siswa lain tanpa menimpa pengaturan lokal
                 window.gabungkanDataCloudTanpaKehilangan(cloudData);
                 return;
             }
 
-            if (!isLocalEmpty && localTs > 0 && cloudTs > 0 && localTs > cloudTs) {
+            if (!forceRefresh && !isLocalEmpty && localTs > 0 && cloudTs > 0 && localTs > cloudTs) {
                 window.gabungkanDataCloudTanpaKehilangan(cloudData);
                 return;
             }
@@ -4516,8 +4428,7 @@
             });
 
             // 4. DETEKSI REALTIME SISWA BELUM PRESENSI MASUK, BELUM PRESENSI PULANG & BELUM ISI JURNAL HARI INI
-            const now = new Date();
-            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            const todayStr = window.getTodayLocalWitaStr();
 
             const belumMasukList = [];
             const belumPulangList = [];
@@ -4530,9 +4441,9 @@
                 const namaIndustri = info.industri || "Belum Ditentukan";
                 const namaGuru = info.guru || "Belum Ditentukan";
 
-                const sudahMasuk = absensiList.some(a => a.tanggal === todayStr && a.tipe_absen === 'Masuk' && window.isNameMatch(a.nama, namaSiswa));
-                const sudahPulang = absensiList.some(a => a.tanggal === todayStr && a.tipe_absen === 'Pulang' && window.isNameMatch(a.nama, namaSiswa));
-                const sudahJurnal = jurnalList.some(j => j.tanggal === todayStr && window.isNameMatch(j.siswa, namaSiswa));
+                const sudahMasuk = absensiList.some(a => window.getAbsensiNormalizedDate(a) === todayStr && a.tipe_absen === 'Masuk' && window.isNameMatch(a.nama, namaSiswa));
+                const sudahPulang = absensiList.some(a => window.getAbsensiNormalizedDate(a) === todayStr && a.tipe_absen === 'Pulang' && window.isNameMatch(a.nama, namaSiswa));
+                const sudahJurnal = jurnalList.some(j => window.normalizeDateToYMD(j.tanggal, j.id) === todayStr && window.isNameMatch(j.siswa, namaSiswa));
 
                 const itemInfo = { nama: namaSiswa, kelas: s.kelas || '-', industri: namaIndustri, guru: namaGuru };
                 if (!sudahMasuk) belumMasukList.push(itemInfo);
@@ -5418,11 +5329,7 @@
             const totalSiswaBimbingan = myStudentKeys.length;
 
             // Hitung tanggal lokal hari ini (WITA / YYYY-MM-DD lokal Indonesia)
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const todayStr = `${year}-${month}-${day}`;
+            const todayStr = window.getTodayLocalWitaStr();
 
             // 2. ISOLASI JURNAL: Hanya jurnal yang dibuat oleh siswa bimbingan guru ini
             const myStudentJournals = (window.cloudState.jurnal || []).filter(j => {
@@ -5430,14 +5337,14 @@
             });
 
             // 3. HITUNG 4 METRIK KARTU MONITORING PKL (PERSIS SESUAI GAMBAR 2)
-            const journalsToday = myStudentJournals.filter(j => j.tanggal === todayStr);
+            const journalsToday = myStudentJournals.filter(j => window.normalizeDateToYMD(j.tanggal, j.id) === todayStr);
             const countJurnalHariIni = journalsToday.length;
             const countSudahDisetujui = myStudentJournals.filter(j => j.status === 'Disetujui').length;
             const countMenungguReview = myStudentJournals.filter(j => j.status !== 'Disetujui').length;
 
             // 4. ISOLASI PRESENSI: Hanya presensi milik siswa bimbingan guru ini hari ini
             const myStudentAbsensiToday = (window.cloudState.absensi || []).filter(a => {
-                return a.tanggal === todayStr && a.nama && myStudentMap.has(window.normalizeTextCompact(a.nama));
+                return window.getAbsensiNormalizedDate(a) === todayStr && a.nama && myStudentMap.has(window.normalizeTextCompact(a.nama));
             });
 
             // 5. PERINGATAN KEDISIPLINAN SISWA HARI INI:
@@ -5875,11 +5782,7 @@
             const totalSiswaMagang = myStudentKeys.length;
 
             // Hitung tanggal lokal hari ini (WITA / YYYY-MM-DD)
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const todayStr = `${year}-${month}-${day}`;
+            const todayStr = window.getTodayLocalWitaStr();
 
             // 2. ISOLASI JURNAL: Hanya jurnal yang dibuat oleh siswa magang di industri ini
             const myStudentJournals = (window.cloudState.jurnal || []).filter(j => {
@@ -5887,14 +5790,14 @@
             });
 
             // 3. HITUNG 4 METRIK KARTU MONITORING PKL INDUSTRI (PERSIS SESUAI GAMBAR 2)
-            const journalsToday = myStudentJournals.filter(j => j.tanggal === todayStr);
+            const journalsToday = myStudentJournals.filter(j => window.normalizeDateToYMD(j.tanggal, j.id) === todayStr);
             const countJurnalHariIni = journalsToday.length;
             const countSudahDisahkan = myStudentJournals.filter(j => j.status === 'Disetujui').length;
             const countMenungguReview = myStudentJournals.filter(j => j.status !== 'Disetujui').length;
 
             // 4. ISOLASI PRESENSI: Hanya presensi milik siswa magang di industri ini hari ini
             const myStudentAbsensiToday = (window.cloudState.absensi || []).filter(a => {
-                return a.tanggal === todayStr && a.nama && myStudentMap.has(a.nama.trim().toLowerCase());
+                return window.getAbsensiNormalizedDate(a) === todayStr && a.nama && myStudentMap.has(a.nama.trim().toLowerCase());
             });
 
             // 5. PERINGATAN KEDISIPLINAN SISWA MAGANG HARI INI
@@ -6225,13 +6128,13 @@
             // tanda centang hijau otomatis ter-reset kembali ke tampilan biasa untuk hari yang baru!
             const todayStr = window.getTodayLocalWitaStr();
             const absenMasuk = (window.cloudState.absensi || []).find(a =>
-                a && a.tanggal === todayStr && a.tipe_absen === 'Masuk' &&
+                a && window.getAbsensiNormalizedDate(a) === todayStr && a.tipe_absen === 'Masuk' &&
                 (window.isNameMatch(a.nama, profile.nama) ||
                  window.isNameMatch(a.nama, placementInfo.namaSiswa) ||
                  (profile.identitas && String(a.user_id || '').trim() === String(profile.identitas).trim()))
             );
             const absenPulang = (window.cloudState.absensi || []).find(a =>
-                a && a.tanggal === todayStr && a.tipe_absen === 'Pulang' &&
+                a && window.getAbsensiNormalizedDate(a) === todayStr && a.tipe_absen === 'Pulang' &&
                 (window.isNameMatch(a.nama, profile.nama) ||
                  window.isNameMatch(a.nama, placementInfo.namaSiswa) ||
                  (profile.identitas && String(a.user_id || '').trim() === String(profile.identitas).trim()))
@@ -6817,7 +6720,7 @@
 
             const now = new Date();
             const jamStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-            const tglStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            const tglStr = window.getTodayLocalWitaStr();
 
             let katText = "Hadir di Lokasi Industri";
             if (kat === 'tugas_luar') katText = "Dinas Luar / Lapangan";
@@ -6860,7 +6763,7 @@
 
             // Jika siswa sudah pernah absen dengan tipe yang sama di tanggal hari ini, perbarui catatannya agar tidak duplikat
             const existingTodayIdx = (window.cloudState.absensi || []).findIndex(a =>
-                a && a.tanggal === tglStr && a.tipe_absen === tipeAbsen &&
+                a && window.getAbsensiNormalizedDate(a) === tglStr && a.tipe_absen === tipeAbsen &&
                 (window.isNameMatch(a.nama, namaResmiSiswa) || (profile.identitas && String(a.user_id || '').trim() === String(profile.identitas).trim()))
             );
             if (existingTodayIdx !== -1) {
@@ -10014,6 +9917,17 @@
 
         window.selectedRekapPresensiDate = "";
         window.selectedRekapPresensiMonth = "";
+        window.selectedSiswaPresensiDate = "";
+        window.selectedOrtuPresensiDate = "";
+
+        window.geserTanggalPresensi = function(currentYmd, deltaDays) {
+            const base = currentYmd ? new Date(currentYmd + "T12:00:00") : new Date();
+            base.setDate(base.getDate() + deltaDays);
+            const y = base.getFullYear();
+            const m = String(base.getMonth() + 1).padStart(2, '0');
+            const d = String(base.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        };
 
         window.ubahTanggalFilterRekapPresensi = function(tglBaru) {
             window.selectedRekapPresensiDate = tglBaru || window.getTodayLocalWitaStr();
@@ -10023,14 +9937,53 @@
             window.openFeature(window.cloudState.currentFeature || "rekap-masuk-pulang", "Rekap Presensi", true);
         };
 
-        window.ubahBulanExportRekapPresensi = function(blnBaru) {
-            window.selectedRekapPresensiMonth = blnBaru || window.getCurrentMonthLocalWitaStr();
+        window.ubahTanggalPresensiSiswa = function(tglBaru) {
+            window.selectedSiswaPresensiDate = tglBaru || "ALL";
+            window.openFeature("presensi", "Presensi GPS & Selfie", true);
         };
 
-        window.segarkanDataPresensiDariCloud = async function() {
-            await window.tarikLogPresensiKhususDariSupabase();
-            await window.tarikDataDariCloud(true);
+        window.ubahTanggalPresensiOrtu = function(tglBaru) {
+            window.selectedOrtuPresensiDate = tglBaru || "ALL";
+            window.openFeature("presensi-ananda", "Presensi Harian Ananda", true);
+        };
+
+        window.ubahBulanExportRekapPresensi = function(blnBaru) {
+            window.selectedRekapPresensiMonth = blnBaru || window.getCurrentMonthLocalWitaStr();
             window.openFeature(window.cloudState.currentFeature || "rekap-masuk-pulang", "Rekap Presensi", true);
+        };
+
+        window.segarkanDataPresensiDariCloud = async function(btnEl) {
+            const origHtml = btnEl ? btnEl.innerHTML : "🔄 Segarkan Data Cloud";
+            if (btnEl) {
+                btnEl.disabled = true;
+                btnEl.innerHTML = "⏳ Menyinkronkan Cloud...";
+            }
+            try {
+                await window.tarikLogPresensiKhususDariSupabase();
+                await window.tarikDataDariCloud(true, true);
+                if (Array.isArray(window.cloudState.absensi)) {
+                    window.cloudState.absensi.forEach(a => window.getAbsensiNormalizedDate(a));
+                }
+                const currentFeat = window.cloudState.currentFeature || "rekap-masuk-pulang";
+                window.openFeature(currentFeat, "Rekap Presensi", true);
+
+                const todayStr = window.getTodayLocalWitaStr();
+                const totalLogs = (window.cloudState.absensi || []).length;
+                const todayLogs = (window.cloudState.absensi || []).filter(a => window.getAbsensiNormalizedDate(a) === todayStr).length;
+                window.showModalInfo(
+                    "Data Presensi Cloud Disegarkan! ✅",
+                    `Berhasil menyinkronkan data presensi terbaru dari server Supabase Cloud.<br><br>` +
+                    `&bull; 📅 Presensi Hari Ini (<b>${window.formatTanggalIndoLengkap(todayStr)}</b>): <b>${todayLogs} catatan</b><br>` +
+                    `&bull; 📦 Total Arsip Presensi Tersimpan: <b>${totalLogs} catatan</b>`
+                );
+            } catch (err) {
+                window.showModalInfo("Gagal Menyegarkan Cloud ⚠️", "Pastikan koneksi internet aktif: " + (err.message || ""));
+            } finally {
+                if (btnEl) {
+                    btnEl.disabled = false;
+                    btnEl.innerHTML = origHtml;
+                }
+            }
         };
 
         window.bukaFotoBuktiPresensi = function(fotoSrc, namaSiswa, tipe, tanggal, jam) {
@@ -10052,7 +10005,7 @@
             const profile = window.cloudState.userProfile || { nama: "" };
             const todayStr = window.getTodayLocalWitaStr();
 
-            // Pastikan setiap kali halaman dibuka, secara default menampilkan HARI INI (Pencatatan Harian)
+            // Pastikan setiap kali halaman dibuka pertama kali, default menampilkan HARI INI
             if (!window.selectedRekapPresensiDate) {
                 window.selectedRekapPresensiDate = todayStr;
             }
@@ -10063,29 +10016,47 @@
             const activeDate = window.selectedRekapPresensiDate;
             const activeMonth = window.selectedRekapPresensiMonth;
 
-            // Ambil seluruh riwayat absensi (tetap tersimpan utuh di sistem untuk rekap bulanan)
+            // Normalkan seluruh tanggal absensi terlebih dahulu agar tidak ada yang gagal terbaca
+            (window.cloudState.absensi || []).forEach(a => window.getAbsensiNormalizedDate(a));
+
+            // Ambil seluruh riwayat absensi sesuai peran (Admin/Panitia/Kepsek semua siswa; Guru/Industri sesuai bimbingan/magang)
             const allRoleAbsensi = window.filterAbsensiByRoleAndProfile(window.cloudState.absensi || [], role, profile);
 
-            // Filter HANYA untuk tanggal hari yang sedang aktif (Sistem Pencatatan Tabel Harian)
-            const dailyAbsensi = allRoleAbsensi.filter(ab => ab && ab.tanggal === activeDate);
+            // Hitung rekap jumlah siswa per tanggal yang tersedia di database (untuk tombol pintasan riwayat tanggal sebelumnya)
+            const dateSummaryMap = new Map();
+            allRoleAbsensi.forEach(ab => {
+                if (!ab || !ab.nama) return;
+                const dStr = window.getAbsensiNormalizedDate(ab);
+                if (!dStr) return;
+                if (!dateSummaryMap.has(dStr)) {
+                    dateSummaryMap.set(dStr, new Set());
+                }
+                dateSummaryMap.get(dStr).add(window.normalizeTextCompact(ab.nama));
+            });
+
+            const availableDatesSorted = Array.from(dateSummaryMap.keys()).sort((a, b) => b.localeCompare(a));
+
+            // Filter untuk tanggal yang sedang dipilih (Hari Ini atau Tanggal Sebelumnya)
+            const dailyAbsensi = allRoleAbsensi.filter(ab => ab && window.getAbsensiNormalizedDate(ab) === activeDate);
 
             // Hitung total catatan bulan berjalan yang tersimpan aman di database
-            const monthlyStoredCount = allRoleAbsensi.filter(ab => ab && String(ab.tanggal || '').startsWith(activeMonth)).length;
+            const monthlyStoredCount = allRoleAbsensi.filter(ab => ab && String(window.getAbsensiNormalizedDate(ab) || '').startsWith(activeMonth)).length;
 
             const pairMap = new Map();
 
             dailyAbsensi.forEach(ab => {
                 if (!ab || !ab.nama) return;
+                const dNorm = window.getAbsensiNormalizedDate(ab) || activeDate;
                 const info = window.getStudentPlacementInfo(ab.nama, ab.user_id || ab.nis);
                 const canonicalNama = (info && info.namaSiswa) ? info.namaSiswa : ab.nama;
                 const sKey = window.normalizeTextCompact(canonicalNama);
-                const key = `${ab.tanggal}_${sKey}`;
+                const key = `${dNorm}_${sKey}`;
 
                 if (!pairMap.has(key)) {
                     const kls = (ab.kelas && ab.kelas !== '-') ? ab.kelas : ((info && info.kelas && info.kelas !== '-') ? info.kelas : '');
                     const indName = (ab.industri && ab.industri !== '-' && ab.industri !== 'Belum Ditentukan') ? ab.industri : (info.industri || '-');
                     pairMap.set(key, {
-                        tanggal: ab.tanggal || activeDate,
+                        tanggal: dNorm,
                         nama: canonicalNama,
                         kelas: kls,
                         industri: indName,
@@ -10131,6 +10102,34 @@
                 </tr>`;
             });
 
+            // Buat daftar pintasan tanggal yang memiliki riwayat presensi agar mudah melihat tanggal sebelumnya
+            let recentDateChipsHtml = "";
+            if (availableDatesSorted.length > 0) {
+                const chips = availableDatesSorted.slice(0, 10).map(dStr => {
+                    const countSiswaOnDate = dateSummaryMap.get(dStr)?.size || 0;
+                    const isSelected = (dStr === activeDate);
+                    const isTodayChip = (dStr === todayStr);
+                    return `
+                    <button type="button" onclick="window.ubahTanggalFilterRekapPresensi('${dStr}')" style="border:1.5px solid ${isSelected ? '#0284c7' : '#cbd5e1'}; background:${isSelected ? '#0284c7' : '#ffffff'}; color:${isSelected ? '#ffffff' : '#0f172a'}; border-radius:10px; padding:5px 10px; font-size:10.5px; font-weight:850; cursor:pointer; display:inline-flex; align-items:center; gap:4px; box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+                        <span>📅 ${isTodayChip ? 'Hari Ini (' + dStr + ')' : dStr}</span>
+                        <span style="background:${isSelected ? '#fde047' : '#e0f2fe'}; color:${isSelected ? '#0f172a' : '#0369a1'}; padding:1px 6px; border-radius:6px; font-size:9.5px; font-weight:900;">${countSiswaOnDate} Siswa</span>
+                    </button>`;
+                }).join('');
+
+                recentDateChipsHtml = `
+                <div style="padding-top:8px; border-top:1px dashed #bae6fd;">
+                    <div style="font-size:10.5px; font-weight:850; color:#334155; margin-bottom:6px;">
+                        🕒 Pintasan Riwayat Presensi Tanggal Sebelumnya (Klik Tanggal untuk Melihat):
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        ${chips}
+                    </div>
+                </div>`;
+            }
+
+            const prevDayStr = window.geserTanggalPresensi(activeDate, -1);
+            const nextDayStr = window.geserTanggalPresensi(activeDate, 1);
+
             const headerTitle = (role === 'guru' || role === 'industri')
                 ? "📈 Riwayat & Rekap Presensi Siswa (Harian)"
                 : "⏱️ Pencatatan Presensi Masuk & Pulang (Harian)";
@@ -10145,32 +10144,40 @@
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">${subLabel}</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">${headerTitle}</h3>
                         <p style="font-size:11px; color:#475569; margin-top:2px;">
-                            Tabel di bawah khusus menampilkan presensi siswa pada tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>. Seluruh riwayat hari-hari sebelumnya tetap tersimpan aman di dalam sistem (${allRoleAbsensi.length} total log) untuk di-export setiap bulan.
+                            Menampilkan presensi siswa pada tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>. Gunakan pemilih tanggal atau tombol pintasan di bawah untuk melihat riwayat presensi pada tanggal-tanggal sebelumnya (${allRoleAbsensi.length} total log tersimpan).
                         </p>
                     </div>
                     <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-                        <button type="button" onclick="window.segarkanDataPresensiDariCloud()" class="btn-action btn-blue" style="font-size:11px; font-weight:850;">
+                        <button type="button" onclick="window.segarkanDataPresensiDariCloud(this)" class="btn-action btn-blue" style="font-size:11.5px; font-weight:900; padding:8px 14px; box-shadow:0 3px 10px rgba(2,132,199,0.25);">
                             🔄 Segarkan Data Cloud
                         </button>
                     </div>
                 </div>
 
-                <!-- KONTROL FILTER HARIAN & EXPORT REKAP BULANAN -->
+                <!-- KONTROL FILTER TANGGAL HARIAN, RIWAYAT TANGGAL SEBELUMNYA & EXPORT BULANAN -->
                 <div style="background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:16px; padding:12px; margin-bottom:12px; display:flex; flex-direction:column; gap:10px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                            <span style="font-size:11.5px; font-weight:900; color:#0369a1;">📅 Tampilkan Presensi Tanggal:</span>
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                            <span style="font-size:11.5px; font-weight:900; color:#0369a1;">📅 Pilih Tanggal Presensi:</span>
+                            <button type="button" onclick="window.ubahTanggalFilterRekapPresensi('${prevDayStr}')" class="btn-action" style="background:#ffffff; border:1px solid #93c5fd; color:#0369a1; padding:6px 9px; font-size:10.5px;" title="Lihat Tanggal Sebelumnya">
+                                ◀ Kemarin
+                            </button>
                             <input type="date" id="filterTanggalPresensiHarian" value="${activeDate}" onchange="window.ubahTanggalFilterRekapPresensi(this.value)" class="form-control" style="width:auto; padding:6px 10px; font-size:12px; font-weight:850; color:#0f172a; background:#ffffff;">
+                            <button type="button" onclick="window.ubahTanggalFilterRekapPresensi('${nextDayStr}')" class="btn-action" style="background:#ffffff; border:1px solid #93c5fd; color:#0369a1; padding:6px 9px; font-size:10.5px;" title="Lihat Tanggal Berikutnya">
+                                Besok ▶
+                            </button>
                             ${activeDate !== todayStr ? `
-                                <button type="button" onclick="window.ubahTanggalFilterRekapPresensi('${todayStr}')" class="btn-action btn-blue" style="padding:6px 10px; font-size:10.5px;">
-                                    Kembali ke Hari Ini (${todayStr})
+                                <button type="button" onclick="window.ubahTanggalFilterRekapPresensi('${todayStr}')" class="btn-action btn-blue" style="padding:6px 10px; font-size:10.5px; font-weight:900;">
+                                    📍 Kembali ke Hari Ini (${todayStr})
                                 </button>
-                            ` : `<span class="badge-status badge-green" style="font-size:10px;">📍 Hari Ini (${counter - 1} Siswa Tercatat)</span>`}
+                            ` : `<span class="badge-status badge-green" style="font-size:10.5px;">📍 Hari Ini (${counter - 1} Siswa Tercatat)</span>`}
                         </div>
                         <button type="button" onclick="window.unduhExcelRekapMasukPulang('harian')" class="btn-action btn-blue" style="font-size:11px; font-weight:850;">
                             📄 Export Harian (${activeDate})
                         </button>
                     </div>
+
+                    ${recentDateChipsHtml}
 
                     <div style="padding-top:10px; border-top:1.5px dashed #bae6fd; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
                         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
@@ -10197,7 +10204,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || `<tr><td colspan="6" class="empty-placeholder">Belum ada siswa yang tercatat melakukan presensi pada tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>.<br><span style="font-size:11px; color:#64748b;">(Catatan presensi hari-hari sebelumnya tetap tersimpan aman di arsip bulanan)</span></td></tr>`}
+                            ${rows || `<tr><td colspan="6" class="empty-placeholder">Belum ada siswa yang tercatat melakukan presensi pada tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>.<br><span style="font-size:11px; color:#0284c7; font-weight:800;">💡 Tips: Klik tombol <b>🔄 Segarkan Data Cloud</b> di atas atau klik salah satu <b>Pintasan Tanggal Sebelumnya</b> untuk melihat riwayat presensi hari kemarin.</span></td></tr>`}
                         </tbody>
                     </table>
                 </div>
@@ -10706,25 +10713,35 @@
             const namaResmi = placementInfo.namaSiswa || profile.nama;
             const kls = (placementInfo.kelas && placementInfo.kelas !== '-') ? ` (${placementInfo.kelas})` : '';
 
-            const myAbsen = (window.cloudState.absensi || []).filter(a =>
+            (window.cloudState.absensi || []).forEach(a => window.getAbsensiNormalizedDate(a));
+
+            const allMyAbsen = (window.cloudState.absensi || []).filter(a =>
                 window.isNameMatch(a.nama, namaResmi) ||
                 window.isNameMatch(a.nama, profile.nama) ||
                 (profile.identitas && String(a.user_id || '').trim() === String(profile.identitas).trim())
             );
 
+            const filterDate = window.selectedSiswaPresensiDate || "ALL";
+            const myAbsen = (filterDate && filterDate !== "ALL")
+                ? allMyAbsen.filter(a => window.getAbsensiNormalizedDate(a) === filterDate)
+                : allMyAbsen;
+
             let rows = "";
             myAbsen.forEach((ab, idx) => {
                 const fotoSrc = ab.foto_url || ab.foto_selfie || '';
                 const safeNama = (namaResmi || '').replace(/'/g, "\\'");
-                const btnFoto = fotoSrc ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${fotoSrc}', '${safeNama}', '${ab.tipe_absen}', '${ab.tanggal}', '${ab.jam}')" class="btn-action btn-blue" style="padding:3px 8px; font-size:10px; margin-left:6px;">📷 Bukti</button>` : '';
+                const dNorm = window.getAbsensiNormalizedDate(ab) || ab.tanggal;
+                const btnFoto = fotoSrc ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${fotoSrc}', '${safeNama}', '${ab.tipe_absen}', '${dNorm}', '${ab.jam}')" class="btn-action btn-blue" style="padding:3px 8px; font-size:10px; margin-left:6px;">📷 Bukti</button>` : '';
                 rows += `<tr>
                     <td>${idx + 1}</td>
                     <td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td>
-                    <td>${ab.tanggal}</td>
+                    <td>${dNorm}</td>
                     <td><b>${ab.jam} WITA</b></td>
                     <td><span class="badge-status badge-green">${ab.kategori_hadir || ab.status || 'Hadir'}</span>${btnFoto}</td>
                 </tr>`;
             });
+
+            const todayStr = window.getTodayLocalWitaStr();
 
             return `
             <div class="card">
@@ -10736,7 +10753,17 @@
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Masuk')" class="btn-action btn-blue">📸 Absen Masuk</button>
                         <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang')" class="btn-action btn-emerald">🚪 Absen Pulang</button>
-                        <button onclick="window.bukaModalAlternatifGantiTitikCabang('Masuk')" class="btn-action btn-amber" title="Gunakan jika dipindahkan ke Cabang Industri">🔄 Pindah Titik Cabang</button>
+                        <button onclick="window.segarkanDataPresensiDariCloud(this)" class="btn-action btn-blue">🔄 Segarkan Cloud</button>
+                    </div>
+                </div>
+
+                <!-- Filter Tanggal Riwayat Presensi Siswa -->
+                <div style="background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:12px; padding:10px 12px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span style="font-size:11px; font-weight:900; color:#0369a1;">📅 Lihat Riwayat Tanggal:</span>
+                        <input type="date" value="${filterDate !== 'ALL' ? filterDate : ''}" onchange="window.ubahTanggalPresensiSiswa(this.value)" class="form-control" style="width:auto; padding:5px 10px; font-size:11.5px; font-weight:800; background:#ffffff;">
+                        <button type="button" onclick="window.ubahTanggalPresensiSiswa('${todayStr}')" class="btn-action ${filterDate === todayStr ? 'btn-blue' : ''}" style="padding:5px 10px; font-size:10.5px;">Hari Ini</button>
+                        <button type="button" onclick="window.ubahTanggalPresensiSiswa('ALL')" class="btn-action ${filterDate === 'ALL' ? 'btn-emerald' : ''}" style="padding:5px 10px; font-size:10.5px;">Semua Riwayat (${allMyAbsen.length})</button>
                     </div>
                 </div>
 
@@ -10752,7 +10779,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada riwayat presensi</td></tr>'}
+                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada riwayat presensi pada pilihan tanggal ini</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -11129,24 +11156,32 @@
             const klsAnanda = (placementInfo.kelas && placementInfo.kelas !== '-') ? ` (${placementInfo.kelas})` : '';
             const todayStr = window.getTodayLocalWitaStr();
 
-            const list = (window.cloudState.absensi || []).filter(a =>
+            (window.cloudState.absensi || []).forEach(a => window.getAbsensiNormalizedDate(a));
+
+            const allList = (window.cloudState.absensi || []).filter(a =>
                 a && (window.isNameMatch(a.nama, namaAnanda) ||
                       window.isNameMatch(a.nama, rawAnanda) ||
                       (placementInfo.nis && placementInfo.nis !== '-' && String(a.user_id || a.nis || '').trim() === String(placementInfo.nis).trim()))
             );
 
-            const sudahMasukHariIni = list.find(a => a.tanggal === todayStr && a.tipe_absen === 'Masuk');
-            const sudahPulangHariIni = list.find(a => a.tanggal === todayStr && a.tipe_absen === 'Pulang');
+            const filterDate = window.selectedOrtuPresensiDate || "ALL";
+            const list = (filterDate && filterDate !== "ALL")
+                ? allList.filter(a => window.getAbsensiNormalizedDate(a) === filterDate)
+                : allList;
+
+            const sudahMasukHariIni = allList.find(a => window.getAbsensiNormalizedDate(a) === todayStr && a.tipe_absen === 'Masuk');
+            const sudahPulangHariIni = allList.find(a => window.getAbsensiNormalizedDate(a) === todayStr && a.tipe_absen === 'Pulang');
 
             let rows = "";
             list.forEach((ab, idx) => {
                 const fotoSrc = ab.foto_url || ab.foto_selfie || '';
                 const safeNama = (namaAnanda || '').replace(/'/g, "\\'");
-                const btnFoto = fotoSrc ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${fotoSrc}', '${safeNama}', '${ab.tipe_absen}', '${ab.tanggal}', '${ab.jam}')" class="btn-action btn-blue" style="padding:3px 8px; font-size:10px; margin-left:6px;">📷 Bukti</button>` : '';
+                const dNorm = window.getAbsensiNormalizedDate(ab) || ab.tanggal;
+                const btnFoto = fotoSrc ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${fotoSrc}', '${safeNama}', '${ab.tipe_absen}', '${dNorm}', '${ab.jam}')" class="btn-action btn-blue" style="padding:3px 8px; font-size:10px; margin-left:6px;">📷 Bukti</button>` : '';
                 rows += `<tr>
                     <td>${idx + 1}</td>
                     <td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td>
-                    <td>${ab.tanggal}</td>
+                    <td>${dNorm}</td>
                     <td><b>${ab.jam} WITA</b></td>
                     <td><span class="badge-status badge-green">${ab.kategori_hadir || ab.status || 'Hadir'}</span>${btnFoto}</td>
                 </tr>`;
@@ -11159,7 +11194,7 @@
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MONITORING KEHADIRAN ANANDA</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📍 Presensi Ananda: ${namaAnanda}${klsAnanda}</h3>
                     </div>
-                    <button type="button" onclick="window.segarkanDataPresensiDariCloud()" class="btn-action btn-blue" style="font-size:10.5px;">🔄 Segarkan</button>
+                    <button type="button" onclick="window.segarkanDataPresensiDariCloud(this)" class="btn-action btn-blue" style="font-size:11px; font-weight:900;">🔄 Segarkan Data Cloud</button>
                 </div>
 
                 <!-- Status Kehadiran Ananda Hari Ini -->
@@ -11178,6 +11213,16 @@
                     </div>
                 </div>
 
+                <!-- Filter Tanggal Riwayat Presensi Ananda -->
+                <div style="background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:12px; padding:10px 12px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span style="font-size:11px; font-weight:900; color:#0369a1;">📅 Lihat Riwayat Tanggal:</span>
+                        <input type="date" value="${filterDate !== 'ALL' ? filterDate : ''}" onchange="window.ubahTanggalPresensiOrtu(this.value)" class="form-control" style="width:auto; padding:5px 10px; font-size:11.5px; font-weight:800; background:#ffffff;">
+                        <button type="button" onclick="window.ubahTanggalPresensiOrtu('${todayStr}')" class="btn-action ${filterDate === todayStr ? 'btn-blue' : ''}" style="padding:5px 10px; font-size:10.5px;">Hari Ini</button>
+                        <button type="button" onclick="window.ubahTanggalPresensiOrtu('ALL')" class="btn-action ${filterDate === 'ALL' ? 'btn-emerald' : ''}" style="padding:5px 10px; font-size:10.5px;">Semua Riwayat (${allList.length})</button>
+                    </div>
+                </div>
+
                 <div class="table-wrap">
                     <table>
                         <thead>
@@ -11190,7 +11235,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada riwayat presensi ananda</td></tr>'}
+                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada riwayat presensi ananda pada pilihan tanggal ini</td></tr>'}
                         </tbody>
                     </table>
                 </div>
