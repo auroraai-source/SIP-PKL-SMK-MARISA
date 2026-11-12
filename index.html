@@ -1782,75 +1782,87 @@
             const b = String(nameB).toLowerCase().trim();
             if (a === b) return true;
 
-            // Bersihkan gelar dan karakter non-alfabet untuk perbandingan inti
-            const cleanStr = (str) => {
-                let s = str.split(',')[0]; 
-                s = s.replace(/\b(s\.?pd|m\.?pd|s\.?st|drs|dra|hj|h\.?|st|mt|m\.?kom)\b/gi, ''); 
-                return s.replace(/[^a-z0-9]/g, '');
+            // Pembersih semua gelar akademik/kehormatan di depan maupun belakang nama
+            const stripTitles = (str) => {
+                let s = String(str || "").toLowerCase();
+                s = s.split(',')[0]; // Buang gelar setelah koma
+                s = s.replace(/\b(prof|dr|drs|dra|ir|hj|h|ny|tn|s\.?pd\.?i?|m\.?pd|s\.?st|s\.?kom|m\.?kom|s\.?t|m\.?t|s\.?e|m\.?m|s\.?ag|s\.?sos|s\.?ip|s\.?ap|s\.?psi|s\.?si|m\.?si|a\.?md|gr)\b\.?/gi, ' ');
+                return s.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
             };
 
-            const ca = cleanStr(a);
-            const cb = cleanStr(b);
-            
-            if (ca && cb) {
-                if (ca === cb) return true;
-                if (ca.includes(cb) || cb.includes(ca)) return true;
-                // Toleransi tinggi untuk variasi ejaan (contoh: Arthur vs Artur)
-                const caNoH = ca.replace(/h/g, '');
-                const cbNoH = cb.replace(/h/g, '');
-                if (caNoH && cbNoH && (caNoH === cbNoH || caNoH.includes(cbNoH) || cbNoH.includes(caNoH))) return true;
-            }
-
-            const compA = window.normalizeTextCompact(a);
-            const compB = window.normalizeTextCompact(b);
-            if (compA === compB) return true;
-            if (compA.length > 5 && compB.length > 5) {
-                if (compA.startsWith(compB) || compB.startsWith(compA)) return true;
-            }
-
-            return false;
-        };
-
-        // Pencocokan Nama Industri yang Presisi (Tidak menyamakan dua industri berbeda)
-        window.normalizeIndustriKey = function(str) {
-            if (!str || str === '-') return "";
-            return String(str)
-                .toLowerCase()
-                .replace(/[^a-z0-9]/g, '')
-                .trim();
-        };
-
-        window.isIndustriMatch = function(targetInd, currentIndName) {
-            if (!targetInd || !currentIndName || targetInd === '-' || currentIndName === '-') return false;
-            const cleanCurrent = String(currentIndName).toLowerCase().trim();
-            const compactCurrent = window.normalizeTextCompact(cleanCurrent);
-
-            const checkSingle = (item) => {
-                if (!item || item === '-') return false;
-                const cleanItem = String(item).toLowerCase().trim();
-                if (cleanItem === cleanCurrent) return true;
-                const compactItem = window.normalizeTextCompact(cleanItem);
-                if (compactItem && compactCurrent && compactItem === compactCurrent) return true;
-                return false;
+            // Normalisasi fonetik Indonesia (Evawaty == Evawati, Hippi == Hippy, Arthur == Artur, Yakop == Yacub)
+            const phoneticNormalize = (str) => {
+                return str
+                    .replace(/y/g, 'i')
+                    .replace(/ph/g, 'f')
+                    .replace(/v/g, 'f')
+                    .replace(/dj/g, 'j')
+                    .replace(/tj/g, 'c')
+                    .replace(/oe/g, 'u')
+                    .replace(/kh/g, 'k')
+                    .replace(/sy/g, 's')
+                    .replace(/sh/g, 's')
+                    .replace(/h/g, '')
+                    .replace(/([a-z])\1+/g, '$1'); // Huruf ganda jadi tunggal (hippi -> hipi, anna -> ana)
             };
 
-            if (Array.isArray(targetInd)) {
-                return targetInd.some(i => checkSingle(i));
-            }
-            if (typeof targetInd === 'string') {
-                if (targetInd.includes(',')) {
-                    return targetInd.split(',').some(i => checkSingle(i));
+            const cleanA = stripTitles(a);
+            const cleanB = stripTitles(b);
+            if (!cleanA || !cleanB) return false;
+            if (cleanA === cleanB) return true;
+
+            const compactA = cleanA.replace(/\s+/g, '');
+            const compactB = cleanB.replace(/\s+/g, '');
+            if (compactA && compactB) {
+                if (compactA === compactB) return true;
+                if (compactA.length >= 5 && compactB.length >= 5 && (compactA.includes(compactB) || compactB.includes(compactA))) {
+                    return true;
                 }
-                return checkSingle(targetInd);
             }
+
+            const phonA = phoneticNormalize(compactA);
+            const phonB = phoneticNormalize(compactB);
+            if (phonA && phonB) {
+                if (phonA === phonB) return true;
+                if (phonA.length >= 5 && phonB.length >= 5 && (phonA.includes(phonB) || phonB.includes(phonA))) {
+                    return true;
+                }
+            }
+
+            // Pencocokan berbasis kata/token (mengabaikan singkatan nama tengah 1-2 huruf seperti "Artur M.F Laluan" vs "Arthur Laluan" atau "Rinto H. Hippi" vs "Rinto Hippi")
+            const tokensA = cleanA.split(' ').filter(w => w.length >= 3).map(w => phoneticNormalize(w));
+            const tokensB = cleanB.split(' ').filter(w => w.length >= 3).map(w => phoneticNormalize(w));
+
+            if (tokensA.length > 0 && tokensB.length > 0) {
+                const shorter = tokensA.length <= tokensB.length ? tokensA : tokensB;
+                const longer = tokensA.length <= tokensB.length ? tokensB : tokensA;
+
+                // Jika semua kata utama pada nama yang lebih pendek ada di nama yang lebih panjang
+                const allShorterMatch = shorter.every(tShort =>
+                    longer.some(tLong => tLong === tShort || (tShort.length >= 4 && (tLong.startsWith(tShort) || tShort.startsWith(tLong))))
+                );
+                if (allShorterMatch && (shorter.length >= 2 || (shorter.length === 1 && shorter[0].length >= 5 && longer.length === 1))) {
+                    return true;
+                }
+
+                // Jika kata pertama DAN kata terakhir cocok secara fonetik (contoh: Rohana ... Evawaty == Rohana Evawati)
+                if (tokensA.length >= 2 && tokensB.length >= 2) {
+                    const firstMatch = tokensA[0] === tokensB[0] || tokensA[0].startsWith(tokensB[0]) || tokensB[0].startsWith(tokensA[0]);
+                    const lastA = tokensA[tokensA.length - 1];
+                    const lastB = tokensB[tokensB.length - 1];
+                    const lastMatch = lastA === lastB || (lastA.length >= 4 && lastB.length >= 4 && (lastA.startsWith(lastB) || lastB.startsWith(lastA)));
+                    if (firstMatch && lastMatch) return true;
+                }
+            }
+
             return false;
         };
 
-        // Pencocokan Nama Industri yang Presisi & Kebal Duplikasi Nama Serupa (Contoh: PT Merdeka Copper Gold vs PT Merdeka Copper Gold, Gorontalo)
+        // Pencocokan Nama Industri yang Presisi & Toleran (Memastikan semua siswa yang di-plot ke industri terbaca di dashboard industri)
         window.normalizeIndustriKey = function(str) {
             if (!str || str === '-') return "";
             let s = String(str).toLowerCase().trim();
-            s = s.replace(/^(pt\.?|cv\.?|ud\.?|toko|bengkel|kantor|perusahaan)\s+/i, '');
+            s = s.replace(/\b(pt|cv|ud|tb|fa|pd|perum|persero|tbk|cabang|cab|unit|kantor|dinas|badan|balai|uptd|upt|toko|bengkel|hotel|bank|koperasi|yayasan| klinik|rs|rsud|puskesmas)\b\.?/gi, ' ');
             return s.replace(/[^a-z0-9]/g, '').trim();
         };
 
@@ -1865,10 +1877,15 @@
                 const cleanItem = String(item).toLowerCase().trim();
                 if (cleanItem === cleanCurrent) return true;
                 const compactItem = window.normalizeTextCompact(cleanItem);
-                if (compactItem && compactCurrent && compactItem === compactCurrent) return true;
-                const coreItem = window.normalizeIndustriKey(cleanItem);
-                if (coreItem && coreCurrent && (coreItem === coreCurrent || (coreItem.length >= 10 && coreCurrent.length >= 10 && (coreItem.includes(coreCurrent) || coreCurrent.includes(coreItem))))) {
+                if (compactItem && compactCurrent && (compactItem === compactCurrent || (compactItem.length >= 6 && compactCurrent.length >= 6 && (compactItem.includes(compactCurrent) || compactCurrent.includes(compactItem))))) {
                     return true;
+                }
+                const coreItem = window.normalizeIndustriKey(cleanItem);
+                if (coreItem && coreCurrent) {
+                    if (coreItem === coreCurrent) return true;
+                    if (coreItem.length >= 5 && coreCurrent.length >= 5 && (coreItem.includes(coreCurrent) || coreCurrent.includes(coreItem))) {
+                        return true;
+                    }
                 }
                 return false;
             };
@@ -2546,15 +2563,22 @@
         window.simpanLogPresensiKhususKeSupabase = async function(newAbsenItem = null) {
             try {
                 let rowAbs = await window.directRestFetchRow('app_cloud_db', 'id', 'absensi_master_log').catch(() => null);
+                if (!rowAbs && window.supabaseClient) {
+                    const res = await window.supabaseClient.from('app_cloud_db').select('payload').eq('id', 'absensi_master_log').maybeSingle();
+                    if (res && res.data) rowAbs = res.data;
+                }
                 let remoteList = (rowAbs && rowAbs.payload && Array.isArray(rowAbs.payload.absensi)) ? rowAbs.payload.absensi : [];
                 let localList = Array.isArray(window.cloudState.absensi) ? window.cloudState.absensi : [];
                 if (newAbsenItem) {
                     localList = [newAbsenItem, ...localList];
                 }
+                localList.forEach(a => window.getAbsensiNormalizedDate(a));
+                remoteList.forEach(a => window.getAbsensiNormalizedDate(a));
+
                 const mergedAbsensi = window.mergeUniqueArrayById(
                     localList,
                     remoteList,
-                    (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${a.tanggal}_${a.tipe_absen}`
+                    (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
                 );
                 window.cloudState.absensi = mergedAbsensi;
                 const absPayload = {
@@ -2575,6 +2599,92 @@
                 }
             }
             return false;
+        };
+
+        // Fungsi Utama Pengiriman Snapshot Database ke Supabase (Pre-fetch Merge Anti-Hilang)
+        window.kirimSnapshotKeSupabase = async function(payloadInput, silent = true) {
+            const creds = window.getSupabaseCredentials();
+            if (!creds || !creds.url || !creds.key) {
+                if (!silent) window.showModalInfo("Koneksi Belum Terhubung ❌", "Periksa konfigurasi URL & Key Supabase.");
+                return false;
+            }
+
+            try {
+                // 1. PRE-FETCH MERGE: Tarik data terbaru dari Cloud terlebih dahulu dan gabungkan dengan data lokal
+                // agar presensi/jurnal dari perangkat siswa lain tidak pernah tertimpa!
+                try {
+                    const [rowState, rowCloud, rowAbsLog] = await Promise.all([
+                        window.directRestFetchRow('app_state', 'id', 1).catch(() => null),
+                        window.directRestFetchRow('app_cloud_db', 'id', 'master').catch(() => null),
+                        window.directRestFetchRow('app_cloud_db', 'id', 'absensi_master_log').catch(() => null)
+                    ]);
+                    const remoteSnap = (rowState && rowState.payload) ? rowState.payload : ((rowCloud && rowCloud.payload) ? rowCloud.payload : null);
+                    if (remoteSnap && typeof remoteSnap === 'object') {
+                        window.gabungkanDataCloudTanpaKehilangan(remoteSnap);
+                    }
+                    if (rowAbsLog && rowAbsLog.payload && Array.isArray(rowAbsLog.payload.absensi)) {
+                        window.cloudState.absensi = window.mergeUniqueArrayById(
+                            window.cloudState.absensi || [],
+                            rowAbsLog.payload.absensi,
+                            (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
+                        );
+                    }
+                } catch (ePre) {}
+
+                window.cloudState.lastUpdated = Date.now();
+                const cleanPayload = window.getSanitizedCloudPayload();
+
+                let okState = false;
+                let okCloud = false;
+
+                // 2. Unggah ke app_state (id=1), app_cloud_db (id='master'), dan absensi_master_log secara paralel
+                const [res1, res2] = await Promise.allSettled([
+                    window.directRestUpsertRow('app_state', { id: 1, payload: cleanPayload }, 'id'),
+                    window.directRestUpsertRow('app_cloud_db', { id: 'master', payload: cleanPayload }, 'id'),
+                    window.directRestUpsertRow('app_cloud_db', {
+                        id: 'absensi_master_log',
+                        payload: { updatedAt: Date.now(), absensi: cleanPayload.absensi || [] }
+                    }, 'id')
+                ]);
+
+                okState = (res1.status === 'fulfilled' && res1.value === true);
+                okCloud = (res2.status === 'fulfilled' && res2.value === true);
+
+                // 3. Fallback menggunakan Supabase SDK jika Direct REST gagal
+                if (!okState && !okCloud && window.supabaseClient) {
+                    const [sdk1, sdk2] = await Promise.allSettled([
+                        window.supabaseClient.from('app_state').upsert({ id: 1, payload: cleanPayload }, { onConflict: 'id' }),
+                        window.supabaseClient.from('app_cloud_db').upsert({ id: 'master', payload: cleanPayload }, { onConflict: 'id' })
+                    ]);
+                    if (sdk1.status === 'fulfilled' && !sdk1.value.error) okState = true;
+                    if (sdk2.status === 'fulfilled' && !sdk2.value.error) okCloud = true;
+                }
+
+                if (okState || okCloud) {
+                    window.isCloudConnected = true;
+                    try {
+                        localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cleanPayload));
+                        localStorage.setItem(STORAGE_KEY_VAULT, JSON.stringify(cleanPayload));
+                    } catch (e) {}
+                    if (!silent) {
+                        window.showModalInfo(
+                            "Berhasil Disinkronkan ke Cloud! ☁️✅",
+                            `Seluruh data (<b>${(cleanPayload.siswa || []).length} Siswa</b>, <b>${(cleanPayload.absensi || []).length} Presensi</b>, dan <b>${(cleanPayload.jurnal || []).length} Jurnal</b>) berhasil diunggah ke Supabase Cloud.`
+                        );
+                    }
+                    return true;
+                } else {
+                    if (!silent) {
+                        window.showModalInfo("Gagal Mengunggah ke Cloud ❌", "Pastikan koneksi internet stabil dan skrip SQL Supabase sudah dijalankan.");
+                    }
+                    return false;
+                }
+            } catch (err) {
+                if (!silent) {
+                    window.showModalInfo("Gagal Mengunggah ke Cloud ❌", err.message || "Terjadi gangguan jaringan.");
+                }
+                return false;
+            }
         };
 
         window.tarikLogPresensiKhususDariSupabase = async function() {
@@ -3830,95 +3940,179 @@
             });
 
             if (foundReg) {
+                // Pastikan untuk Guru, Siswa, dan Industri kita mengembalikan Nama Resmi (Canonical) dari Data Master
+                // agar dashboard Guru & Industri langsung sinkron membaca daftar siswanya!
+                let resolvedNama = foundReg.nama;
+                let resolvedIdentitas = foundReg.identitas || foundReg.username;
+                if (foundReg.role === 'guru') {
+                    const gMaster = (window.cloudState.guru || []).find(g =>
+                        g && (window.isNameMatch(g.nama, foundReg.nama) ||
+                              (g.nip && g.nip !== '-' && window.normalizeTextCompact(g.nip) === window.normalizeTextCompact(foundReg.username)))
+                    );
+                    if (gMaster && gMaster.nama) resolvedNama = gMaster.nama;
+                } else if (foundReg.role === 'industri') {
+                    const iMaster = (window.cloudState.industri || []).find(i =>
+                        i && window.isIndustriMatch(i.nama, foundReg.nama)
+                    );
+                    if (iMaster && iMaster.nama) resolvedNama = iMaster.nama;
+                } else if (foundReg.role === 'siswa') {
+                    const sMaster = (window.cloudState.siswa || []).find(s =>
+                        s && (window.isNameMatch(s.nama, foundReg.nama) ||
+                              (s.nis && s.nis !== '-' && window.normalizeTextCompact(s.nis) === window.normalizeTextCompact(foundReg.username)))
+                    );
+                    if (sMaster && sMaster.nama) {
+                        resolvedNama = sMaster.nama;
+                        if (sMaster.nis && sMaster.nis !== '-') resolvedIdentitas = sMaster.nis;
+                    }
+                }
                 return {
-                    nama: foundReg.nama,
+                    nama: resolvedNama,
                     role: foundReg.role,
-                    jabatan: foundReg.jabatan || "",
-                    identitas: foundReg.identitas || foundReg.username
+                    identitas: resolvedIdentitas,
+                    username: foundReg.username,
+                    jabatan: foundReg.jabatan || ""
                 };
             }
 
-            // 3. Cek langsung dari Tabel Master Siswa (jika login di Room Siswa)
-            if (allowedRoles.includes('siswa')) {
-                const sMatch = (window.cloudState.siswa || []).find(s => {
-                    if (!s) return false;
-                    return isFlexibleUserMatch(s.nama, s.nis, s.nis);
-                });
-                if (sMatch) {
-                    const sNisClean = String(sMatch.nis || "").toLowerCase().replace(/\s+/g, "");
-                    const linkedAcc = (window.cloudState.registeredUsers || []).find(u =>
-                        u.role === 'siswa' && isFlexibleUserMatch(u.nama, u.username, sMatch.nis)
-                    );
-                    const accPass = linkedAcc ? String(linkedAcc.pass || "").toLowerCase().replace(/\s+/g, "") : "";
-                    if (
-                        (accPass && cleanP === accPass) ||
-                        cleanP === 'siswa123' ||
-                        cleanP === '123456' ||
-                        cleanP === 'buka123' ||
-                        cleanP === cleanU ||
-                        (sNisClean && cleanP === sNisClean)
-                    ) {
-                        return {
-                            nama: sMatch.nama,
-                            role: 'siswa',
-                            identitas: sMatch.nis && sMatch.nis !== '-' ? sMatch.nis : sMatch.nama
-                        };
-                    }
-                }
-            }
-
-            // 4. Cek langsung dari Tabel Master Guru (jika login di Room Guru)
+            // 3. Fallback Cerdas: Cari langsung di Data Master Guru (jika login sebagai Guru / Pengawasan)
             if (allowedRoles.includes('guru')) {
-                const gMatch = (window.cloudState.guru || []).find(g => {
-                    if (!g) return false;
-                    return isFlexibleUserMatch(g.nama, g.nip, g.nip);
+                const gMaster = (window.cloudState.guru || []).find(g => {
+                    if (!g || !g.nama) return false;
+                    return isFlexibleUserMatch(g.nama, g.nip, g.noHp);
                 });
-                if (gMatch) {
-                    const gNipClean = String(gMatch.nip || "").toLowerCase().replace(/\s+/g, "");
-                    const linkedAcc = (window.cloudState.registeredUsers || []).find(u =>
-                        u.role === 'guru' && isFlexibleUserMatch(u.nama, u.username, gMatch.nip)
-                    );
-                    const accPass = linkedAcc ? String(linkedAcc.pass || "").toLowerCase().replace(/\s+/g, "") : "";
-                    if (
-                        (accPass && cleanP === accPass) ||
-                        cleanP === 'guru123' ||
-                        cleanP === '123456' ||
-                        cleanP === 'buka123' ||
-                        cleanP === cleanU ||
-                        (gNipClean && cleanP === gNipClean)
-                    ) {
+                if (gMaster) {
+                    const gNip = window.normalizeTextCompact(gMaster.nip);
+                    if (cleanP === 'guru123' || cleanP === '123456' || cleanP === 'buka123' || (gNip && cleanP === gNip) || cleanP === cleanU) {
                         return {
-                            nama: gMatch.nama,
+                            nama: gMaster.nama,
                             role: 'guru',
-                            identitas: gMatch.nip && gMatch.nip !== '-' ? gMatch.nip : gMatch.nama
+                            identitas: gMaster.nip || gMaster.nama
+                        };
+                    }
+                }
+                // Cek juga nama guru yang langsung tertulis di tabel Penempatan atau Master Siswa
+                const penGuru = (window.cloudState.penempatan || []).find(p => p && p.guru && window.isNameMatch(p.guru, rawUsername));
+                if (penGuru && (cleanP === 'guru123' || cleanP === '123456' || cleanP === 'buka123' || cleanP === cleanU)) {
+                    return {
+                        nama: penGuru.guru,
+                        role: 'guru',
+                        identitas: penGuru.guru
+                    };
+                }
+            }
+
+            // 4. Fallback Cerdas: Cari langsung di Data Master Siswa (jika login sebagai Siswa)
+            if (allowedRoles.includes('siswa')) {
+                const sMaster = (window.cloudState.siswa || []).find(s => {
+                    if (!s || !s.nama) return false;
+                    return isFlexibleUserMatch(s.nama, s.nis, s.noHp);
+                });
+                if (sMaster) {
+                    const sNis = window.normalizeTextCompact(sMaster.nis);
+                    if (cleanP === 'siswa123' || cleanP === '123456' || cleanP === 'buka123' || (sNis && cleanP === sNis) || cleanP === cleanU) {
+                        return {
+                            nama: sMaster.nama,
+                            role: 'siswa',
+                            identitas: (sMaster.nis && sMaster.nis !== '-') ? sMaster.nis : sMaster.nama
                         };
                     }
                 }
             }
 
-            // 5. Cek langsung dari Tabel Master Industri DUDI (jika login di Room Industri)
+            // 5. Fallback Cerdas: Cari langsung di Data Master Industri (jika login sebagai Mitra Industri DUDI)
             if (allowedRoles.includes('industri')) {
-                const indMatch = (window.cloudState.industri || []).find(ind => {
-                    if (!ind) return false;
-                    const iNama = String(ind.nama || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-                    return (iNama && iNama === cleanU) || window.isIndustriMatch(ind.nama, rawUsername);
+                const iMaster = (window.cloudState.industri || []).find(ind => {
+                    if (!ind || !ind.nama) return false;
+                    return window.isIndustriMatch(ind.nama, rawUsername) || isFlexibleUserMatch(ind.nama, ind.id, ind.noWa);
                 });
-                if (indMatch) {
-                    const linkedAcc = (window.cloudState.registeredUsers || []).find(u =>
-                        u.role === 'industri' && window.isIndustriMatch(u.nama, indMatch.nama)
-                    );
-                    const accPass = linkedAcc ? String(linkedAcc.pass || "").toLowerCase().replace(/\s+/g, "") : "";
-                    if ((accPass && cleanP === accPass) || cleanP === 'dudi123' || cleanP === '123456' || cleanP === 'buka123' || cleanP === cleanU) {
+                if (iMaster) {
+                    if (cleanP === 'dudi123' || cleanP === '123456' || cleanP === 'buka123' || cleanP === cleanU) {
                         return {
-                            nama: indMatch.nama,
+                            nama: iMaster.nama,
                             role: 'industri',
-                            identitas: indMatch.nama
+                            identitas: iMaster.nama
                         };
                     }
                 }
             }
 
             return null;
+        };
+
+        // Helper khusus untuk memeriksa apakah siswa ini secara pribadi sudah pernah mengunci titik lokasi
+        // atau sudah pernah melakukan presensi masuk di titik koordinat yang valid
+        window.cekApakahSiswaSudahKunciLokasi = function(namaInd, dataIndObj, namaSiswa) {
+            const indKey = window.normalizeTextCompact(namaInd);
+            const studentKey = (indKey && namaSiswa) ? `${indKey}__${window.normalizeTextCompact(namaSiswa)}` : "";
+
+            // 1. Cek di profil Master Siswa
+            if (namaSiswa && Array.isArray(window.cloudState.siswa)) {
+                const sMaster = window.cloudState.siswa.find(s => s && window.isNameMatch(s.nama, namaSiswa));
+                if (sMaster && sMaster.gpsLocked && sMaster.lockedLat && sMaster.lockedLng &&
+                    !window.isDefaultUncalibratedCoords(sMaster.lockedLat, sMaster.lockedLng, { gpsLocked: true })) {
+                    return {
+                        locked: true,
+                        lat: parseFloat(sMaster.lockedLat),
+                        lng: parseFloat(sMaster.lockedLng),
+                        radius: (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100,
+                        sumber: sMaster.cabangIndustri || namaInd
+                    };
+                }
+            }
+
+            // 2. Cek di memori penguncian lokal perangkat
+            try {
+                const mapStr = localStorage.getItem("SIP_PKL_LOCKED_GPS_MAP");
+                if (mapStr) {
+                    const mapObj = JSON.parse(mapStr);
+                    if (studentKey && mapObj[studentKey] && mapObj[studentKey].lat && mapObj[studentKey].lng) {
+                        return {
+                            locked: true,
+                            lat: parseFloat(mapObj[studentKey].lat),
+                            lng: parseFloat(mapObj[studentKey].lng),
+                            radius: parseInt(mapObj[studentKey].radius) || 100,
+                            sumber: mapObj[studentKey].namaCabang || namaInd
+                        };
+                    }
+                }
+            } catch (e) {}
+
+            // 3. Cek dari riwayat presensi siswa sebelumnya yang memiliki koordinat valid
+            if (namaSiswa) {
+                const prevAbsenSiswa = (window.cloudState.absensi || []).find(a =>
+                    a && a.latitude && a.longitude &&
+                    window.isNameMatch(a.nama, namaSiswa) &&
+                    !window.isDefaultUncalibratedCoords(a.latitude, a.longitude, { gpsLocked: true })
+                );
+                if (prevAbsenSiswa) {
+                    return {
+                        locked: true,
+                        lat: parseFloat(prevAbsenSiswa.latitude),
+                        lng: parseFloat(prevAbsenSiswa.longitude),
+                        radius: (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100,
+                        sumber: prevAbsenSiswa.industri || namaInd
+                    };
+                }
+            }
+
+            // 4. Cek apakah Master Industri sudah dikunci koordinatnya (bukan koordinat default 0.45612, 121.94210)
+            if (dataIndObj && !window.isDefaultUncalibratedCoords(dataIndObj.lat, dataIndObj.lng, dataIndObj)) {
+                return {
+                    locked: true,
+                    lat: parseFloat(dataIndObj.lat),
+                    lng: parseFloat(dataIndObj.lng),
+                    radius: parseInt(dataIndObj.radius) >= 100 ? parseInt(dataIndObj.radius) : 100,
+                    sumber: dataIndObj.nama || namaInd
+                };
+            }
+
+            return {
+                locked: false,
+                lat: parseFloat(dataIndObj?.lat) || 0.45612,
+                lng: parseFloat(dataIndObj?.lng) || 121.94210,
+                radius: 100,
+                sumber: namaInd
+            };
         };
 
         window.submitOnlineAuth = async function(event) {
@@ -5270,70 +5464,139 @@
             window.open(obs.link, '_blank');
         };
 
-        window.renderGuruOfficialDashboard = function() {
-            const profile = window.cloudState.userProfile || { nama: "Guru Pembimbing" };
-            const bannerHtml = window.renderBannerCarouselHtml("RUANG GURU PEMBIMBING LAPANGAN");
-
+        // =========================================================================
+        // MESIN PENGUMPUL SISWA BIMBINGAN GURU TERPUSAT (ANTI-KOSONG / ANTI-0 SISWA)
+        // Mendeteksi seluruh siswa bimbingan untuk guru seperti Rohana Evawaty, Rinto Hippi,
+        // Artur M.F Laluan, Sri Wahyuni, dll. dari Master Siswa, Alokasi Penempatan & Kredensial
+        // =========================================================================
+        window.getMyGuruStudents = function(guruProfileOrName) {
             if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
                 window.konsolidasiSatuBarisPerGuru();
             }
 
-            // Fungsi pencocokan nama guru yang fleksibel dan aman dari gelar/spasi
-            const isMatchGuru = (guruName) => {
-                return window.isNameMatch(guruName, profile.nama);
+            const rawName = (typeof guruProfileOrName === 'object' && guruProfileOrName !== null)
+                ? (guruProfileOrName.nama || guruProfileOrName.username || guruProfileOrName.identitas || "")
+                : String(guruProfileOrName || "");
+            const rawIdentitas = (typeof guruProfileOrName === 'object' && guruProfileOrName !== null)
+                ? (guruProfileOrName.identitas || guruProfileOrName.username || "")
+                : "";
+
+            // Cari juga nama lengkap resmi guru di Master Guru & RegisteredUsers jika profil login hanya menyimpan username/NIP
+            const candidateGuruNames = new Set();
+            if (rawName && rawName !== '-') candidateGuruNames.add(String(rawName).trim());
+
+            (window.cloudState.guru || []).forEach(g => {
+                if (!g || !g.nama) return;
+                if (window.isNameMatch(g.nama, rawName) ||
+                    (rawIdentitas && g.nip && g.nip !== '-' && window.normalizeTextCompact(g.nip) === window.normalizeTextCompact(rawIdentitas)) ||
+                    (rawName && g.nip && g.nip !== '-' && window.normalizeTextCompact(g.nip) === window.normalizeTextCompact(rawName))) {
+                    candidateGuruNames.add(g.nama.trim());
+                }
+            });
+
+            (window.cloudState.registeredUsers || []).forEach(u => {
+                if (!u || u.role !== 'guru') return;
+                if (window.isNameMatch(u.nama, rawName) ||
+                    (rawIdentitas && window.normalizeTextCompact(u.username) === window.normalizeTextCompact(rawIdentitas)) ||
+                    (rawName && window.normalizeTextCompact(u.username) === window.normalizeTextCompact(rawName))) {
+                    if (u.nama) candidateGuruNames.add(u.nama.trim());
+                }
+            });
+
+            const isMatchTargetGuru = (testGuruName) => {
+                if (!testGuruName || testGuruName === '-' || testGuruName === 'Belum Ditentukan') return false;
+                for (const cand of candidateGuruNames) {
+                    if (window.isNameMatch(testGuruName, cand)) return true;
+                }
+                return false;
             };
 
-            // 1. ISOLASI DATA KETAT: Ambil HANYA penempatan siswa resmi guru ini dari Data Master Siswa & Alokasi Guru
-            const myPlacements = (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru));
-
-            // Pemetaan nama siswa bimbingan -> data industri spesifik tempat siswa tersebut magang (Prioritas Mutlak: Data Master Siswa)
             const myStudentMap = new Map();
-            myPlacements.forEach(p => {
-                const sMap = (p.siswaIndustriMap && typeof p.siswaIndustriMap === 'object') ? p.siswaIndustriMap : {};
-                const sList = window.extractStudentList(p.siswa);
-                sList.forEach(s => {
-                    if (s && s.trim()) {
-                        const sClean = s.trim();
-                        const sKey = window.normalizeTextCompact(sClean);
-                        const placementInfo = window.getStudentPlacementInfo(sClean);
-                        const specificInd = (placementInfo.industri && placementInfo.industri !== 'Belum Ditentukan')
-                            ? placementInfo.industri
-                            : ((sMap[sKey] && sMap[sKey] !== '-') ? window.getCanonicalIndustriName(sMap[sKey]) : 'Belum Ditentukan');
-                        myStudentMap.set(sKey, {
-                            nama: placementInfo.namaSiswa || sClean,
-                            industri: specificInd
-                        });
+
+            const registerStudent = (sNameRaw, fallbackInd = "") => {
+                if (!sNameRaw) return;
+                const sClean = String(sNameRaw).trim();
+                if (!sClean || sClean === '-') return;
+                const placementInfo = window.getStudentPlacementInfo(sClean);
+                const canonicalNama = (placementInfo && placementInfo.namaSiswa) ? placementInfo.namaSiswa.trim() : sClean;
+                const sKey = window.normalizeTextCompact(canonicalNama);
+                if (!sKey) return;
+
+                const resolvedInd = (placementInfo && placementInfo.industri && placementInfo.industri !== 'Belum Ditentukan' && placementInfo.industri !== '-')
+                    ? placementInfo.industri
+                    : ((fallbackInd && fallbackInd !== '-' && fallbackInd !== 'Belum Ditentukan') ? window.getCanonicalIndustriName(fallbackInd) : 'Belum Ditentukan');
+
+                const sObj = (placementInfo && placementInfo.siswaObj) ? placementInfo.siswaObj : {};
+                if (!myStudentMap.has(sKey)) {
+                    myStudentMap.set(sKey, {
+                        nama: canonicalNama,
+                        kelas: (placementInfo && placementInfo.kelas && placementInfo.kelas !== '-') ? placementInfo.kelas : (sObj.kelas || '-'),
+                        nis: (placementInfo && placementInfo.nis && placementInfo.nis !== '-') ? placementInfo.nis : (sObj.nis || '-'),
+                        noHp: sObj.noHp || '-',
+                        industri: resolvedInd
+                    });
+                } else {
+                    const existing = myStudentMap.get(sKey);
+                    if ((existing.industri === 'Belum Ditentukan' || existing.industri === '-') && resolvedInd !== 'Belum Ditentukan') {
+                        existing.industri = resolvedInd;
                     }
+                }
+            };
+
+            // 1. Pindai dari tabel Alokasi Penempatan (window.cloudState.penempatan)
+            (window.cloudState.penempatan || []).forEach(p => {
+                if (!p || !isMatchTargetGuru(p.guru)) return;
+                const sMap = (p.siswaIndustriMap && typeof p.siswaIndustriMap === 'object') ? p.siswaIndustriMap : {};
+                const defaultInd = Array.isArray(p.industri) ? (p.industri[0] || '') : (p.industri || '');
+                const sList = window.extractStudentList(p.siswa);
+                sList.forEach(sName => {
+                    const k = window.normalizeTextCompact(sName);
+                    const mappedInd = sMap[k] || defaultInd || '';
+                    registerStudent(sName, mappedInd);
                 });
             });
 
-            // Lengkapi juga dari Master Siswa jika ada siswa yang gurunya cocok
+            // 2. Pindai langsung dari Data Master Siswa (window.cloudState.siswa)
             (window.cloudState.siswa || []).forEach(s => {
-                if (s && s.nama && s.guru && isMatchGuru(s.guru)) {
-                    const key = window.normalizeTextCompact(s.nama);
-                    const indMaster = (s.industri && s.industri !== '-' && s.industri !== 'Belum Ditentukan')
-                        ? window.getCanonicalIndustriName(s.industri)
-                        : 'Belum Ditentukan';
-                    if (!myStudentMap.has(key)) {
-                        myStudentMap.set(key, {
-                            nama: s.nama.trim(),
-                            industri: indMaster
-                        });
-                    } else if (indMaster !== 'Belum Ditentukan') {
-                        myStudentMap.get(key).industri = indMaster;
+                if (!s || !s.nama) return;
+                if (isMatchTargetGuru(s.guru)) {
+                    registerStudent(s.nama, s.industri || '');
+                } else {
+                    // Cek melalui getStudentPlacementInfo jika nama guru tersimpan di struktur relasi
+                    const inf = window.getStudentPlacementInfo(s.nama, s.nis);
+                    if (inf && isMatchTargetGuru(inf.guru)) {
+                        registerStudent(s.nama, inf.industri || s.industri || '');
                     }
                 }
             });
 
+            return myStudentMap;
+        };
+
+        window.renderGuruOfficialDashboard = function() {
+            const profile = window.cloudState.userProfile || { nama: "Guru Pembimbing" };
+            const bannerHtml = window.renderBannerCarouselHtml("RUANG GURU PEMBIMBING LAPANGAN");
+
+            // Gunakan mesin pengumpul terpusat agar seluruh siswa bimbingan guru ini terbaca utuh (Anti-0 Siswa)
+            const myStudentMap = window.getMyGuruStudents(profile);
+            const myStudentList = Array.from(myStudentMap.values());
             const myStudentKeys = Array.from(myStudentMap.keys());
             const totalSiswaBimbingan = myStudentKeys.length;
+
+            // Fungsi pencocokan apakah sebuah nama siswa termasuk siswa bimbingan guru ini
+            const isMyStudent = (studentName) => {
+                if (!studentName) return false;
+                const k = window.normalizeTextCompact(studentName);
+                if (myStudentMap.has(k)) return true;
+                return myStudentList.some(s => window.isNameMatch(s.nama, studentName));
+            };
 
             // Hitung tanggal lokal hari ini (WITA / YYYY-MM-DD lokal Indonesia)
             const todayStr = window.getTodayLocalWitaStr();
 
             // 2. ISOLASI JURNAL: Hanya jurnal yang dibuat oleh siswa bimbingan guru ini
             const myStudentJournals = (window.cloudState.jurnal || []).filter(j => {
-                return j.siswa && myStudentMap.has(window.normalizeTextCompact(j.siswa));
+                return j && j.siswa && isMyStudent(j.siswa);
             });
 
             // 3. HITUNG 4 METRIK KARTU MONITORING PKL (PERSIS SESUAI GAMBAR 2)
@@ -5344,29 +5607,29 @@
 
             // 4. ISOLASI PRESENSI: Hanya presensi milik siswa bimbingan guru ini hari ini
             const myStudentAbsensiToday = (window.cloudState.absensi || []).filter(a => {
-                return window.getAbsensiNormalizedDate(a) === todayStr && a.nama && myStudentMap.has(window.normalizeTextCompact(a.nama));
+                return a && window.getAbsensiNormalizedDate(a) === todayStr && a.nama && isMyStudent(a.nama);
             });
 
             // 5. PERINGATAN KEDISIPLINAN SISWA HARI INI:
             // a. Siswa yang belum mengisi jurnal hari ini
-            const belumIsiJurnalList = myStudentKeys.filter(sKey => {
-                return !journalsToday.some(j => window.normalizeTextCompact(j.siswa) === sKey);
-            }).map(sKey => myStudentMap.get(sKey));
+            const belumIsiJurnalList = myStudentList.filter(s => {
+                return !journalsToday.some(j => window.isNameMatch(j.siswa, s.nama));
+            });
 
             // b. Siswa yang belum presensi datang (Masuk) hari ini
-            const belumPresensiMasukList = myStudentKeys.filter(sKey => {
-                return !myStudentAbsensiToday.some(a => window.normalizeTextCompact(a.nama) === sKey && a.tipe_absen === 'Masuk');
-            }).map(sKey => myStudentMap.get(sKey));
+            const belumPresensiMasukList = myStudentList.filter(s => {
+                return !myStudentAbsensiToday.some(a => window.isNameMatch(a.nama, s.nama) && a.tipe_absen === 'Masuk');
+            });
 
             // c. Siswa yang belum presensi pulang hari ini
-            const belumPresensiPulangList = myStudentKeys.filter(sKey => {
-                return !myStudentAbsensiToday.some(a => window.normalizeTextCompact(a.nama) === sKey && a.tipe_absen === 'Pulang');
-            }).map(sKey => myStudentMap.get(sKey));
+            const belumPresensiPulangList = myStudentList.filter(s => {
+                return !myStudentAbsensiToday.some(a => window.isNameMatch(a.nama, s.nama) && a.tipe_absen === 'Pulang');
+            });
 
             // Total masalah yang perlu tindakan
             const countPerluTindakan = countMenungguReview + belumIsiJurnalList.length + belumPresensiMasukList.length;
 
-            // 6. RENDER AKTIVITAS SISWA TERBARU (Maksimal 5 Jurnal Terbaru)
+            // 6. RENDER AKTIVITAS SISWA BIMBINGAN TERBARU (Maksimal 5 Jurnal Terbaru)
             let aktivitasJurnalHtml = "";
             const recentJournals = myStudentJournals.slice(0, 5);
 
@@ -5374,7 +5637,9 @@
                 recentJournals.forEach(j => {
                     const originalIdx = (window.cloudState.jurnal || []).indexOf(j);
                     const sInfo = myStudentMap.get(window.normalizeTextCompact(j.siswa));
-                    const indName = sInfo ? sInfo.industri : (j.industri || 'DUDI Mitra');
+                    const indName = (j.industri && j.industri !== '-' && j.industri !== 'DUDI Mitra')
+                        ? j.industri
+                        : (sInfo && sInfo.industri ? sInfo.industri : '-');
                     const isApproved = (j.status === 'Disetujui');
 
                     aktivitasJurnalHtml += `
@@ -5726,44 +5991,83 @@
             window.openFeature("dashboard", "Beranda", true);
         };
 
-        window.getMyIndustriStudents = function(industriName) {
-            if (!industriName) return new Map();
-            const cleanInd = industriName.toLowerCase().trim();
-            const studentMap = new Map();
+        window.getMyIndustriStudents = function(industriNameOrProfile) {
+            if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
+                window.konsolidasiSatuBarisPerGuru();
+            }
 
-            // 1. Periksa seluruh siswa di Master Siswa melalui getStudentPlacementInfo
-            // agar hanya siswa yang benar-benar ditempatkan di industri ini yang masuk daftar
-            (window.cloudState.siswa || []).forEach(s => {
-                if (!s || !s.nama) return;
-                const info = window.getStudentPlacementInfo(s.nama, s.nis);
-                if (info.industri && window.isIndustriMatch(info.industri, cleanInd)) {
-                    studentMap.set(s.nama.trim().toLowerCase(), {
-                        nama: s.nama.trim(),
-                        kelas: s.kelas || 'Siswa Magang',
-                        nis: s.nis || '-',
-                        noHp: s.noHp || '-',
-                        guru: (info.guru && info.guru !== 'Belum Ditentukan') ? info.guru : (s.guru || 'Guru Pembimbing')
-                    });
+            const rawInd = (typeof industriNameOrProfile === 'object' && industriNameOrProfile !== null)
+                ? (industriNameOrProfile.nama || industriNameOrProfile.identitas || industriNameOrProfile.username || "")
+                : String(industriNameOrProfile || "");
+            if (!rawInd || rawInd === '-') return new Map();
+
+            const candidateIndNames = new Set([rawInd.trim()]);
+            (window.cloudState.industri || []).forEach(ind => {
+                if (ind && ind.nama && window.isIndustriMatch(ind.nama, rawInd)) {
+                    candidateIndNames.add(ind.nama.trim());
+                }
+            });
+            (window.cloudState.registeredUsers || []).forEach(u => {
+                if (u && u.role === 'industri' && (window.isIndustriMatch(u.nama, rawInd) || window.normalizeTextCompact(u.username) === window.normalizeTextCompact(rawInd))) {
+                    if (u.nama) candidateIndNames.add(u.nama.trim());
                 }
             });
 
-            // 2. Periksa juga daftar siswa di Alokasi Penempatan yang belum ada di Master Siswa
+            const isMatchTargetIndustri = (testInd) => {
+                if (!testInd || testInd === '-' || testInd === 'Belum Ditentukan') return false;
+                for (const cand of candidateIndNames) {
+                    if (window.isIndustriMatch(testInd, cand)) return true;
+                }
+                return false;
+            };
+
+            const studentMap = new Map();
+
+            const addStudentToIndustri = (sNameRaw, kelasRaw, nisRaw, noHpRaw, guruRaw) => {
+                if (!sNameRaw) return;
+                const info = window.getStudentPlacementInfo(sNameRaw, nisRaw);
+                const canonicalNama = (info && info.namaSiswa) ? info.namaSiswa.trim() : String(sNameRaw).trim();
+                const sKey = window.normalizeTextCompact(canonicalNama);
+                if (!sKey) return;
+
+                if (!studentMap.has(sKey)) {
+                    studentMap.set(sKey, {
+                        nama: canonicalNama,
+                        kelas: (kelasRaw && kelasRaw !== '-') ? kelasRaw : ((info && info.kelas && info.kelas !== '-') ? info.kelas : 'Siswa Magang'),
+                        nis: (nisRaw && nisRaw !== '-') ? nisRaw : ((info && info.nis) ? info.nis : '-'),
+                        noHp: (noHpRaw && noHpRaw !== '-') ? noHpRaw : ((info && info.siswaObj && info.siswaObj.noHp) ? info.siswaObj.noHp : '-'),
+                        guru: (info && info.guru && info.guru !== 'Belum Ditentukan') ? info.guru : (guruRaw || 'Guru Pembimbing')
+                    });
+                }
+            };
+
+            // 1. Pindai seluruh siswa di Data Master Siswa (window.cloudState.siswa)
+            (window.cloudState.siswa || []).forEach(s => {
+                if (!s || !s.nama) return;
+                if (isMatchTargetIndustri(s.industri)) {
+                    addStudentToIndustri(s.nama, s.kelas, s.nis, s.noHp, s.guru);
+                } else {
+                    const info = window.getStudentPlacementInfo(s.nama, s.nis);
+                    if (info && isMatchTargetIndustri(info.industri)) {
+                        addStudentToIndustri(s.nama, s.kelas, s.nis, s.noHp, info.guru || s.guru);
+                    }
+                }
+            });
+
+            // 2. Pindai seluruh pemetaan di Alokasi Penempatan (window.cloudState.penempatan)
             (window.cloudState.penempatan || []).forEach(p => {
+                if (!p) return;
+                const sMap = (p.siswaIndustriMap && typeof p.siswaIndustriMap === 'object') ? p.siswaIndustriMap : {};
                 const sList = window.extractStudentList(p.siswa);
+                const pIndList = Array.isArray(p.industri) ? p.industri : (p.industri ? [p.industri] : []);
+                const isSingleGroupMatch = (pIndList.length === 1 && isMatchTargetIndustri(pIndList[0]));
+
                 sList.forEach(sName => {
                     if (!sName) return;
-                    const key = sName.trim().toLowerCase();
-                    if (!studentMap.has(key)) {
-                        const info = window.getStudentPlacementInfo(sName);
-                        if (info.industri && window.isIndustriMatch(info.industri, cleanInd)) {
-                            studentMap.set(key, {
-                                nama: info.namaSiswa || sName.trim(),
-                                kelas: info.kelas !== '-' ? info.kelas : 'Siswa Magang',
-                                nis: info.nis || '-',
-                                noHp: (info.siswaObj && info.siswaObj.noHp) ? info.siswaObj.noHp : '-',
-                                guru: (info.guru && info.guru !== 'Belum Ditentukan') ? info.guru : (p.guru || 'Guru Pembimbing')
-                            });
-                        }
+                    const sKey = window.normalizeTextCompact(sName);
+                    const mappedInd = sMap[sKey] || '';
+                    if ((mappedInd && isMatchTargetIndustri(mappedInd)) || (!mappedInd && isSingleGroupMatch)) {
+                        addStudentToIndustri(sName, '-', '-', '-', p.guru);
                     }
                 });
             });
@@ -5777,16 +6081,24 @@
             const bannerHtml = window.renderBannerCarouselHtml("PANEL MITRA INDUSTRI DUDI");
 
             // 1. ISOLASI DATA KETAT: Ambil HANYA siswa yang dialokasikan resmi di industri ini
-            const myStudentMap = window.getMyIndustriStudents(profile.nama);
+            const myStudentMap = window.getMyIndustriStudents(profile);
+            const myStudentList = Array.from(myStudentMap.values());
             const myStudentKeys = Array.from(myStudentMap.keys());
             const totalSiswaMagang = myStudentKeys.length;
+
+            const isMyIndStudent = (studentName) => {
+                if (!studentName) return false;
+                const k = window.normalizeTextCompact(studentName);
+                if (myStudentMap.has(k)) return true;
+                return myStudentList.some(s => window.isNameMatch(s.nama, studentName));
+            };
 
             // Hitung tanggal lokal hari ini (WITA / YYYY-MM-DD)
             const todayStr = window.getTodayLocalWitaStr();
 
             // 2. ISOLASI JURNAL: Hanya jurnal yang dibuat oleh siswa magang di industri ini
             const myStudentJournals = (window.cloudState.jurnal || []).filter(j => {
-                return j.siswa && myStudentMap.has(j.siswa.trim().toLowerCase());
+                return j && j.siswa && (isMyIndStudent(j.siswa) || (j.industri && window.isIndustriMatch(j.industri, profile.nama)));
             });
 
             // 3. HITUNG 4 METRIK KARTU MONITORING PKL INDUSTRI (PERSIS SESUAI GAMBAR 2)
@@ -5797,21 +6109,21 @@
 
             // 4. ISOLASI PRESENSI: Hanya presensi milik siswa magang di industri ini hari ini
             const myStudentAbsensiToday = (window.cloudState.absensi || []).filter(a => {
-                return window.getAbsensiNormalizedDate(a) === todayStr && a.nama && myStudentMap.has(a.nama.trim().toLowerCase());
+                return a && window.getAbsensiNormalizedDate(a) === todayStr && a.nama && (isMyIndStudent(a.nama) || (a.industri && window.isIndustriMatch(a.industri, profile.nama)));
             });
 
             // 5. PERINGATAN KEDISIPLINAN SISWA MAGANG HARI INI
-            const belumIsiJurnalList = myStudentKeys.filter(sKey => {
-                return !journalsToday.some(j => (j.siswa || '').trim().toLowerCase() === sKey);
-            }).map(sKey => myStudentMap.get(sKey));
+            const belumIsiJurnalList = myStudentList.filter(s => {
+                return !journalsToday.some(j => window.isNameMatch(j.siswa, s.nama));
+            });
 
-            const belumPresensiMasukList = myStudentKeys.filter(sKey => {
-                return !myStudentAbsensiToday.some(a => (a.nama || '').trim().toLowerCase() === sKey && a.tipe_absen === 'Masuk');
-            }).map(sKey => myStudentMap.get(sKey));
+            const belumPresensiMasukList = myStudentList.filter(s => {
+                return !myStudentAbsensiToday.some(a => window.isNameMatch(a.nama, s.nama) && a.tipe_absen === 'Masuk');
+            });
 
-            const belumPresensiPulangList = myStudentKeys.filter(sKey => {
-                return !myStudentAbsensiToday.some(a => (a.nama || '').trim().toLowerCase() === sKey && a.tipe_absen === 'Pulang');
-            }).map(sKey => myStudentMap.get(sKey));
+            const belumPresensiPulangList = myStudentList.filter(s => {
+                return !myStudentAbsensiToday.some(a => window.isNameMatch(a.nama, s.nama) && a.tipe_absen === 'Pulang');
+            });
 
             const countPerluTindakan = countMenungguReview + belumIsiJurnalList.length + belumPresensiMasukList.length;
 
@@ -5822,54 +6134,7 @@
             if (recentJournals.length > 0) {
                 recentJournals.forEach(j => {
                     const originalIdx = (window.cloudState.jurnal || []).indexOf(j);
-                    const sInfo = myStudentMap.get((j.siswa || '').trim().toLowerCase());
-                    const isApproved = (j.status === 'Disetujui');
-
-                    aktivitasJurnalHtml += `
-                    <div style="background:#ffffff; border:1.5px solid #e2e8f0; border-radius:16px; padding:14px; margin-bottom:10px; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
-                        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
-                            <div>
-                                <div style="font-size:13.5px; font-weight:900; color:#0f172a;">👨‍🎓 ${j.siswa}</div>
-                                <div style="font-size:10.5px; color:#0284c7; font-weight:800; margin-top:1px;">📚 ${sInfo ? sInfo.kelas : 'Siswa Magang'} &bull; 📅 ${j.tanggal || todayStr}</div>
-                            </div>
-                            <span class="badge-status ${isApproved ? 'badge-green' : 'badge-amber'}" style="font-size:10px;">
-                                ${isApproved ? '✓ Disahkan' : '⏳ Menunggu'}
-                            </span>
-                        </div>
-                        <div style="font-size:11.5px; color:#334155; line-height:1.45; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:8px 10px; margin:6px 0;">
-                            ${j.kegiatan || '-'}
-                        </div>
-                        <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:8px;">
-                            ${!isApproved ? `
-                                <button onclick="window.sahkanJurnalSiswa(${originalIdx})" class="btn-action btn-emerald" style="padding:6px 12px; font-size:11px; font-weight:900;">
-                                    ✓ Sahkan Jurnal
-                                </button>
-                            ` : ''}
-                            <button onclick="window.openFeature('validasi-jurnal', 'Pengesahan Jurnal')" class="btn-action btn-blue" style="padding:6px 12px; font-size:11px; font-weight:800;">
-                                Periksa ➔
-                            </button>
-                        </div>
-                    </div>`;
-                });
-            } else {
-                aktivitasJurnalHtml = `
-                <div style="text-align:center; padding:22px 14px; background:#f8fafc; border-radius:14px; border:1.5px dashed #cbd5e1; color:#94a3b8; font-size:12px; font-weight:700;">
-                    Belum ada pengisian jurnal dari siswa magang di perusahaan/instansi Anda.
-                </div>`;
-            }
-
-            // 7. RENDER PERINGATAN KEDISIPLINAN SISWA MAGANG
-            let warningJurnalHtml = "";
-            if (belumIsiJurnalList.length > 0) {
-                belumIsiJurnalList.forEach(s => {
-                    warningJurnalHtml += `
-                    <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 12px; background:#ffffff; border:1px solid #fecaca; border-radius:12px; margin-bottom:6px;">
-                        <div>
-                            <div style="font-size:12px; font-weight:850; color:#0f172a;">👨‍🎓 ${s.nama}</div>
-                            <div style="font-size:10px; color:#64748b;">📚 ${s.kelas} &bull; Guru: ${s.guru}</div>
-                        </div>
-                        <span class="badge-status badge-red" style="font-size:9.5px;">Belum Mengisi Jurnal</span>
-                    </div>`;
+                    const sInfo = myStudentMap.get(window.normalizeTextCompact(j.siswa));
                 });
             } else {
                 warningJurnalHtml = `
@@ -6361,6 +6626,23 @@
                     </div>
                 </div>
 
+                <!-- KOTAK PERINGATAN JIKA BERADA DI LUAR TITIK LOKASI YANG SUDAH TERKUNCI (KAMERA TIDAK AKAN TERBUKA) -->
+                <div id="gpsOutOfRangeLockedBox" style="display:none; background:#fef2f2; border:2px solid #ef4444; border-radius:18px; padding:16px 14px; text-align:center; color:#991b1b; margin-bottom:12px;">
+                    <div style="font-size:32px; margin-bottom:4px;">🚫📍</div>
+                    <div style="font-size:13px; font-weight:950; color:#dc2626; text-transform:uppercase;">Kamera Terkunci: Lokasi Tidak Sesuai!</div>
+                    <div id="gpsOutOfRangeDetailText" style="font-size:11.5px; color:#7f1d1d; margin:6px 0 10px; line-height:1.45;">
+                        Anda terdeteksi berada di luar radius titik lokasi industri yang sudah tersimpan. Kamera hanya akan terbuka apabila Anda berada di titik lokasi industri yang telah dikunci.
+                    </div>
+                    <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+                        <button type="button" onclick="window.evaluasiLokasiDanKamera('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${dataInd.nama.replace(/'/g, "\\'")}')" class="btn-action btn-blue" style="padding:9px 14px; font-size:11.5px; font-weight:900;">
+                            📡 Cek Ulang Posisi Saya Sekarang
+                        </button>
+                        <button type="button" onclick="window.bukaModalAlternatifGantiTitikCabang('${tipeAbsen}')" class="btn-action btn-amber" style="padding:9px 14px; font-size:11px; font-weight:850;">
+                            🔑 Pindah Cabang (Kode Akses)
+                        </button>
+                    </div>
+                </div>
+
                 <!-- OPSI KE-2 (JIKA TITIK LOKASI OTOMATIS TIDAK DITEMUKAN): HANYA KOLOM KODE AKSES & TOMBOL KUNCI TITIK LOKASI -->
                 <div id="gpsNotifOutsideBox" style="display:none; background:#fffbeb; border:2px solid #f59e0b; border-radius:18px; padding:16px 14px; text-align:center; color:#92400e; margin-bottom:12px;">
                     <div style="font-size:30px; margin-bottom:4px;">🛰️🔑</div>
@@ -6376,7 +6658,7 @@
                     </div>
                 </div>
 
-                <!-- Wadah Kamera (Terbuka otomatis saat menekan Presensi Masuk / Pulang) -->
+                <!-- Wadah Kamera (Hanya terbuka jika berada di titik lokasi yang sesuai) -->
                 <div id="cameraPreviewWrap" style="display:none; position:relative; width:100%; height:200px; background:#0f172a; border-radius:18px; overflow:hidden; border:2px solid #38bdf8; align-items:center; justify-content:center; margin-bottom:10px;">
                     <video id="selfieVideoElement" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
                     <img id="selfieCapturedPreview" src="" alt="Selfie" style="display:none; width:100%; height:100%; object-fit:cover;">
@@ -6426,6 +6708,8 @@
             const badgeStatus = document.getElementById("badgeGpsPresensiStatus");
             const badgeLock = document.getElementById("badgeGpsLockState");
             const notifBox = document.getElementById("gpsNotifOutsideBox");
+            const outOfRangeBox = document.getElementById("gpsOutOfRangeLockedBox");
+            const outOfRangeDetail = document.getElementById("gpsOutOfRangeDetailText");
             const cameraWrap = document.getElementById("cameraPreviewWrap");
             const btnCamWrap = document.getElementById("cameraActionButtonsWrap");
             const btnSimpan = document.getElementById("btnSimpanPresensiAction");
@@ -6434,16 +6718,17 @@
             const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
             const namaSiswaResmi = placementInfo.namaSiswa || profile.nama;
 
-            // Ambil status koordinat terkunci paling mutakhir untuk siswa/industri ini
-            const latestLocked = window.ambilKoordinatTerkunciIndustri(targetNamaInd, placementInfo.industriObj, namaSiswaResmi);
-            let activeTargetLat = latestLocked.lat || targetLat || 0.45612;
-            let activeTargetLng = latestLocked.lng || targetLng || 121.94210;
-            let activeRadius = latestLocked.radius || targetRadius || 100;
-            let isAlreadyLocked = latestLocked.isLocked;
+            // Cek apakah siswa/industri ini SUDAH PERNAH mengunci titik lokasi sebelumnya
+            const lockStatus = window.cekApakahSiswaSudahKunciLokasi(targetNamaInd, placementInfo.industriObj, namaSiswaResmi);
+            let activeTargetLat = lockStatus.lat || targetLat || 0.45612;
+            let activeTargetLng = lockStatus.lng || targetLng || 121.94210;
+            let activeRadius = lockStatus.radius || targetRadius || 100;
+            const sudahPernahKunciTitik = lockStatus.locked;
 
             // KONDISI PENGECUALIAN: Dinas Luar atau Izin/Sakit
             if (kat === 'tugas_luar' || kat === 'izin_sakit') {
                 if (notifBox) notifBox.style.display = 'none';
+                if (outOfRangeBox) outOfRangeBox.style.display = 'none';
                 if (cameraWrap) cameraWrap.style.display = 'flex';
                 if (btnCamWrap) btnCamWrap.style.display = 'flex';
                 if (btnSimpan) {
@@ -6481,60 +6766,22 @@
                 return;
             }
 
-            // KHUSUS PRESENSI PULANG:
-            // Langsung gunakan titik koordinat yang sudah terkunci saat Presensi Masuk (tanpa perlu ambil ulang titik lokasi)
-            if (tipeAbsen === 'Pulang') {
-                const now = new Date();
-                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                const absenMasukHariIni = (window.cloudState.absensi || []).find(a =>
-                    a && a.tanggal === todayStr && a.tipe_absen === 'Masuk' &&
-                    (window.isNameMatch(a.nama, namaSiswaResmi) || window.isNameMatch(a.nama, profile.nama))
-                );
-
-                const lockedPulangLat = (absenMasukHariIni && absenMasukHariIni.latitude) ? parseFloat(absenMasukHariIni.latitude) : activeTargetLat;
-                const lockedPulangLng = (absenMasukHariIni && absenMasukHariIni.longitude) ? parseFloat(absenMasukHariIni.longitude) : activeTargetLng;
-
-                window.currentSelfieLocation = {
-                    lat: lockedPulangLat,
-                    lng: lockedPulangLng,
-                    targetLat: lockedPulangLat,
-                    targetLng: lockedPulangLng,
-                    distance: 0,
-                    inRadius: true
-                };
-
-                if (notifBox) notifBox.style.display = 'none';
-                if (cameraWrap) cameraWrap.style.display = 'flex';
-                if (btnCamWrap) btnCamWrap.style.display = 'flex';
-                if (btnSimpan) {
-                    btnSimpan.disabled = false;
-                    btnSimpan.style.opacity = '1';
-                }
-                if (badgeLock) {
-                    badgeLock.style.background = "#dcfce7";
-                    badgeLock.style.color = "#15803d";
-                    badgeLock.innerText = "🔒 Menggunakan Titik Lokasi Presensi Masuk";
-                }
-                if (badgeStatus) {
-                    badgeStatus.className = "badge-status badge-green";
-                    badgeStatus.innerText = "🟢 TITIK LOKASI TERKUNCI DARI ABSEN MASUK";
-                }
-                window.mulaiStreamKameraSelfie();
-                return;
-            }
-
-            // KONDISI PRESENSI MASUK DI INDUSTRI:
-            // Baik yang belum maupun yang sudah pernah menyimpan titik koordinat, ketika siswa menekan Presensi Masuk,
-            // sistem otomatis menangkap titik koordinat GPS secara akurat, langsung menyimpannya secara permanen,
-            // dan langsung membuka kamera selfie tanpa perlu memasukkan kode akses!
+            // SEMBUNYIKAN KAMERA TERLEBIH DAHULU SAMPAI LOKASI GPS TERVERIFIKASI AKURAT
             window.hentikanStreamKamera();
             if (cameraWrap) cameraWrap.style.display = 'none';
             if (btnCamWrap) btnCamWrap.style.display = 'none';
             if (notifBox) notifBox.style.display = 'none';
+            if (outOfRangeBox) outOfRangeBox.style.display = 'none';
+            if (btnSimpan) {
+                btnSimpan.disabled = true;
+                btnSimpan.style.opacity = '0.5';
+            }
 
             if (badgeStatus) {
                 badgeStatus.className = "badge-status badge-amber";
-                badgeStatus.innerText = "🛰️ Menangkap & Mengunci Titik GPS Industri...";
+                badgeStatus.innerText = sudahPernahKunciTitik
+                    ? "🛰️ Memverifikasi Kesesuaian Titik Lokasi..."
+                    : "🛰️ Menangkap & Mengunci Titik GPS Industri...";
             }
 
             if ("geolocation" in navigator) {
@@ -6543,42 +6790,119 @@
                         const curLat = pos.coords.latitude;
                         const curLng = pos.coords.longitude;
 
-                        // OTOMATIS TANGKAP & SIMPAN PERMANEN TITIK LOKASI SAAT PRESENSI MASUK DITEKAN (TANPA KODE AKSES)
-                        activeTargetLat = curLat;
-                        activeTargetLng = curLng;
-                        window.kunciKoordinatGpsIndustriPermanen(targetNamaInd, curLat, curLng, namaSiswaResmi, false);
-                        window.simpanDatabasePersisten(true);
+                        // KASUS 1: BELUM PERNAH MENGUNCI TITIK LOKASI (Pengambilan Pertama Kali di Industri)
+                        // Otomatis kunci dan simpan permanen titik lokasi industri saat itu, lalu buka kamera
+                        if (!sudahPernahKunciTitik) {
+                            activeTargetLat = curLat;
+                            activeTargetLng = curLng;
+                            window.kunciKoordinatGpsIndustriPermanen(targetNamaInd, curLat, curLng, namaSiswaResmi, false);
+                            window.simpanDatabasePersisten(true);
+
+                            window.currentSelfieLocation = {
+                                lat: curLat,
+                                lng: curLng,
+                                targetLat: curLat,
+                                targetLng: curLng,
+                                distance: 0,
+                                inRadius: true
+                            };
+
+                            if (badgeLock) {
+                                badgeLock.style.background = "#dcfce7";
+                                badgeLock.style.color = "#15803d";
+                                badgeLock.innerText = `🔒 Terkunci Otomatis (${curLat.toFixed(5)}, ${curLng.toFixed(5)})`;
+                            }
+                            if (cameraWrap) cameraWrap.style.display = 'flex';
+                            if (btnCamWrap) btnCamWrap.style.display = 'flex';
+                            if (btnSimpan) {
+                                btnSimpan.disabled = false;
+                                btnSimpan.style.opacity = '1';
+                            }
+                            if (badgeStatus) {
+                                badgeStatus.className = "badge-status badge-green";
+                                badgeStatus.innerText = "🟢 TITIK LOKASI DIKUNCI & KAMERA AKTIF";
+                            }
+                            window.mulaiStreamKameraSelfie();
+                            return;
+                        }
+
+                        // KASUS 2: SUDAH PERNAH MENGUNCI TITIK LOKASI DI INDUSTRI
+                        // Wajib periksa apakah posisi GPS saat ini sesuai dengan titik yang sudah tersimpan (dan juga cek daftar titik cabang resmi jika ada)
+                        let minDistance = window.hitungJarakMeterHaversine(curLat, curLng, activeTargetLat, activeTargetLng);
+                        let matchedLat = activeTargetLat;
+                        let matchedLng = activeTargetLng;
+
+                        const indMasterObj = placementInfo.industriObj;
+                        if (indMasterObj && Array.isArray(indMasterObj.cabangCoords)) {
+                            indMasterObj.cabangCoords.forEach(cb => {
+                                if (cb && cb.lat && cb.lng) {
+                                    const dCab = window.hitungJarakMeterHaversine(curLat, curLng, parseFloat(cb.lat), parseFloat(cb.lng));
+                                    if (dCab < minDistance) {
+                                        minDistance = dCab;
+                                        matchedLat = parseFloat(cb.lat);
+                                        matchedLng = parseFloat(cb.lng);
+                                    }
+                                }
+                            });
+                        }
+
+                        const isInsideLockedRadius = (minDistance <= activeRadius);
 
                         window.currentSelfieLocation = {
                             lat: curLat,
                             lng: curLng,
-                            targetLat: curLat,
-                            targetLng: curLng,
-                            distance: 0,
-                            inRadius: true
+                            targetLat: matchedLat,
+                            targetLng: matchedLng,
+                            distance: minDistance,
+                            inRadius: isInsideLockedRadius
                         };
 
-                        if (badgeLock) {
-                            badgeLock.style.background = "#dcfce7";
-                            badgeLock.style.color = "#15803d";
-                            badgeLock.innerText = `🔒 Terkunci Otomatis (${curLat.toFixed(5)}, ${curLng.toFixed(5)})`;
+                        if (isInsideLockedRadius) {
+                            // BERADA DI TITIK GPS LOKASI YANG SUDAH TERSIMPAN -> BUKA KAMERA!
+                            if (badgeLock) {
+                                badgeLock.style.background = "#dcfce7";
+                                badgeLock.style.color = "#15803d";
+                                badgeLock.innerText = `🔒 Lokasi Sesuai (Jarak ${minDistance}m dari Titik Terkunci)`;
+                            }
+                            if (outOfRangeBox) outOfRangeBox.style.display = 'none';
+                            if (notifBox) notifBox.style.display = 'none';
+                            if (cameraWrap) cameraWrap.style.display = 'flex';
+                            if (btnCamWrap) btnCamWrap.style.display = 'flex';
+                            if (btnSimpan) {
+                                btnSimpan.disabled = false;
+                                btnSimpan.style.opacity = '1';
+                            }
+                            if (badgeStatus) {
+                                badgeStatus.className = "badge-status badge-green";
+                                badgeStatus.innerText = `🟢 DI DALAM RADIUS (${minDistance}m / Maks ${activeRadius}m)`;
+                            }
+                            window.mulaiStreamKameraSelfie();
+                        } else {
+                            // TITIK LOKASI BERBEDA DARI YANG SUDAH TERSIMPAN -> KAMERA DILARANG TERBUKA!
+                            window.hentikanStreamKamera();
+                            if (cameraWrap) cameraWrap.style.display = 'none';
+                            if (btnCamWrap) btnCamWrap.style.display = 'none';
+                            if (notifBox) notifBox.style.display = 'none';
+                            if (outOfRangeBox) outOfRangeBox.style.display = 'block';
+                            if (outOfRangeDetail) {
+                                outOfRangeDetail.innerHTML = `
+                                    Posisi Anda saat ini berjarak <b>${minDistance} meter</b> dari titik lokasi <b>${targetNamaInd}</b> yang sudah dikunci (Batas radius: <b>${activeRadius} meter</b>).<br><br>
+                                    <b>Kamera tidak akan terbuka</b> di luar lokasi magang. Silakan menuju ke titik lokasi industri Anda lalu klik <b>"Cek Ulang Posisi Saya"</b>.
+                                `;
+                            }
+                            if (badgeLock) {
+                                badgeLock.style.background = "#fee2e2";
+                                badgeLock.style.color = "#b91c1c";
+                                badgeLock.innerText = `🚫 Di Luar Titik Terkunci (${minDistance}m)`;
+                            }
+                            if (badgeStatus) {
+                                badgeStatus.className = "badge-status badge-red";
+                                badgeStatus.innerText = `🔴 LOKASI BERBEDA (${minDistance}m > ${activeRadius}m) - KAMERA DIKUNCI`;
+                            }
                         }
-                        if (notifBox) notifBox.style.display = 'none';
-                        if (cameraWrap) cameraWrap.style.display = 'flex';
-                        if (btnCamWrap) btnCamWrap.style.display = 'flex';
-                        if (btnSimpan) {
-                            btnSimpan.disabled = false;
-                            btnSimpan.style.opacity = '1';
-                        }
-                        if (badgeStatus) {
-                            badgeStatus.className = "badge-status badge-green";
-                            badgeStatus.innerText = "🟢 TITIK LOKASI TERKUNCI OTOMATIS (KAMERA AKTIF)";
-                        }
-                        window.mulaiStreamKameraSelfie();
                     },
                     err => {
-                        // JIKA TITIK LOKASI TIDAK DITEMUKAN SECARA OTOMATIS:
-                        // Tampilkan Opsi Ke-2 (Formulir Kode Akses: Hanya kolom Kode Akses & tombol Kunci Titik Lokasi)
+                        // JIKA SINYAL GPS GAGAL TERBACA OTOMATIS:
                         window.hentikanStreamKamera();
                         if (cameraWrap) cameraWrap.style.display = 'none';
                         if (btnCamWrap) btnCamWrap.style.display = 'none';
@@ -6589,13 +6913,12 @@
                         }
                         if (badgeStatus) {
                             badgeStatus.className = "badge-status badge-amber";
-                            badgeStatus.innerText = "🔑 GUNAKAN KODE AKSES UNTUK KUNCI LOKASI";
+                            badgeStatus.innerText = "🔑 SINYAL GPS BELUM TERBACA (GUNAKAN KODE AKSES / REFRESH)";
                         }
                     },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
                 );
             } else {
-                // Jika browser/perangkat memblokir GPS otomatis, buka Opsi Ke-2 (Kode Akses)
                 window.hentikanStreamKamera();
                 if (cameraWrap) cameraWrap.style.display = 'none';
                 if (btnCamWrap) btnCamWrap.style.display = 'none';
@@ -6926,20 +7249,13 @@
 
             // FILTER KETAT KHUSUS GURU PEMBIMBING & INDUSTRI AGAR TIDAK SALAH KAMAR
             if (role === 'guru') {
-                if (typeof window.konsolidasiSatuBarisPerGuru === 'function') window.konsolidasiSatuBarisPerGuru();
-                const isMatchGuru = (guruName) => window.isNameMatch(guruName, profile.nama);
-                const mySiswaNames = [];
-                (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru)).forEach(p => {
-                    window.extractStudentList(p.siswa).forEach(s => mySiswaNames.push(s));
-                });
-                (window.cloudState.siswa || []).forEach(s => {
-                    if (s && s.nama && s.guru && isMatchGuru(s.guru)) mySiswaNames.push(s.nama);
-                });
-                list = list.filter(j => j && j.siswa && mySiswaNames.some(sn => window.isNameMatch(sn, j.siswa)));
+                const gMap = window.getMyGuruStudents(profile);
+                const mySiswaNames = Array.from(gMap.values()).map(s => s.nama);
+                list = list.filter(j => j && j.siswa && (gMap.has(window.normalizeTextCompact(j.siswa)) || mySiswaNames.some(sn => window.isNameMatch(sn, j.siswa))));
             } else if (role === 'industri') {
-                const sMap = window.getMyIndustriStudents(profile.nama);
+                const sMap = window.getMyIndustriStudents(profile);
                 const indSiswaNames = Array.from(sMap.values()).map(s => s.nama);
-                list = list.filter(j => j && j.siswa && (indSiswaNames.some(sn => window.isNameMatch(sn, j.siswa)) || window.isIndustriMatch(j.industri, profile.nama)));
+                list = list.filter(j => j && j.siswa && (sMap.has(window.normalizeTextCompact(j.siswa)) || indSiswaNames.some(sn => window.isNameMatch(sn, j.siswa)) || window.isIndustriMatch(j.industri, profile.nama)));
             }
 
             let rows = "";
@@ -9825,20 +10141,13 @@
             let allJurnal = window.cloudState.jurnal || [];
 
             if (role === 'guru') {
-                if (typeof window.konsolidasiSatuBarisPerGuru === 'function') window.konsolidasiSatuBarisPerGuru();
-                const isMatchGuru = (guruName) => window.isNameMatch(guruName, profile.nama);
-                const mySiswaNames = [];
-                (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru)).forEach(p => {
-                    window.extractStudentList(p.siswa).forEach(s => mySiswaNames.push(s));
-                });
-                (window.cloudState.siswa || []).forEach(s => {
-                    if (s && s.nama && s.guru && isMatchGuru(s.guru)) mySiswaNames.push(s.nama);
-                });
-                allJurnal = allJurnal.filter(j => j && j.siswa && mySiswaNames.some(sn => window.isNameMatch(sn, j.siswa)));
+                const gMap = window.getMyGuruStudents(profile);
+                const mySiswaNames = Array.from(gMap.values()).map(s => s.nama);
+                allJurnal = allJurnal.filter(j => j && j.siswa && (gMap.has(window.normalizeTextCompact(j.siswa)) || mySiswaNames.some(sn => window.isNameMatch(sn, j.siswa))));
             } else if (role === 'industri') {
-                const sMap = window.getMyIndustriStudents(profile.nama);
+                const sMap = window.getMyIndustriStudents(profile);
                 const indSiswaNames = Array.from(sMap.values()).map(s => s.nama);
-                allJurnal = allJurnal.filter(j => j && j.siswa && (indSiswaNames.some(sn => window.isNameMatch(sn, j.siswa)) || window.isIndustriMatch(j.industri, profile.nama)));
+                allJurnal = allJurnal.filter(j => j && j.siswa && (sMap.has(window.normalizeTextCompact(j.siswa)) || indSiswaNames.some(sn => window.isNameMatch(sn, j.siswa)) || window.isIndustriMatch(j.industri, profile.nama)));
             }
 
             const data = [
@@ -9871,40 +10180,30 @@
         window.filterAbsensiByRoleAndProfile = function(rawAbsensiList, role, profile) {
             const allAbsensi = Array.isArray(rawAbsensiList) ? rawAbsensiList : [];
             if (role === 'guru') {
-                if (typeof window.konsolidasiSatuBarisPerGuru === 'function') window.konsolidasiSatuBarisPerGuru();
-                const isMatchGuru = (guruName) => window.isNameMatch(guruName, profile.nama);
-                const mySiswaNames = [];
+                const gMap = window.getMyGuruStudents(profile);
+                const mySiswaNames = Array.from(gMap.values()).map(s => s.nama);
                 const mySiswaNisSet = new Set();
-
-                (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru)).forEach(p => {
-                    window.extractStudentList(p.siswa).forEach(s => {
-                        mySiswaNames.push(s);
-                        const inf = window.getStudentPlacementInfo(s);
-                        if (inf && inf.nis && inf.nis !== '-') mySiswaNisSet.add(window.normalizeTextCompact(inf.nis));
-                    });
-                });
-                (window.cloudState.siswa || []).forEach(s => {
-                    if (s && s.nama && s.guru && isMatchGuru(s.guru)) {
-                        mySiswaNames.push(s.nama);
-                        if (s.nis && s.nis !== '-') mySiswaNisSet.add(window.normalizeTextCompact(s.nis));
-                    }
+                gMap.forEach(s => {
+                    if (s.nis && s.nis !== '-') mySiswaNisSet.add(window.normalizeTextCompact(s.nis));
                 });
 
                 return allAbsensi.filter(ab => {
                     if (!ab || !ab.nama) return false;
-                    if (ab.guru && isMatchGuru(ab.guru)) return true;
+                    if (gMap.has(window.normalizeTextCompact(ab.nama))) return true;
+                    if (ab.guru && window.isNameMatch(ab.guru, profile.nama)) return true;
                     if (mySiswaNames.some(sn => window.isNameMatch(sn, ab.nama))) return true;
                     const abUid = window.normalizeTextCompact(ab.user_id || ab.nis || "");
                     if (abUid && mySiswaNisSet.has(abUid)) return true;
                     const inf = window.getStudentPlacementInfo(ab.nama, ab.user_id);
-                    if (inf && inf.guru && isMatchGuru(inf.guru)) return true;
+                    if (inf && inf.guru && window.isNameMatch(inf.guru, profile.nama)) return true;
                     return false;
                 });
             } else if (role === 'industri') {
-                const sMap = window.getMyIndustriStudents(profile.nama);
+                const sMap = window.getMyIndustriStudents(profile);
                 const indSiswaNames = Array.from(sMap.values()).map(s => s.nama);
                 return allAbsensi.filter(ab => {
                     if (!ab || !ab.nama) return false;
+                    if (sMap.has(window.normalizeTextCompact(ab.nama))) return true;
                     if (ab.industri && window.isIndustriMatch(ab.industri, profile.nama)) return true;
                     if (indSiswaNames.some(sn => window.isNameMatch(sn, ab.nama))) return true;
                     const inf = window.getStudentPlacementInfo(ab.nama, ab.user_id);
@@ -9917,8 +10216,36 @@
 
         window.selectedRekapPresensiDate = "";
         window.selectedRekapPresensiMonth = "";
+        window.selectedRekapFilterMode = "sudah"; // 'sudah' | 'belum' | 'semua'
         window.selectedSiswaPresensiDate = "";
         window.selectedOrtuPresensiDate = "";
+
+        window.ubahModeTampilanRekapPresensi = function(modeBaru) {
+            window.selectedRekapFilterMode = modeBaru || "sudah";
+            window.openFeature(window.cloudState.currentFeature || "rekap-masuk-pulang", "Rekap Presensi", true);
+        };
+
+        window.tindakLanjutiWaSiswaBelumPresensi = function(namaSiswa, kelasSiswa, namaIndustri, namaGuru, noHpSiswa, tanggalStr) {
+            let targetHp = (noHpSiswa && noHpSiswa !== '-') ? String(noHpSiswa).trim() : "";
+            let targetRoleLabel = `Siswa ${namaSiswa}`;
+            if (!targetHp && namaGuru && namaGuru !== '-' && namaGuru !== 'Belum Ditentukan') {
+                targetHp = window.getNoHpGuruByName(namaGuru);
+                targetRoleLabel = `Guru Pembimbing (${namaGuru})`;
+            }
+            if (!targetHp) {
+                return window.showModalInfo(
+                    "Nomor WhatsApp Belum Terisi 📱",
+                    `Nomor WhatsApp untuk siswa <b>${namaSiswa}</b> maupun Guru Pembimbing <b>${namaGuru}</b> belum terdaftar di Data Master.<br><br>Silakan lengkapi nomor HP di menu Data Master Siswa / Guru.`
+                );
+            }
+            const pesan = `*⚠️ PERINGATAN PRESENSI PKL - SMKN 1 MARISA*\n\n` +
+                `Halo *${namaSiswa}* (${kelasSiswa || 'Siswa PKL'}),\n` +
+                `Berdasarkan pantauan Panel Admin/Panitia PKL pada tanggal *${tanggalStr}*, Anda tercatat *BELUM MELAKUKAN PRESENSI HARI INI* di tempat PKL (*${namaIndustri}*).\n\n` +
+                `Mohon segera melakukan Presensi Masuk/Pulang melalui aplikasi SIP-PKL saat berada di titik lokasi industri. Terima kasih.\n` +
+                `— *Panitia PKL / Admin SMKN 1 Marisa*`;
+            const urlWa = window.formatNoWaLink(targetHp, pesan);
+            if (urlWa) window.open(urlWa, '_blank');
+        };
 
         window.geserTanggalPresensi = function(currentYmd, deltaDays) {
             const base = currentYmd ? new Date(currentYmd + "T12:00:00") : new Date();
@@ -10012,9 +10339,13 @@
             if (!window.selectedRekapPresensiMonth) {
                 window.selectedRekapPresensiMonth = todayStr.substring(0, 7);
             }
+            if (!window.selectedRekapFilterMode) {
+                window.selectedRekapFilterMode = "sudah";
+            }
 
             const activeDate = window.selectedRekapPresensiDate;
             const activeMonth = window.selectedRekapPresensiMonth;
+            const filterMode = window.selectedRekapFilterMode;
 
             // Normalkan seluruh tanggal absensi terlebih dahulu agar tidak ada yang gagal terbaca
             (window.cloudState.absensi || []).forEach(a => window.getAbsensiNormalizedDate(a));
@@ -10055,17 +10386,22 @@
                 if (!pairMap.has(key)) {
                     const kls = (ab.kelas && ab.kelas !== '-') ? ab.kelas : ((info && info.kelas && info.kelas !== '-') ? info.kelas : '');
                     const indName = (ab.industri && ab.industri !== '-' && ab.industri !== 'Belum Ditentukan') ? ab.industri : (info.industri || '-');
+                    const guruName = (ab.guru && ab.guru !== '-' && ab.guru !== 'Belum Ditentukan') ? ab.guru : (info.guru || '-');
                     pairMap.set(key, {
+                        sKey: sKey,
                         tanggal: dNorm,
                         nama: canonicalNama,
                         kelas: kls,
                         industri: indName,
+                        guru: guruName,
+                        noHp: (info.siswaObj && info.siswaObj.noHp) ? info.siswaObj.noHp : '-',
                         masukJam: '-',
                         masukStatus: 'Belum Presensi Masuk',
                         masukFoto: '',
                         pulangJam: '-',
                         pulangStatus: 'Belum Presensi Pulang',
-                        pulangFoto: ''
+                        pulangFoto: '',
+                        sudahPresensi: true
                     });
                 }
                 const entry = pairMap.get(key);
@@ -10080,24 +10416,110 @@
                 }
             });
 
+            // Susun daftar seluruh siswa sesuai peran untuk mendeteksi siapa saja yang BELUM melakukan presensi pada tanggal tersebut
+            let masterStudentsForRole = [];
+            if (role === 'guru') {
+                const gMap = window.getMyGuruStudents(profile);
+                gMap.forEach(s => {
+                    masterStudentsForRole.push({
+                        nama: s.nama,
+                        kelas: s.kelas || '-',
+                        industri: s.industri || '-',
+                        guru: profile.nama,
+                        noHp: s.noHp || '-'
+                    });
+                });
+            } else if (role === 'industri') {
+                const sMap = window.getMyIndustriStudents(profile);
+                sMap.forEach(s => {
+                    masterStudentsForRole.push({
+                        nama: s.nama,
+                        kelas: s.kelas || '-',
+                        industri: profile.nama,
+                        guru: s.guru || '-',
+                        noHp: s.noHp || '-'
+                    });
+                });
+            } else {
+                (window.cloudState.siswa || []).forEach(s => {
+                    if (!s || !s.nama) return;
+                    const inf = window.getStudentPlacementInfo(s.nama, s.nis);
+                    masterStudentsForRole.push({
+                        nama: inf.namaSiswa || s.nama,
+                        kelas: s.kelas || inf.kelas || '-',
+                        industri: inf.industri || s.industri || '-',
+                        guru: inf.guru || s.guru || '-',
+                        noHp: s.noHp || '-'
+                    });
+                });
+            }
+
+            const sudahPresensiList = Array.from(pairMap.values()).sort((a, b) => (a.nama || '').localeCompare(b.nama || ''));
+            const belumPresensiList = [];
+
+            masterStudentsForRole.forEach(s => {
+                const sKey = window.normalizeTextCompact(s.nama);
+                const key = `${activeDate}_${sKey}`;
+                if (!pairMap.has(key)) {
+                    belumPresensiList.push({
+                        sKey: sKey,
+                        tanggal: activeDate,
+                        nama: s.nama,
+                        kelas: (s.kelas && s.kelas !== '-') ? s.kelas : '',
+                        industri: s.industri || '-',
+                        guru: s.guru || '-',
+                        noHp: s.noHp || '-',
+                        masukJam: '-',
+                        masukStatus: 'Belum Presensi Masuk',
+                        masukFoto: '',
+                        pulangJam: '-',
+                        pulangStatus: 'Belum Presensi Pulang',
+                        pulangFoto: '',
+                        sudahPresensi: false
+                    });
+                }
+            });
+            belumPresensiList.sort((a, b) => (a.nama || '').localeCompare(b.nama || ''));
+
+            let displayList = sudahPresensiList;
+            if (filterMode === 'belum') {
+                displayList = belumPresensiList;
+            } else if (filterMode === 'semua') {
+                displayList = [...sudahPresensiList, ...belumPresensiList];
+            }
+
             let rows = "";
             let counter = 1;
-            Array.from(pairMap.values()).sort((a,b) => (a.nama || '').localeCompare(b.nama || '')).forEach(item => {
+            displayList.forEach(item => {
                 const kelasBadge = item.kelas ? ` <span style="color:#0284c7; font-weight:850; font-size:11px;">(${item.kelas})</span>` : '';
                 const safeNama = (item.nama || '').replace(/'/g, "\\'");
+                const safeKelas = (item.kelas || '').replace(/'/g, "\\'");
+                const safeInd = (item.industri || '').replace(/'/g, "\\'");
+                const safeGuru = (item.guru || '').replace(/'/g, "\\'");
+                const safeHp = (item.noHp || '').replace(/'/g, "\\'");
+
                 const btnFotoMasuk = item.masukFoto ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${item.masukFoto}', '${safeNama}', 'Masuk', '${item.tanggal}', '${item.masukJam}')" class="btn-action btn-blue" style="padding:2px 6px; font-size:9.5px; margin-left:4px;">📷</button>` : '';
                 const btnFotoPulang = item.pulangFoto ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${item.pulangFoto}', '${safeNama}', 'Pulang', '${item.tanggal}', '${item.pulangJam}')" class="btn-action btn-emerald" style="padding:2px 6px; font-size:9.5px; margin-left:4px;">📷</button>` : '';
 
-                rows += `<tr>
+                const btnTindakLanjutWa = !item.sudahPresensi ? `
+                    <button type="button" onclick="window.tindakLanjutiWaSiswaBelumPresensi('${safeNama}', '${safeKelas}', '${safeInd}', '${safeGuru}', '${safeHp}', '${item.tanggal}')" style="background:linear-gradient(135deg, #25D366 0%, #128C7E 100%); color:#ffffff; border:none; border-radius:8px; padding:4px 8px; font-size:10px; font-weight:900; cursor:pointer; display:inline-flex; align-items:center; gap:4px; margin-left:4px; box-shadow:0 2px 6px rgba(37,211,102,0.3);" title="Hubungi via WhatsApp agar segera melakukan presensi">
+                        ${window.getWhatsappSvgIcon(12)} <span>Tegur WA</span>
+                    </button>
+                ` : '';
+
+                rows += `<tr style="${!item.sudahPresensi ? 'background:#fff5f5;' : ''}">
                     <td>${counter++}</td>
-                    <td><b>${item.nama}</b>${kelasBadge}</td>
+                    <td>
+                        <b>${item.nama}</b>${kelasBadge}
+                        ${item.guru && item.guru !== '-' ? `<div style="font-size:10px; color:#15803d; font-weight:800;">👩‍🏫 Pembimbing: ${item.guru}</div>` : ''}
+                    </td>
                     <td>${item.industri}</td>
                     <td>${item.tanggal}</td>
                     <td>
-                        <span class="badge-status ${item.masukJam !== '-' ? 'badge-green' : 'badge-amber'}">${item.masukJam !== '-' ? '✅ ' + item.masukJam : 'Belum Absen'}</span>${btnFotoMasuk}
+                        <span class="badge-status ${item.masukJam !== '-' ? 'badge-green' : 'badge-red'}">${item.masukJam !== '-' ? '✅ ' + item.masukJam : '⚠️ Belum Presensi'}</span>${btnFotoMasuk}${btnTindakLanjutWa}
                     </td>
                     <td>
-                        <span class="badge-status ${item.pulangJam !== '-' ? 'badge-green' : 'badge-amber'}">${item.pulangJam !== '-' ? '✅ ' + item.pulangJam : 'Belum Absen'}</span>${btnFotoPulang}
+                        <span class="badge-status ${item.pulangJam !== '-' ? 'badge-green' : 'badge-amber'}">${item.pulangJam !== '-' ? '✅ ' + item.pulangJam : 'Belum Pulang'}</span>${btnFotoPulang}
                     </td>
                 </tr>`;
             });
@@ -10135,7 +10557,7 @@
                 : "⏱️ Pencatatan Presensi Masuk & Pulang (Harian)";
             const subLabel = (role === 'guru')
                 ? "PENCATATAN HARIAN SISWA BIMBINGAN RESMI ANDA"
-                : (role === 'industri' ? "PENCATATAN HARIAN SISWA MAGANG DI INDUSTRI ANDA" : "SISTEM PENCATATAN PRESENSI HARIAN & ARSIP BULANAN");
+                : (role === 'industri' ? "PENCATATAN HARIAN SISWA MAGANG DI INDUSTRI ANDA" : "SISTEM PENCATATAN PRESENSI HARIAN & TINDAK LANJUT ADMIN");
 
             return `
             <div class="card">
@@ -10144,7 +10566,7 @@
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">${subLabel}</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">${headerTitle}</h3>
                         <p style="font-size:11px; color:#475569; margin-top:2px;">
-                            Menampilkan presensi siswa pada tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>. Gunakan pemilih tanggal atau tombol pintasan di bawah untuk melihat riwayat presensi pada tanggal-tanggal sebelumnya (${allRoleAbsensi.length} total log tersimpan).
+                            Menampilkan pantauan presensi siswa pada tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>. Admin dapat memantau siapa saja yang <b>Sudah Presensi</b> maupun <b>Belum Presensi</b> untuk segera ditindaklanjuti.
                         </p>
                     </div>
                     <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
@@ -10152,6 +10574,19 @@
                             🔄 Segarkan Data Cloud
                         </button>
                     </div>
+                </div>
+
+                <!-- 3 TAB FILTER CEPAT ADMIN: SUDAH PRESENSI HARI INI vs BELUM PRESENSI (TINDAK LANJUT) vs SEMUA SISWA -->
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
+                    <button type="button" onclick="window.ubahModeTampilanRekapPresensi('sudah')" style="padding:10px 8px; border-radius:12px; border:2px solid ${filterMode === 'sudah' ? '#16a34a' : '#bbf7d0'}; background:${filterMode === 'sudah' ? '#dcfce7' : '#ffffff'}; color:#15803d; font-size:11px; font-weight:900; cursor:pointer; text-align:center;">
+                        ✅ Sudah Presensi (${sudahPresensiList.length})
+                    </button>
+                    <button type="button" onclick="window.ubahModeTampilanRekapPresensi('belum')" style="padding:10px 8px; border-radius:12px; border:2px solid ${filterMode === 'belum' ? '#dc2626' : '#fecaca'}; background:${filterMode === 'belum' ? '#fee2e2' : '#ffffff'}; color:#b91c1c; font-size:11px; font-weight:900; cursor:pointer; text-align:center;">
+                        ⚠️ Belum Presensi (${belumPresensiList.length})
+                    </button>
+                    <button type="button" onclick="window.ubahModeTampilanRekapPresensi('semua')" style="padding:10px 8px; border-radius:12px; border:2px solid ${filterMode === 'semua' ? '#0284c7' : '#bae6fd'}; background:${filterMode === 'semua' ? '#e0f2fe' : '#ffffff'}; color:#0369a1; font-size:11px; font-weight:900; cursor:pointer; text-align:center;">
+                        📋 Semua Siswa (${sudahPresensiList.length + belumPresensiList.length})
+                    </button>
                 </div>
 
                 <!-- KONTROL FILTER TANGGAL HARIAN, RIWAYAT TANGGAL SEBELUMNYA & EXPORT BULANAN -->
@@ -10170,7 +10605,7 @@
                                 <button type="button" onclick="window.ubahTanggalFilterRekapPresensi('${todayStr}')" class="btn-action btn-blue" style="padding:6px 10px; font-size:10.5px; font-weight:900;">
                                     📍 Kembali ke Hari Ini (${todayStr})
                                 </button>
-                            ` : `<span class="badge-status badge-green" style="font-size:10.5px;">📍 Hari Ini (${counter - 1} Siswa Tercatat)</span>`}
+                            ` : `<span class="badge-status badge-green" style="font-size:10.5px;">📍 Hari Ini (${sudahPresensiList.length} Sudah / ${belumPresensiList.length} Belum)</span>`}
                         </div>
                         <button type="button" onclick="window.unduhExcelRekapMasukPulang('harian')" class="btn-action btn-blue" style="font-size:11px; font-weight:850;">
                             📄 Export Harian (${activeDate})
@@ -10199,12 +10634,17 @@
                                 <th>Nama Siswa & Kelas</th>
                                 <th>Tempat PKL</th>
                                 <th>Tanggal</th>
-                                <th>Jam Masuk</th>
+                                <th>Jam Masuk / Tindak Lanjut</th>
                                 <th>Jam Pulang</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || `<tr><td colspan="6" class="empty-placeholder">Belum ada siswa yang tercatat melakukan presensi pada tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>.<br><span style="font-size:11px; color:#0284c7; font-weight:800;">💡 Tips: Klik tombol <b>🔄 Segarkan Data Cloud</b> di atas atau klik salah satu <b>Pintasan Tanggal Sebelumnya</b> untuk melihat riwayat presensi hari kemarin.</span></td></tr>`}
+                            ${rows || `<tr><td colspan="6" class="empty-placeholder">
+                                ${filterMode === 'sudah'
+                                    ? `Belum ada siswa yang tercatat melakukan presensi pada tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>.<br><span style="font-size:11px; color:#dc2626; font-weight:800;">👉 Klik tab <b>"⚠️ Belum Presensi (${belumPresensiList.length})"</b> di atas untuk melihat daftar siswa yang belum absen hari ini dan mengirim teguran WhatsApp!</span>`
+                                    : `Seluruh siswa telah melakukan presensi pada tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>. 🎉`
+                                }
+                            </td></tr>`}
                         </tbody>
                     </table>
                 </div>
@@ -10795,7 +11235,7 @@
             let counter = 1;
 
             if (isIndustri) {
-                const sMap = window.getMyIndustriStudents(profile.nama);
+                const sMap = window.getMyIndustriStudents(profile);
                 sMap.forEach(s => {
                     rows += `<tr>
                         <td>${counter++}</td>
@@ -10838,56 +11278,20 @@
                 </div>`;
             }
 
-            // Untuk Guru Pembimbing: Ambil nama siswa bimbingan lalu tampilkan HANYA nama industri tempat siswa tersebut magang/PKL
-            if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
-                window.konsolidasiSatuBarisPerGuru();
-            }
-
-            const isMatchGuru = (guruName) => {
-                return window.isNameMatch(guruName, profile.nama);
-            };
-
-            const myPlacements = (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru));
-            const uniqueStudents = new Map();
-
-            myPlacements.forEach(p => {
-                const sMap = (p.siswaIndustriMap && typeof p.siswaIndustriMap === 'object') ? p.siswaIndustriMap : {};
-                const sList = window.extractStudentList(p.siswa);
-
-                sList.forEach(sNama => {
-                    const key = window.normalizeTextCompact(sNama);
-                    if (!key) return;
-                    const mappedInd = (sMap[key] && sMap[key] !== '-') ? window.getCanonicalIndustriName(sMap[key]) : '';
-                    if (!uniqueStudents.has(key)) {
-                        uniqueStudents.set(key, { nama: sNama, mappedInd: mappedInd });
-                    } else if (mappedInd && mappedInd !== '-') {
-                        uniqueStudents.get(key).mappedInd = mappedInd;
-                    }
-                });
-            });
-
-            // Tambahkan juga siswa dari Master Siswa yang gurunya cocok jika belum masuk daftar
-            (window.cloudState.siswa || []).forEach(s => {
-                if (s && s.nama && s.guru && isMatchGuru(s.guru)) {
-                    const key = window.normalizeTextCompact(s.nama);
-                    if (key && !uniqueStudents.has(key)) {
-                        uniqueStudents.set(key, { nama: s.nama, mappedInd: window.getCanonicalIndustriName(s.industri || '') });
-                    }
-                }
-            });
+            // Untuk Guru Pembimbing: Gunakan mesin terpusat window.getMyGuruStudents(profile)
+            // agar semua siswa bimbingan (termasuk Rohana Evawaty, Rinto Hippi, dll.) langsung tampil lengkap
+            const uniqueStudents = window.getMyGuruStudents(profile);
 
             uniqueStudents.forEach(item => {
-                const placementInfo = window.getStudentPlacementInfo(item.nama);
+                const placementInfo = window.getStudentPlacementInfo(item.nama, item.nis);
                 const sData = placementInfo.siswaObj || {};
                 const namaResmi = placementInfo.namaSiswa || item.nama;
-                const kelasResmi = placementInfo.kelas || sData.kelas || '-';
-                const nisResmi = placementInfo.nis || sData.nis || '-';
-                const hpResmi = sData.noHp || '-';
-
-                // Prioritas 1 Mutlak: Tempat PKL yang ditetapkan di Data Master Siswa (sData.industri)
-                let indResmi = (sData.industri && sData.industri.trim() !== '' && sData.industri.trim() !== '-')
-                    ? window.getCanonicalIndustriName(sData.industri)
-                    : ((placementInfo.industri && placementInfo.industri !== 'Belum Ditentukan') ? placementInfo.industri : (item.mappedInd || 'Belum Ditentukan'));
+                const kelasResmi = (placementInfo.kelas && placementInfo.kelas !== '-') ? placementInfo.kelas : (item.kelas || sData.kelas || '-');
+                const nisResmi = (placementInfo.nis && placementInfo.nis !== '-') ? placementInfo.nis : (item.nis || sData.nis || '-');
+                const hpResmi = sData.noHp || item.noHp || '-';
+                const indResmi = (item.industri && item.industri !== 'Belum Ditentukan' && item.industri !== '-')
+                    ? item.industri
+                    : ((placementInfo.industri && placementInfo.industri !== 'Belum Ditentukan') ? placementInfo.industri : 'Belum Ditentukan');
 
                 rows += `<tr>
                     <td>${counter++}</td>
@@ -10905,7 +11309,7 @@
                     <div>
                         <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">BIMBINGAN AKADEMIK PKL</div>
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">👥 Daftar Siswa Bimbingan</h3>
-                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Data Nama Siswa, Kelas/Jurusan, dan Industri Magang terdeteksi langsung secara presisi dari Data Master Siswa.</p>
+                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Data Nama Siswa, Kelas/Jurusan, dan Industri Magang terdeteksi langsung secara presisi dari Data Master Siswa & Alokasi Penempatan.</p>
                     </div>
                     <span class="badge-status badge-green" style="font-size:11px; font-weight:900;">${counter - 1} Siswa Dibimbing</span>
                 </div>
@@ -10935,19 +11339,13 @@
             let list = window.cloudState.jurnal || [];
 
             if (role === 'industri') {
-                const sMap = window.getMyIndustriStudents(profile.nama);
-                list = list.filter(j => j.siswa && sMap.has(j.siswa.trim().toLowerCase()));
+                const sMap = window.getMyIndustriStudents(profile);
+                const indNames = Array.from(sMap.values()).map(s => s.nama);
+                list = list.filter(j => j && j.siswa && (sMap.has(window.normalizeTextCompact(j.siswa)) || indNames.some(sn => window.isNameMatch(sn, j.siswa)) || window.isIndustriMatch(j.industri, profile.nama)));
             } else if (role === 'guru') {
-                const isMatchGuru = (guruName) => {
-                    return window.isNameMatch(guruName, profile.nama);
-                };
-                const myPlacements = (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru));
-                const gMap = new Set();
-                myPlacements.forEach(p => {
-                    const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
-                    sList.forEach(s => { if (s && s.trim()) gMap.add(s.trim().toLowerCase()); });
-                });
-                list = list.filter(j => j.siswa && gMap.has(j.siswa.trim().toLowerCase()));
+                const gMap = window.getMyGuruStudents(profile);
+                const gNames = Array.from(gMap.values()).map(s => s.nama);
+                list = list.filter(j => j && j.siswa && (gMap.has(window.normalizeTextCompact(j.siswa)) || gNames.some(sn => window.isNameMatch(sn, j.siswa))));
             }
 
             let rows = "";
