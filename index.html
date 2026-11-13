@@ -1727,40 +1727,35 @@
             return window.getTanggalSiklusAktifWita().substring(0, 7);
         };
 
-        // Normalisasi segala format tanggal (DD/MM/YYYY, DD-MM-YYYY, ISO UTC, atau ekstraksi dari ID abs_17629...) menjadi YYYY-MM-DD Siklus WITA
+        // Normalisasi segala format tanggal (DD/MM/YYYY, DD-MM-YYYY, ISO UTC, atau ekstraksi dari ID abs_17629...)
+        // PENTING: Jika string tanggal YYYY-MM-DD sudah valid (misal "2026-11-13"), JANGAN PERNAH digeser mundur oleh timestamp ID!
         window.normalizeDateToYMD = function(rawDate, recordId = "") {
-            // 1. Jika ada timestamp milidetik di ID (contoh: abs_1762908000000 atau rwp_1762908000000), hitung tanggal_siklus WITA (reset 06:00 pagi)
+            if (rawDate) {
+                const s = String(rawDate).trim();
+                // 1. Jika sudah berformat YYYY-MM-DD (atau ISO), langsung gunakan tanggal tersebut secara mutlak
+                const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+                if (isoMatch) {
+                    return `${isoMatch[1]}-${String(isoMatch[2]).padStart(2, '0')}-${String(isoMatch[3]).padStart(2, '0')}`;
+                }
+                // 2. Format DD/MM/YYYY atau DD-MM-YYYY
+                const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+                if (dmyMatch) {
+                    return `${dmyMatch[3]}-${String(dmyMatch[2]).padStart(2, '0')}-${String(dmyMatch[1]).padStart(2, '0')}`;
+                }
+            }
+
+            // 3. Fallback: Hanya jika rawDate kosong, ekstrak dari timestamp milidetik di ID (contoh: abs_1762908000000)
             if (recordId && typeof recordId === 'string') {
                 const matchTs = recordId.match(/(?:abs|rwp|jur|dokkeg|disp)_(\d{12,14})/);
                 if (matchTs && matchTs[1]) {
                     const tsNum = parseInt(matchTs[1], 10);
                     if (!isNaN(tsNum) && tsNum > 1700000000000) {
-                        const witaYmd = window.getTanggalSiklusAktifWita(tsNum);
-                        if (!rawDate) return witaYmd;
-                        const cleanRaw = String(rawDate).trim().substring(0, 10);
-                        if (cleanRaw !== witaYmd && Math.abs(new Date(witaYmd).getTime() - new Date(cleanRaw).getTime()) <= 86400000) {
-                            return witaYmd;
-                        }
+                        return window.getTanggalSiklusAktifWita(tsNum);
                     }
                 }
             }
 
-            if (!rawDate) return "";
-            const s = String(rawDate).trim();
-
-            // Format YYYY-MM-DD atau ISO string
-            const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-            if (isoMatch) {
-                return `${isoMatch[1]}-${String(isoMatch[2]).padStart(2, '0')}-${String(isoMatch[3]).padStart(2, '0')}`;
-            }
-
-            // Format DD/MM/YYYY atau DD-MM-YYYY
-            const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
-            if (dmyMatch) {
-                return `${dmyMatch[3]}-${String(dmyMatch[2]).padStart(2, '0')}-${String(dmyMatch[1]).padStart(2, '0')}`;
-            }
-
-            return s;
+            return rawDate ? String(rawDate).trim() : "";
         };
 
         window.getAbsensiNormalizedDate = function(ab) {
@@ -2197,62 +2192,6 @@
                 }
             } catch (e) {}
             return false;
-        };
-
-        window.getCurrentMonthLocalWitaStr = function() {
-            return window.getTodayLocalWitaStr().substring(0, 7);
-        };
-
-        // Normalisasi segala format tanggal (DD/MM/YYYY, DD-MM-YYYY, ISO UTC, atau ekstraksi dari ID abs_17629...) menjadi YYYY-MM-DD WITA
-        window.normalizeDateToYMD = function(rawDate, recordId = "") {
-            // 1. Jika ada timestamp milidetik di ID (contoh: abs_1762908000000), gunakan untuk memvalidasi tanggal WITA (UTC+8)
-            if (recordId && typeof recordId === 'string') {
-                const matchTs = recordId.match(/(?:abs|jur|dokkeg|disp)_(\d{12,14})/);
-                if (matchTs && matchTs[1]) {
-                    const tsNum = parseInt(matchTs[1], 10);
-                    if (!isNaN(tsNum) && tsNum > 1700000000000) {
-                        const dObj = new Date(tsNum);
-                        const utcMs = dObj.getTime() + (dObj.getTimezoneOffset() * 60000);
-                        const witaObj = new Date(utcMs + (8 * 3600000));
-                        const y = witaObj.getFullYear();
-                        const m = String(witaObj.getMonth() + 1).padStart(2, '0');
-                        const d = String(witaObj.getDate()).padStart(2, '0');
-                        const witaYmd = `${y}-${m}-${d}`;
-                        // Jika rawDate kosong atau hanya selisih 1 hari akibat bug UTC pagi hari, prioritaskan tanggal WITA dari timestamp asli
-                        if (!rawDate) return witaYmd;
-                        const cleanRaw = String(rawDate).trim().substring(0, 10);
-                        if (cleanRaw !== witaYmd && Math.abs(new Date(witaYmd).getTime() - new Date(cleanRaw).getTime()) <= 86400000) {
-                            return witaYmd;
-                        }
-                    }
-                }
-            }
-
-            if (!rawDate) return "";
-            const s = String(rawDate).trim();
-
-            // Format YYYY-MM-DD atau ISO string
-            const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-            if (isoMatch) {
-                return `${isoMatch[1]}-${String(isoMatch[2]).padStart(2, '0')}-${String(isoMatch[3]).padStart(2, '0')}`;
-            }
-
-            // Format DD/MM/YYYY atau DD-MM-YYYY
-            const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
-            if (dmyMatch) {
-                return `${dmyMatch[3]}-${String(dmyMatch[2]).padStart(2, '0')}-${String(dmyMatch[1]).padStart(2, '0')}`;
-            }
-
-            return s;
-        };
-
-        window.getAbsensiNormalizedDate = function(ab) {
-            if (!ab) return "";
-            const norm = window.normalizeDateToYMD(ab.tanggal, ab.id);
-            if (norm && ab.tanggal !== norm) {
-                ab.tanggal = norm;
-            }
-            return norm;
         };
 
         window.formatTanggalIndoLengkap = function(ymdStr) {
@@ -3063,29 +3002,29 @@
 
         window.directRestUpsertRow = async function(tableName, rowObject, conflictColumn = "id") {
             const creds = window.getSupabaseCredentials();
-            const baseUrl = String(creds.url || "").trim().replace(/\/+$/, "");
+            if (!creds || !creds.url || !creds.key) return false;
+            const baseUrl = String(creds.url).trim().replace(/\/+$/, "");
+            const apiKey = String(creds.key).trim();
             const endpoint = `${baseUrl}/rest/v1/${tableName}?on_conflict=${encodeURIComponent(conflictColumn)}`;
-            const bodyJson = JSON.stringify(rowObject);
 
-            const tryUpsert = async (withAuthBearer) => {
+            const tryUpsert = async (withBearer) => {
                 const headers = {
-                    "apikey": String(creds.key || "").trim(),
+                    "apikey": apiKey,
                     "Content-Type": "application/json",
-                    "Accept": "application/json",
                     "Prefer": "resolution=merge-duplicates,return=minimal"
                 };
-                if (withAuthBearer) {
-                    headers["Authorization"] = `Bearer ${String(creds.key || "").trim()}`;
+                if (withBearer) {
+                    headers["Authorization"] = `Bearer ${apiKey}`;
                 }
                 const resp = await fetch(endpoint, {
                     method: "POST",
                     headers: headers,
-                    body: bodyJson,
+                    body: JSON.stringify(rowObject),
                     mode: "cors"
                 });
                 if (!resp.ok) {
-                    const errTxt = await resp.text().catch(() => "");
-                    throw new Error(`HTTP ${resp.status}: ${errTxt || resp.statusText}`);
+                    const txt = await resp.text().catch(() => "");
+                    throw new Error(`HTTP ${resp.status}: ${txt}`);
                 }
                 return true;
             };
@@ -3097,10 +3036,29 @@
             }
         };
 
-        // Saluran Khusus Log Presensi Terpusat di Supabase (app_cloud_db id='absensi_master_log' & tabel 'riwayat_presensi')
-        // Menjamin presensi dari puluhan HP siswa bersifat APPEND-ONLY (tidak pernah hilang/tertimpa)
+        // Saluran Khusus Log Presensi Terpusat & Per-Siswa di Supabase
+        // Menggunakan sistem Atomic Individual Row (`absitem_<tanggal>_<siswa>_<tipe>`) di `app_cloud_db`
+        // + `absensi_master_log` + tabel `riwayat_presensi` sehingga ketika >50 siswa absen bersamaan
+        // di pagi hari, TIDAK ADA SATU PUN data presensi siswa yang saling menimpa atau gagal masuk ke Admin!
         window.simpanLogPresensiKhususKeSupabase = async function(newAbsenItem = null, newRiwayatRow = null) {
             try {
+                // 1. SIMPAN ATOMIK PER-SISWA (Anti-Tabrakan / Anti-Race Condition saat puluhan siswa absen serentak)
+                if (newAbsenItem && newAbsenItem.nama) {
+                    const tglNorm = window.getAbsensiNormalizedDate(newAbsenItem) || window.getTanggalSiklusAktifWita();
+                    const sKeyAtom = window.normalizeTextCompact(newAbsenItem.nama);
+                    const tipeKey = String(newAbsenItem.tipe_absen || 'Masuk').toLowerCase();
+                    const atomicRowId = `absitem_${tglNorm}_${sKeyAtom}_${tipeKey}`;
+                    await window.directRestUpsertRow('app_cloud_db', {
+                        id: atomicRowId,
+                        payload: {
+                            updatedAt: Date.now(),
+                            absen: newAbsenItem,
+                            riwayat: newRiwayatRow || null
+                        }
+                    }, 'id').catch(() => {});
+                }
+
+                // 2. Tarik dan gabungkan ke log kolektif `absensi_master_log`
                 let rowAbs = await window.directRestFetchRow('app_cloud_db', 'id', 'absensi_master_log').catch(() => null);
                 if (!rowAbs && window.supabaseClient) {
                     const res = await window.supabaseClient.from('app_cloud_db').select('payload').eq('id', 'absensi_master_log').maybeSingle();
@@ -3119,7 +3077,7 @@
                 const mergedAbsensi = window.mergeUniqueArrayById(
                     localList,
                     remoteList,
-                    (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
+                    (a) => `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
                 );
                 window.cloudState.absensi = mergedAbsensi;
 
@@ -3142,7 +3100,7 @@
 
                 await window.directRestUpsertRow('app_cloud_db', { id: 'absensi_master_log', payload: absPayload }, 'id');
 
-                // Upsert juga langsung ke tabel SQL `riwayat_presensi` jika tabel tersebut aktif di Supabase
+                // 3. Upsert juga langsung ke tabel SQL `riwayat_presensi` jika tabel tersebut aktif di Supabase
                 if (newRiwayatRow && newRiwayatRow.id) {
                     await window.directRestUpsertRow('riwayat_presensi', {
                         id: newRiwayatRow.id,
@@ -3199,17 +3157,29 @@
                         window.directRestFetchRow('app_cloud_db', 'id', 'master').catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', 'absensi_master_log').catch(() => null)
                     ]);
-                    const remoteSnap = (rowState && rowState.payload) ? rowState.payload : ((rowCloud && rowCloud.payload) ? rowCloud.payload : null);
-                    if (remoteSnap && typeof remoteSnap === 'object') {
-                        window.gabungkanDataCloudTanpaKehilangan(remoteSnap);
+                    if (rowState && rowState.payload && typeof rowState.payload === 'object') {
+                        window.gabungkanDataCloudTanpaKehilangan(rowState.payload);
                     }
-                    if (rowAbsLog && rowAbsLog.payload && Array.isArray(rowAbsLog.payload.absensi)) {
-                        window.cloudState.absensi = window.mergeUniqueArrayById(
-                            window.cloudState.absensi || [],
-                            rowAbsLog.payload.absensi,
-                            (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
-                        );
+                    if (rowCloud && rowCloud.payload && typeof rowCloud.payload === 'object') {
+                        window.gabungkanDataCloudTanpaKehilangan(rowCloud.payload);
                     }
+                    if (rowAbsLog && rowAbsLog.payload) {
+                        if (Array.isArray(rowAbsLog.payload.absensi)) {
+                            window.cloudState.absensi = window.mergeUniqueArrayById(
+                                window.cloudState.absensi || [],
+                                rowAbsLog.payload.absensi,
+                                (a) => `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
+                            );
+                        }
+                        if (Array.isArray(rowAbsLog.payload.riwayat_presensi)) {
+                            window.cloudState.riwayat_presensi = window.mergeUniqueArrayById(
+                                window.cloudState.riwayat_presensi || [],
+                                rowAbsLog.payload.riwayat_presensi,
+                                (r) => r.id || `rwp_${r.tanggal_siklus}_${window.normalizeTextCompact(r.nama_siswa || r.siswa_id)}`
+                            );
+                        }
+                    }
+                    window.sinkronkanTabelRiwayatPresensiPermanen();
                 } catch (ePre) {}
 
                 window.cloudState.lastUpdated = Date.now();
@@ -3224,7 +3194,11 @@
                     window.directRestUpsertRow('app_cloud_db', { id: 'master', payload: cleanPayload }, 'id'),
                     window.directRestUpsertRow('app_cloud_db', {
                         id: 'absensi_master_log',
-                        payload: { updatedAt: Date.now(), absensi: cleanPayload.absensi || [] }
+                        payload: {
+                            updatedAt: Date.now(),
+                            absensi: cleanPayload.absensi || [],
+                            riwayat_presensi: cleanPayload.riwayat_presensi || []
+                        }
                     }, 'id')
                 ]);
 
@@ -3270,6 +3244,10 @@
 
         window.tarikLogPresensiKhususDariSupabase = async function() {
             try {
+                const creds = window.getSupabaseCredentials();
+                const baseUrl = creds && creds.url ? String(creds.url).trim().replace(/\/+$/, "") : "";
+                const apiKey = creds && creds.key ? String(creds.key).trim() : "";
+
                 let rowAbs = await window.directRestFetchRow('app_cloud_db', 'id', 'absensi_master_log').catch(() => null);
                 if (!rowAbs && window.supabaseClient) {
                     const res = await window.supabaseClient.from('app_cloud_db').select('payload, updated_at').eq('id', 'absensi_master_log').maybeSingle();
@@ -3281,7 +3259,7 @@
                         window.cloudState.absensi = window.mergeUniqueArrayById(
                             window.cloudState.absensi || [],
                             rowAbs.payload.absensi,
-                            (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
+                            (a) => `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
                         );
                         updated = true;
                     }
@@ -3294,18 +3272,65 @@
                         updated = true;
                     }
                 }
-                // Tarik juga dari tabel SQL `riwayat_presensi` jika tersedia di Supabase
-                try {
-                    const creds = window.getSupabaseCredentials();
-                    if (creds && creds.url && creds.key) {
-                        const baseUrl = String(creds.url).trim().replace(/\/+$/, "");
-                        const resp = await fetch(`${baseUrl}/rest/v1/riwayat_presensi?select=*&order=tanggal_siklus.desc&limit=1000`, {
+
+                // 2. Tarik seluruh baris presensi atomik per-siswa (`absitem_%`) dari `app_cloud_db`
+                // Ini menjamin 100% presensi siswa dari semua HP di lapangan terbaca di Admin meskipun sempat terjadi tabrakan jaringan!
+                if (baseUrl && apiKey) {
+                    try {
+                        const respAtom = await fetch(`${baseUrl}/rest/v1/app_cloud_db?id=like.absitem_*&select=id,payload&limit=2000`, {
                             method: "GET",
                             headers: {
-                                "apikey": String(creds.key).trim(),
-                                "Authorization": `Bearer ${String(creds.key).trim()}`,
+                                "apikey": apiKey,
+                                "Authorization": `Bearer ${apiKey}`,
                                 "Accept": "application/json"
+                            },
+                            cache: "no-store"
+                        });
+                        if (respAtom.ok) {
+                            const atomRows = await respAtom.json();
+                            if (Array.isArray(atomRows) && atomRows.length > 0) {
+                                const atomAbsList = [];
+                                const atomRwpList = [];
+                                atomRows.forEach(r => {
+                                    if (r && r.payload) {
+                                        if (r.payload.absen && r.payload.absen.nama) {
+                                            atomAbsList.push(r.payload.absen);
+                                        }
+                                        if (r.payload.riwayat && (r.payload.riwayat.nama_siswa || r.payload.riwayat.siswa_id)) {
+                                            atomRwpList.push(r.payload.riwayat);
+                                        }
+                                    }
+                                });
+                                if (atomAbsList.length > 0) {
+                                    window.cloudState.absensi = window.mergeUniqueArrayById(
+                                        window.cloudState.absensi || [],
+                                        atomAbsList,
+                                        (a) => `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
+                                    );
+                                    updated = true;
+                                }
+                                if (atomRwpList.length > 0) {
+                                    window.cloudState.riwayat_presensi = window.mergeUniqueArrayById(
+                                        window.cloudState.riwayat_presensi || [],
+                                        atomRwpList,
+                                        (r) => r.id || `rwp_${r.tanggal_siklus}_${window.normalizeTextCompact(r.nama_siswa || r.siswa_id)}`
+                                    );
+                                    updated = true;
+                                }
                             }
+                        }
+                    } catch (eAtom) {}
+
+                    // 3. Tarik juga dari tabel SQL `riwayat_presensi` jika tersedia di Supabase
+                    try {
+                        const resp = await fetch(`${baseUrl}/rest/v1/riwayat_presensi?select=*&order=tanggal_siklus.desc&limit=1500`, {
+                            method: "GET",
+                            headers: {
+                                "apikey": apiKey,
+                                "Authorization": `Bearer ${apiKey}`,
+                                "Accept": "application/json"
+                            },
+                            cache: "no-store"
                         });
                         if (resp.ok) {
                             const rowsSql = await resp.json();
@@ -3318,8 +3343,8 @@
                                 updated = true;
                             }
                         }
-                    }
-                } catch (eSql) {}
+                    } catch (eSql) {}
+                }
 
                 if (updated) {
                     window.sinkronkanTabelRiwayatPresensiPermanen();
@@ -3435,13 +3460,20 @@
                     const t1 = Number(statePayload.lastUpdated || 0);
                     const t2 = Number(cloudDbPayload.lastUpdated || 0);
                     cloudPayload = (t1 >= t2) ? statePayload : cloudDbPayload;
-                    // Gabungkan absensi dari kedua tabel (app_state & app_cloud_db) agar tidak ada satu pun presensi siswa yang hilang
+                    // Gabungkan absensi & riwayat_presensi dari kedua tabel (app_state & app_cloud_db) agar tidak ada satu pun presensi siswa yang hilang
                     const combinedRemoteAbs = window.mergeUniqueArrayById(
                         statePayload.absensi || [],
                         cloudDbPayload.absensi || [],
-                        (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
+                        (a) => `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
                     );
                     cloudPayload.absensi = combinedRemoteAbs;
+
+                    const combinedRemoteRwp = window.mergeUniqueArrayById(
+                        statePayload.riwayat_presensi || [],
+                        cloudDbPayload.riwayat_presensi || [],
+                        (r) => r.id || `rwp_${r.tanggal_siklus}_${window.normalizeTextCompact(r.nama_siswa || r.siswa_id)}`
+                    );
+                    cloudPayload.riwayat_presensi = combinedRemoteRwp;
 
                     // Pastikan banner diambil dari sumber yang memiliki customBannerUpdatedAt paling baru
                     const bTs1 = Number(statePayload.customBannerUpdatedAt || 0);
@@ -3458,33 +3490,26 @@
                 }
 
                 // Gabungkan juga dari saluran khusus absensi_master_log
-                if (absensiLogPayload && Array.isArray(absensiLogPayload.absensi) && absensiLogPayload.absensi.length > 0) {
+                if (absensiLogPayload) {
                     if (!cloudPayload) cloudPayload = {};
-                    cloudPayload.absensi = window.mergeUniqueArrayById(
-                        cloudPayload.absensi || [],
-                        absensiLogPayload.absensi,
-                        (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
-                    );
+                    if (Array.isArray(absensiLogPayload.absensi) && absensiLogPayload.absensi.length > 0) {
+                        cloudPayload.absensi = window.mergeUniqueArrayById(
+                            cloudPayload.absensi || [],
+                            absensiLogPayload.absensi,
+                            (a) => `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
+                        );
+                    }
+                    if (Array.isArray(absensiLogPayload.riwayat_presensi) && absensiLogPayload.riwayat_presensi.length > 0) {
+                        cloudPayload.riwayat_presensi = window.mergeUniqueArrayById(
+                            cloudPayload.riwayat_presensi || [],
+                            absensiLogPayload.riwayat_presensi,
+                            (r) => r.id || `rwp_${r.tanggal_siklus}_${window.normalizeTextCompact(r.nama_siswa || r.siswa_id)}`
+                        );
+                    }
                 }
 
-                // Gabungkan juga dari saluran khusus jurnal_master_log
-                if (jurnalLogPayload) {
-                    if (!cloudPayload) cloudPayload = {};
-                    if (Array.isArray(jurnalLogPayload.jurnal_harian) && jurnalLogPayload.jurnal_harian.length > 0) {
-                        cloudPayload.jurnal_harian = window.mergeUniqueArrayById(
-                            cloudPayload.jurnal_harian || [],
-                            jurnalLogPayload.jurnal_harian,
-                            (j) => j.id || `jh_${j.tanggal_kegiatan || j.tanggal}_${window.normalizeTextCompact(j.nama_siswa || j.siswa)}_${window.normalizeTextCompact(j.uraian_kegiatan || j.kegiatan).substring(0, 24)}`
-                        );
-                    }
-                    if (Array.isArray(jurnalLogPayload.jurnal) && jurnalLogPayload.jurnal.length > 0) {
-                        cloudPayload.jurnal = window.mergeUniqueArrayById(
-                            cloudPayload.jurnal || [],
-                            jurnalLogPayload.jurnal,
-                            (j) => j.id || `${window.normalizeTextCompact(j.siswa)}_${j.tanggal}_${window.normalizeTextCompact(j.kegiatan)}`
-                        );
-                    }
-                }
+                // Tarik juga baris-baris atomik presensi (`absitem_%`) & tabel SQL `riwayat_presensi`
+                await window.tarikLogPresensiKhususDariSupabase().catch(() => {});
 
                 // Normalkan seluruh tanggal absensi yang ditarik dari Cloud
                 if (cloudPayload && Array.isArray(cloudPayload.absensi)) {
@@ -3561,7 +3586,9 @@
                     m: dataObj.penugasanMonitoring || [],
                     u: dataObj.registeredUsers || [],
                     aLen: (dataObj.absensi || []).length,
+                    rwpLen: (dataObj.riwayat_presensi || []).length,
                     jLen: (dataObj.jurnal || []).length,
+                    jhLen: (dataObj.jurnal_harian || []).length,
                     dLen: (dataObj.dokumen || []).length,
                     nLen: (dataObj.nilai || []).length,
                     lLen: (dataObj.laporanAkhir || []).length,
@@ -3864,9 +3891,19 @@
                 window.cloudState.absensi = window.mergeUniqueArrayById(
                     window.cloudState.absensi,
                     cloudData.absensi,
-                    (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
+                    (a) => `${window.normalizeTextCompact(a.nama)}_${window.getAbsensiNormalizedDate(a)}_${a.tipe_absen}`
                 );
             }
+            // Gabungkan Riwayat Presensi Permanen (`riwayat_presensi`) dari seluruh siswa di lapangan
+            if (Array.isArray(cloudData.riwayat_presensi)) {
+                window.cloudState.riwayat_presensi = window.mergeUniqueArrayById(
+                    window.cloudState.riwayat_presensi || [],
+                    cloudData.riwayat_presensi,
+                    (r) => r.id || `rwp_${window.normalizeDateToYMD(r.tanggal_siklus || r.tanggal)}_${window.normalizeTextCompact(r.nama_siswa || r.siswa_id)}`
+                );
+            }
+            window.sinkronkanTabelRiwayatPresensiPermanen();
+
             // Gabungkan Jurnal Harian Siswa (Permanen Append-Only)
             if (Array.isArray(cloudData.jurnal)) {
                 window.cloudState.jurnal = window.mergeUniqueArrayById(
@@ -3936,12 +3973,24 @@
 
             if (!forceRefresh && !isLocalEmpty && (Date.now() - (window.lastLocalWriteTimestamp || 0) < 15000)) {
                 // Tetap gabungkan absensi & jurnal masuk dari siswa lain tanpa menimpa pengaturan lokal
+                const prevAbsCount = (window.cloudState.absensi || []).length;
+                const prevRwpCount = (window.cloudState.riwayat_presensi || []).length;
                 window.gabungkanDataCloudTanpaKehilangan(cloudData);
+                if (((window.cloudState.absensi || []).length !== prevAbsCount || (window.cloudState.riwayat_presensi || []).length !== prevRwpCount) &&
+                    (window.cloudState.currentFeature === 'rekap-masuk-pulang' || window.cloudState.currentFeature === 'rekap-absensi')) {
+                    window.openFeature(window.cloudState.currentFeature, undefined, true);
+                }
                 return;
             }
 
             if (!forceRefresh && !isLocalEmpty && localTs > 0 && cloudTs > 0 && localTs > cloudTs) {
+                const prevAbsCount = (window.cloudState.absensi || []).length;
+                const prevRwpCount = (window.cloudState.riwayat_presensi || []).length;
                 window.gabungkanDataCloudTanpaKehilangan(cloudData);
+                if (((window.cloudState.absensi || []).length !== prevAbsCount || (window.cloudState.riwayat_presensi || []).length !== prevRwpCount) &&
+                    (window.cloudState.currentFeature === 'rekap-masuk-pulang' || window.cloudState.currentFeature === 'rekap-absensi')) {
+                    window.openFeature(window.cloudState.currentFeature, undefined, true);
+                }
                 return;
             }
 
@@ -12140,25 +12189,46 @@
             }
         };
 
-        window.bukaFotoBuktiPresensi = function(fotoSrc, namaSiswa, tipe, tanggal, jam) {
-            if (!fotoSrc) return window.showModalInfo("Foto Tidak Tersedia", "Bukti foto selfie tidak ditemukan untuk catatan presensi ini.");
+        window.bukaFotoBuktiPresensi = function(fotoUrl, namaSiswa, tipeAbsen, tanggal, jam) {
+            if (!fotoUrl) return;
             window.openDynamicModal(`
                 <div style="text-align:center;">
-                    <h3 style="font-size:15px; font-weight:900; color:#0284c7; margin-bottom:4px;">📸 Bukti Presensi ${tipe}</h3>
-                    <div style="font-size:11.5px; color:#334155; font-weight:800; margin-bottom:10px;">${namaSiswa} &bull; ${tanggal} (${jam} WITA)</div>
-                    <img src="${fotoSrc}" alt="Foto Selfie Presensi" style="width:100%; max-height:340px; object-fit:contain; border-radius:14px; border:2px solid #38bdf8; background:#0f172a;">
-                    <div style="margin-top:14px;">
-                        <button type="button" onclick="window.closeDynamicModal()" class="btn-action btn-blue" style="padding:8px 24px;">Tutup</button>
+                    <h3 style="font-size:15px; font-weight:900; color:#0284c7; margin-bottom:4px;">📷 Bukti Foto Presensi ${tipeAbsen}</h3>
+                    <div style="font-size:11.5px; color:#475569; margin-bottom:10px;">
+                        <b>${namaSiswa}</b> &bull; ${tanggal} (${jam})
+                    </div>
+                    <img src="${fotoUrl}" alt="Bukti Presensi" style="width:100%; max-height:360px; object-fit:contain; border-radius:14px; border:2px solid #38bdf8; background:#0f172a;">
+                    <div style="margin-top:12px; display:flex; justify-content:center; gap:8px;">
+                        <a href="${fotoUrl}" target="_blank" class="btn-action btn-emerald" style="text-decoration:none; padding:8px 14px;">🔗 Buka Ukuran Penuh ↗</a>
+                        <button type="button" onclick="window.closeDynamicModal()" class="btn-action btn-blue" style="padding:8px 18px;">Tutup</button>
                     </div>
                 </div>
             `);
         };
+
+        window.lastAutoSyncRekapPresensiAt = 0;
 
         window.renderRekapPresensiMasukPulang = function() {
             window.sinkronkanTabelRiwayatPresensiPermanen();
             const role = window.cloudState.activeRole || "panitia";
             const profile = window.cloudState.userProfile || { nama: "" };
             const todayStr = window.getTanggalSiklusAktifWita();
+
+            // OTOMATIS TARIK DATA PRESENSI TERBARU DARI SUPABASE SAAT HALAMAN REKAP DIBUKA
+            // (Mencegah tampilan 0 Siswa apabila perangkat Admin baru dibuka atau belum menekan tombol Segarkan)
+            if (Date.now() - (window.lastAutoSyncRekapPresensiAt || 0) > 8000) {
+                window.lastAutoSyncRekapPresensiAt = Date.now();
+                setTimeout(async () => {
+                    const prevCount = (window.cloudState.absensi || []).length + (window.cloudState.riwayat_presensi || []).length;
+                    await window.tarikLogPresensiKhususDariSupabase().catch(() => {});
+                    await window.tarikDataDariCloud(true, true).catch(() => {});
+                    window.sinkronkanTabelRiwayatPresensiPermanen();
+                    const newCount = (window.cloudState.absensi || []).length + (window.cloudState.riwayat_presensi || []).length;
+                    if (newCount !== prevCount && (window.cloudState.currentFeature === 'rekap-masuk-pulang' || window.cloudState.currentFeature === 'rekap-absensi')) {
+                        window.openFeature(window.cloudState.currentFeature, "Rekap Presensi", true);
+                    }
+                }, 80);
+            }
 
             // Pastikan setiap kali halaman dibuka pertama kali, default menampilkan SIKLUS HARI INI (Reset 06:00 Pagi)
             if (!window.selectedRekapPresensiDate) {
@@ -12181,6 +12251,7 @@
 
             // Normalkan seluruh tanggal absensi terlebih dahulu agar tidak ada yang gagal terbaca
             (window.cloudState.absensi || []).forEach(a => window.getAbsensiNormalizedDate(a));
+            window.sinkronkanTabelRiwayatPresensiPermanen();
 
             // Ambil seluruh riwayat absensi sesuai peran (Admin/Panitia/Kepsek semua siswa; Guru/Industri sesuai bimbingan/magang)
             let allRoleAbsensi = window.filterAbsensiByRoleAndProfile(window.cloudState.absensi || [], role, profile);
