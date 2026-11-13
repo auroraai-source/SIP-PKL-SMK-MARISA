@@ -1284,201 +1284,119 @@
         } catch(e) {}
 
         // =========================================================================
-        // PEMBERSIH PERMANEN DATA DUMMY LAMA (AGAR TIDAK PERNAH MUNCUL KEMBALI)
-        // Menghapus Ahmad Dani, Toko Zainab, PT. Telkom Marisa, dsb. jika masih tersisa di memori
+        // HELPER PEMBERSIH, NORMALISASI TEKS, PENYIMPANAN & UPLOAD STORAGE SUPABASE
         // =========================================================================
-        window.bersihkanDataDummyLama = function(stateObj) {
-            const target = stateObj || window.cloudState;
-            if (!target || typeof target !== 'object') return;
-
-            const dummySiswaNames = ["ahmaddani"];
-            const dummyIndustriNames = ["tokozainab", "tokozenab", "pttelkommarisa", "telkommarisa"];
-            const dummyUsernames = ["1001", "telkom_marisa", "telkommarisa"];
-
-            const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-
-            if (Array.isArray(target.siswa)) {
-                target.siswa = target.siswa.filter(s => {
-                    if (!s || !s.nama) return false;
-                    const n = norm(s.nama);
-                    const ind = norm(s.industri);
-                    if (dummySiswaNames.includes(n)) return false;
-                    if ((n === "nurulhidayah" || n === "annisaputrimaele") && dummyIndustriNames.includes(ind) && (s.nis === "1002" || s.nis === "1003")) {
-                        return false;
-                    }
-                    return true;
-                });
-                // Bersihkan referensi industri dummy pada siswa asli jika ada
-                target.siswa.forEach(s => {
-                    if (s && s.industri && dummyIndustriNames.includes(norm(s.industri))) {
-                        s.industri = "-";
-                    }
-                });
-            }
-
-            if (Array.isArray(target.industri)) {
-                target.industri = target.industri.filter(i => {
-                    if (!i || !i.nama) return false;
-                    return !dummyIndustriNames.includes(norm(i.nama));
-                });
-            }
-
-            if (Array.isArray(target.registeredUsers)) {
-                target.registeredUsers = target.registeredUsers.filter(u => {
-                    if (!u) return false;
-                    const n = norm(u.nama);
-                    const usr = norm(u.username);
-                    if (dummySiswaNames.includes(n) || dummyIndustriNames.includes(n)) return false;
-                    if (dummyUsernames.includes(usr) && (u.pass === "siswa123" || u.pass === "dudi123")) return false;
-                    return true;
-                });
-            }
-
-            if (Array.isArray(target.penempatan)) {
-                target.penempatan = target.penempatan.filter(p => {
-                    if (!p) return false;
-                    if (p.id === "pen_1" && norm(p.industri) === "pttelkommarisa") return false;
-                    const sList = Array.isArray(p.siswa) ? p.siswa : (p.siswa ? [p.siswa] : []);
-                    p.siswa = sList.filter(sn => !dummySiswaNames.includes(norm(sn)));
-                    if (Array.isArray(p.industri)) {
-                        p.industri = p.industri.filter(ind => !dummyIndustriNames.includes(norm(ind)));
-                    } else if (p.industri && dummyIndustriNames.includes(norm(p.industri))) {
-                        p.industri = "";
-                    }
-                    if (p.siswaIndustriMap && typeof p.siswaIndustriMap === 'object') {
-                        Object.keys(p.siswaIndustriMap).forEach(k => {
-                            if (dummySiswaNames.includes(k) || dummyIndustriNames.includes(norm(p.siswaIndustriMap[k]))) {
-                                delete p.siswaIndustriMap[k];
-                            }
-                        });
-                    }
-                    return p.siswa.length > 0 || (p.industri && p.industri.length > 0);
-                });
-            }
-
-            // Normalisasi permanen: Hilangkan ejaan lama "Yacub Kaco" / "yacubkaco" menjadi "Yakop Kaco" / "yakopkaco"
-            const fixYakopName = (val) => {
-                if (!val || typeof val !== 'string') return val;
-                if (/yacub\s*kaco/i.test(val)) {
-                    return val.replace(/yacub\s*kaco/gi, "Yakop Kaco");
-                }
-                return val;
-            };
-
-            if (Array.isArray(target.guru)) {
-                target.guru.forEach(g => {
-                    if (!g) return;
-                    if (g.nama && (/yacub\s*kaco/i.test(g.nama) || norm(g.nama).includes("yacubkaco"))) {
-                        g.nama = fixYakopName(g.nama);
-                        if (norm(g.nama) === "yacubkaco") g.nama = "Yakop Kaco";
-                    }
-                });
-            }
-
-            if (Array.isArray(target.registeredUsers)) {
-                target.registeredUsers.forEach(u => {
-                    if (!u) return;
-                    const uNorm = norm(u.username);
-                    const nNorm = norm(u.nama);
-                    if (uNorm === "yacubkaco" || nNorm.includes("yacubkaco") || /yacub\s*kaco/i.test(u.nama || "")) {
-                        u.nama = fixYakopName(u.nama || "Yakop Kaco");
-                        if (norm(u.nama) === "yacubkaco") u.nama = "Yakop Kaco";
-                        if (uNorm === "yacubkaco" || !u.username) u.username = "yakopkaco";
-                        if (norm(u.identitas) === "yacubkaco") u.identitas = "yakopkaco";
-                    }
-                });
-            }
-
-            if (Array.isArray(target.siswa)) {
-                target.siswa.forEach(s => {
-                    if (s && s.guru && (/yacub\s*kaco/i.test(s.guru) || norm(s.guru).includes("yacubkaco"))) {
-                        s.guru = fixYakopName(s.guru);
-                    }
-                });
-            }
-
-            if (Array.isArray(target.penempatan)) {
-                target.penempatan.forEach(p => {
-                    if (p && p.guru && (/yacub\s*kaco/i.test(p.guru) || norm(p.guru).includes("yacubkaco"))) {
-                        p.guru = fixYakopName(p.guru);
-                    }
-                });
-            }
-
-            if (Array.isArray(target.penugasanMonitoring)) {
-                target.penugasanMonitoring.forEach(m => {
-                    if (m && m.guru && (/yacub\s*kaco/i.test(m.guru) || norm(m.guru).includes("yacubkaco"))) {
-                        m.guru = fixYakopName(m.guru);
-                    }
-                });
-            }
+        window.normalizeTextCompact = function(str) {
+            if (!str) return "";
+            return String(str).toLowerCase().replace(/[^a-z0-9]/g, "");
         };
-        window.bersihkanDataDummyLama(window.cloudState);
 
-        // =========================================================================
-        // NORMALISASI RADIUS INDUSTRI MENJADI 100 METER UNTUK SEMUA INDUSTRI
-        // =========================================================================
         window.pastikanRadiusIndustri100Meter = function(stateObj) {
             const target = stateObj || window.cloudState;
             if (!target || typeof target !== 'object') return;
             if (Array.isArray(target.industri)) {
                 target.industri.forEach(ind => {
-                    if (!ind) return;
-                    const r = parseInt(ind.radius);
-                    if (!r || r <= 50) {
-                        ind.radius = 100;
+                    if (ind && typeof ind === 'object') {
+                        const r = parseInt(ind.radius);
+                        if (!r || r < 50) {
+                            ind.radius = 100;
+                        }
                     }
-                    if (!ind.lat) ind.lat = "0.45612";
-                    if (!ind.lng) ind.lng = "121.94210";
                 });
             }
-            if (target.jamConfig) {
-                target.jamConfig.toleransi = 100;
+            if (target.jamConfig && typeof target.jamConfig === 'object') {
+                if (!target.jamConfig.toleransi || parseInt(target.jamConfig.toleransi) < 50) {
+                    target.jamConfig.toleransi = 100;
+                }
             }
         };
-        window.pastikanRadiusIndustri100Meter(window.cloudState);
+
+        window.bersihkanDataDummyLama = function(stateObj) {
+            if (!stateObj || typeof stateObj !== 'object') return;
+            const dummyNames = ["andi pratama", "budi santoso", "citra dewi", "contoh siswa", "contoh nama 1"];
+            const isDummy = (name) => {
+                if (!name) return false;
+                const clean = String(name).toLowerCase().trim();
+                return dummyNames.includes(clean);
+            };
+            if (Array.isArray(stateObj.siswa)) {
+                stateObj.siswa = stateObj.siswa.filter(s => s && s.nama && !isDummy(s.nama));
+            }
+            if (Array.isArray(stateObj.absensi)) {
+                stateObj.absensi = stateObj.absensi.filter(a => a && a.nama && !isDummy(a.nama));
+            }
+            if (Array.isArray(stateObj.jurnal)) {
+                stateObj.jurnal = stateObj.jurnal.filter(j => j && (j.siswa || j.nama_siswa) && !isDummy(j.siswa || j.nama_siswa));
+            }
+            window.pastikanRadiusIndustri100Meter(stateObj);
+        };
 
         window.pastikanAkunEkosistemDefault = function() {
-            if (!Array.isArray(window.cloudState.registeredUsers)) window.cloudState.registeredUsers = [];
-            const users = window.cloudState.registeredUsers;
-            const hl = window.cloudState.hotlineConfig || DEFAULT_HOTLINE_CONFIG;
-
-            const existingAdmin = users.find(u => u.role === 'admin');
-            if (!existingAdmin) {
-                users.unshift({ role: "admin", nama: "Admin Utama SIP-PKL", username: "Admin", pass: "SMKBisa2000", identitas: "ADMIN-UTAMA" });
-            } else {
-                existingAdmin.username = "Admin";
-                existingAdmin.pass = "SMKBisa2000";
+            if (!Array.isArray(window.cloudState.registeredUsers)) {
+                window.cloudState.registeredUsers = [];
             }
-            if (!users.some(u => u.role === 'kepsek')) {
-                users.push({
-                    role: "kepsek",
-                    nama: hl.kepsek?.nama || "Drs. H. Saiful Hinta, M.Pd",
-                    username: "kepsek",
-                    pass: "kepsek123",
-                    identitas: hl.kepsek?.nip || "196805121994121001",
-                    jabatan: "Kepala Sekolah"
+            const defaults = [
+                { role: "admin", nama: "Admin Utama SIP-PKL", username: "Admin", pass: "SMKBisa2000", identitas: "ADMIN-UTAMA" },
+                { role: "kepsek", nama: "Drs. H. Saiful Hinta, M.Pd", username: "kepsek", pass: "kepsek123", identitas: "196805121994121001", jabatan: "Kepala Sekolah" },
+                { role: "panitia", nama: "Wilasia S. Talaa, S.ST (Ketua Panitia)", username: "ketua_panitia", pass: "panitia123", identitas: "KETUA-PANITIA", jabatan: "Ketua Panitia" },
+                { role: "panitia", nama: "Ulco Masrun Arbie, S.Pd (Sekretaris)", username: "sekretaris_panitia", pass: "panitia123", identitas: "SEKRETARIS-PANITIA", jabatan: "Sekretaris" },
+                { role: "panitia", nama: "Hj. Ratna Dewi, S.E (Bendahara)", username: "bendahara_panitia", pass: "panitia123", identitas: "BENDAHARA-PANITIA", jabatan: "Bendahara" }
+            ];
+            defaults.forEach(def => {
+                const exists = window.cloudState.registeredUsers.some(u =>
+                    u && u.role === def.role && window.normalizeTextCompact(u.username) === window.normalizeTextCompact(def.username)
+                );
+                if (!exists) {
+                    window.cloudState.registeredUsers.push(def);
+                }
+            });
+        };
+
+        window.getSanitizedCloudPayload = function() {
+            const copy = Object.assign({}, window.cloudState);
+            delete copy.userProfile;
+            delete copy.activeRole;
+            delete copy.currentFeature;
+
+            // Pastikan foto presensi yang berupa Base64 panjang tidak membebani JSON utama
+            if (Array.isArray(copy.absensi)) {
+                copy.absensi = copy.absensi.map(a => {
+                    if (!a || typeof a !== 'object') return a;
+                    const item = Object.assign({}, a);
+                    if (item.foto_selfie && String(item.foto_selfie).startsWith('data:image') && String(item.foto_selfie).length > 80000) {
+                        item.foto_selfie = item.foto_url && String(item.foto_url).startsWith('http') ? item.foto_url : "";
+                    }
+                    return item;
                 });
             }
-
-            const panitiaUsers = users.filter(u => u.role === 'panitia');
-            if (panitiaUsers.length === 0) {
-                users.push(
-                    { role: "panitia", nama: (hl.ketuaPanitia?.nama || "Wilasia S. Talaa, S.ST") + " (Ketua Panitia)", username: "ketua_panitia", pass: "panitia123", identitas: "KETUA-PANITIA", jabatan: "Ketua Panitia" },
-                    { role: "panitia", nama: (hl.sekretarisPanitia?.nama || "Ulco Masrun Arbie, S.Pd") + " (Sekretaris)", username: "sekretaris_panitia", pass: "panitia123", identitas: "SEKRETARIS-PANITIA", jabatan: "Sekretaris" },
-                    { role: "panitia", nama: (hl.bendahara?.nama || "Hj. Ratna Dewi, S.E") + " (Bendahara)", username: "bendahara_panitia", pass: "panitia123", identitas: "BENDAHARA-PANITIA", jabatan: "Bendahara" }
-                );
-            }
+            return copy;
         };
-        window.pastikanAkunEkosistemDefault();
 
-        // =========================================================================
-        // KOMPRESI GAMBAR OTOMATIS & UPLOAD TERPISAH KE SUPABASE STORAGE (ANTI-LIMIT DB)
-        // =========================================================================
+        window.lastLocalWriteTimestamp = 0;
+
+        window.simpanDatabasePersisten = function(syncToCloud = true) {
+            try {
+                window.lastLocalWriteTimestamp = Date.now();
+                window.cloudState.lastUpdated = window.lastLocalWriteTimestamp;
+                const cleanPayload = window.getSanitizedCloudPayload();
+                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cleanPayload));
+                localStorage.setItem(STORAGE_KEY_VAULT, JSON.stringify(cleanPayload));
+                if (Array.isArray(cleanPayload.penempatan) && cleanPayload.penempatan.length > 0) {
+                    localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(cleanPayload.penempatan));
+                }
+                if (Array.isArray(cleanPayload.bannerSliderImages) && cleanPayload.bannerSliderImages.length > 0) {
+                    localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(cleanPayload.bannerSliderImages));
+                }
+                if (syncToCloud && typeof window.kirimSnapshotKeSupabase === 'function') {
+                    window.kirimSnapshotKeSupabase(cleanPayload, true).catch(() => {});
+                }
+            } catch (e) {}
+        };
+
         window.compressImageDataUrl = function(dataUrl, maxWidth = 360, maxHeight = 270, quality = 0.55) {
             return new Promise((resolve) => {
-                if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) {
-                    return resolve(dataUrl);
+                if (!dataUrl || !String(dataUrl).startsWith('data:image')) {
+                    return resolve(dataUrl || "");
                 }
                 const img = new Image();
                 img.onload = function() {
@@ -1505,208 +1423,130 @@
 
         window.dataUrlToBlob = function(dataUrl) {
             try {
-                const parts = dataUrl.split(';base64,');
-                const contentType = parts[0].split(':')[1] || 'image/jpeg';
-                const raw = window.atob(parts[1]);
-                const uInt8Array = new Uint8Array(raw.length);
-                for (let i = 0; i < raw.length; ++i) {
-                    uInt8Array[i] = raw.charCodeAt(i);
+                const parts = String(dataUrl).split(',');
+                if (parts.length < 2) return null;
+                const mimeMatch = parts[0].match(/:(.*?);/);
+                const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+                const bstr = atob(parts[1]);
+                let n = bstr.length;
+                const u8arr = new Uint8Array(n);
+                while (n--) {
+                    u8arr[n] = bstr.charCodeAt(n);
                 }
-                return new Blob([uInt8Array], { type: contentType });
+                return new Blob([u8arr], { type: mime });
             } catch (e) {
                 return null;
             }
         };
 
-        window.uploadFotoKeSupabaseStorage = async function(base64DataUrl, prefix = 'selfie') {
-            if (!base64DataUrl || !base64DataUrl.startsWith('data:image')) return base64DataUrl || "";
-            const compressedDataUrl = await window.compressImageDataUrl(base64DataUrl, 480, 360, 0.65);
-            const blob = window.dataUrlToBlob(compressedDataUrl);
+        window.uploadFotoKeSupabaseStorage = async function(base64DataUrl, prefix = "selfie") {
+            if (!base64DataUrl) return "";
+            if (String(base64DataUrl).startsWith('http://') || String(base64DataUrl).startsWith('https://')) {
+                return base64DataUrl;
+            }
+            const blob = window.dataUrlToBlob(base64DataUrl);
             if (!blob) return "";
 
+            const creds = window.getSupabaseCredentials();
+            if (!creds || !creds.url || !creds.key) return "";
+            const baseUrl = String(creds.url).trim().replace(/\/+$/, "");
+            const apiKey = String(creds.key).trim();
             const fileName = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}.jpg`;
-            const bucketsToTry = ['foto_presensi', 'berkas_pkl', 'bukti_jurnal'];
-            const creds = typeof window.getSupabaseCredentials === 'function' ? window.getSupabaseCredentials() : null;
+            const buckets = ['foto_presensi', 'berkas_pkl'];
 
-            // 1. Jalur Utama: Direct REST Storage Upload
-            if (creds && creds.url && creds.key) {
-                const baseUrl = String(creds.url).trim().replace(/\/+$/, "");
-                const apiKey = String(creds.key).trim();
-                for (const bucketName of bucketsToTry) {
-                    try {
-                        const uploadEndpoint = `${baseUrl}/storage/v1/object/${bucketName}/${fileName}`;
-                        const resp = await fetch(uploadEndpoint, {
-                            method: 'POST',
-                            headers: {
-                                'apikey': apiKey,
-                                'Authorization': `Bearer ${apiKey}`,
-                                'Content-Type': 'image/jpeg',
-                                'x-upsert': 'true'
-                            },
-                            body: blob,
-                            mode: 'cors'
-                        });
-                        if (resp.ok) {
-                            return `${baseUrl}/storage/v1/object/public/${bucketName}/${fileName}`;
-                        }
-                    } catch (errRest) {}
-                }
-            }
+            for (const bucketName of buckets) {
+                try {
+                    const uploadUrl = `${baseUrl}/storage/v1/object/${bucketName}/${fileName}`;
+                    const resp = await fetch(uploadUrl, {
+                        method: 'POST',
+                        headers: {
+                            'apikey': apiKey,
+                            'Authorization': `Bearer ${apiKey}`,
+                            'Content-Type': 'image/jpeg',
+                            'x-upsert': 'true'
+                        },
+                        body: blob
+                    });
+                    if (resp.ok) {
+                        return `${baseUrl}/storage/v1/object/public/${bucketName}/${fileName}`;
+                    }
+                } catch (e) {}
 
-            // 2. Jalur Kedua: Supabase SDK Storage Upload
-            if (window.supabaseClient) {
-                for (const bucketName of bucketsToTry) {
+                if (window.supabaseClient && window.supabaseClient.storage) {
                     try {
-                        const { error } = await window.supabaseClient
-                            .storage
+                        const { error } = await window.supabaseClient.storage
                             .from(bucketName)
-                            .upload(fileName, blob, {
-                                contentType: 'image/jpeg',
-                                upsert: true
-                            });
-
+                            .upload(fileName, blob, { contentType: 'image/jpeg', upsert: true });
                         if (!error) {
-                            const { data: pubData } = window.supabaseClient
-                                .storage
-                                .from(bucketName)
-                                .getPublicUrl(fileName);
-                            if (pubData && pubData.publicUrl) {
-                                return pubData.publicUrl;
-                            }
+                            const { data: pubData } = window.supabaseClient.storage.from(bucketName).getPublicUrl(fileName);
+                            if (pubData && pubData.publicUrl) return pubData.publicUrl;
                         }
-                    } catch (e) {}
+                    } catch (e2) {}
                 }
             }
-
             return "";
         };
 
-        window.getSanitizedCloudPayload = function() {
-            // Pastikan field foto_selfie dan foto_url di database JSONB utama MURNI menyimpan link URL Supabase Storage
-            // dan TIDAK PERNAH menyimpan string Base64 di baris database
-            const sanitizedAbsensi = (window.cloudState.absensi || []).map(a => {
-                if (!a) return a;
-                const copy = Object.assign({}, a);
-                const validUrl = (copy.foto_url && (copy.foto_url.startsWith('http://') || copy.foto_url.startsWith('https://')))
-                    ? copy.foto_url
-                    : ((copy.foto_selfie && (copy.foto_selfie.startsWith('http://') || copy.foto_selfie.startsWith('https://'))) ? copy.foto_selfie : "");
-                copy.foto_url = validUrl;
-                copy.foto_selfie = validUrl;
-                return copy;
-            });
-
-            // JANGAN PERNAH MENGHEMPAS / MERESET GAMBAR BANNER YANG SUDAH DIUPLOAD ATAU DIEDIT OLEH USER!
-            const sanitizedBanners = (window.cloudState.bannerSliderImages && window.cloudState.bannerSliderImages.length > 0
-                ? window.cloudState.bannerSliderImages
-                : DEFAULT_BANNER_IMAGES).map((b) => {
-                if (!b) return b;
-                return Object.assign({}, b);
-            });
-
-            const sanitizedPengaduan = (window.cloudState.pengaduan || []).map(ad => {
-                if (!ad) return ad;
-                const copy = Object.assign({}, ad);
-                if (copy.lampiran && copy.lampiran.startsWith('data:') && copy.lampiran.length > 65000) {
-                    copy.lampiran = null;
-                }
-                return copy;
-            });
-
-            return {
-                lastUpdated: window.cloudState.lastUpdated || Date.now(),
-                customBannerUpdatedAt: window.cloudState.customBannerUpdatedAt || 0,
-                placementUpdatedAt: window.cloudState.placementUpdatedAt || 0,
-                registeredUsers: window.cloudState.registeredUsers || [],
-                siswa: window.cloudState.siswa || [],
-                guru: window.cloudState.guru || [],
-                industri: window.cloudState.industri || [],
-                penempatan: window.cloudState.penempatan || [],
-                penugasanMonitoring: window.cloudState.penugasanMonitoring || [],
-                absensi: sanitizedAbsensi,
-                riwayat_presensi: window.cloudState.riwayat_presensi || [],
-                jurnal: window.cloudState.jurnal || [],
-                jurnal_harian: window.cloudState.jurnal_harian || [],
-                dokumen: window.cloudState.dokumen || [],
-                nilai: window.cloudState.nilai || [],
-                agendaKunjungan: window.cloudState.agendaKunjungan || [],
-                laporanAkhir: window.cloudState.laporanAkhir || [],
-                pengaduan: sanitizedPengaduan,
-                disposisiKepsek: window.cloudState.disposisiKepsek || [],
-                dokumentasiKegiatan: window.cloudState.dokumentasiKegiatan || [],
-                videoPanduanYoutube: window.cloudState.videoPanduanYoutube || [],
-                bannerSliderImages: sanitizedBanners,
-                pklConfig: window.cloudState.pklConfig || DEFAULT_PKL_CONFIG,
-                observasiConfig: window.cloudState.observasiConfig || DEFAULT_OBSERVASI_CONFIG,
-                hotlineConfig: window.cloudState.hotlineConfig || DEFAULT_HOTLINE_CONFIG,
-                jamConfig: window.cloudState.jamConfig || {
-                    masukMulai: "06:30",
-                    masukTepatWaktu: "08:15",
-                    masukBatasAkhir: "15:00",
-                    pulangMulai: "16:00",
-                    pulangBatasAkhir: "23:00"
-                },
-                gpsResetAccess: window.cloudState.gpsResetAccess || { code: "", createdAt: 0, expiresAt: 0, createdBy: "Admin Utama" }
-            };
-        };
-
-        window.lastLocalWriteTimestamp = 0;
-
-        window.simpanDatabasePersisten = function(pushToCloud = true) {
-            const nowTs = Date.now();
-            window.cloudState.lastUpdated = nowTs;
-            window.lastLocalWriteTimestamp = nowTs;
-            const payload = window.getSanitizedCloudPayload();
+        // =========================================================================
+        // LOGIKA SIKLUS RESET HARIAN JAM 06:00 PAGI WITA (ASIA/MAKASSAR)
+        // Menggunakan Intl / toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' })
+        // secara konsisten agar presensi pagi hari (06:00 - 08:00 WITA) TIDAK PERNAH
+        // mundur ke tanggal kemarin akibat konversi UTC!
+        // =========================================================================
+        window.getTanggalLokalMakassar = function(customDateOrMs = null) {
+            const baseDate = customDateOrMs ? new Date(customDateOrMs) : new Date();
             try {
-                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(payload));
-                localStorage.setItem(STORAGE_KEY_VAULT, JSON.stringify(payload));
-                if (Array.isArray(payload.penempatan)) {
-                    localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(payload.penempatan));
-                }
-                if (Array.isArray(payload.bannerSliderImages) && payload.bannerSliderImages.length > 0) {
-                    localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(payload.bannerSliderImages));
-                }
-            } catch(e) {}
-
-            if (pushToCloud && typeof window.kirimSnapshotKeSupabase === 'function') {
-                window.kirimSnapshotKeSupabase(payload, true);
+                return baseDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' });
+            } catch (e) {
+                const utcMs = baseDate.getTime() + (baseDate.getTimezoneOffset() * 60000);
+                const witaDate = new Date(utcMs + (8 * 3600000));
+                const yyyy = witaDate.getFullYear();
+                const mm = String(witaDate.getMonth() + 1).padStart(2, '0');
+                const dd = String(witaDate.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
             }
         };
 
-        // =========================================================================
-        // HELPER PEMBERSIH & PENCOCOKAN NAMA CERDAS (ANTI GAGAL SPASI / TYPO)
-        // =========================================================================
-        window.normalizeTextCompact = function(str) {
-            if (!str) return "";
-            return String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
+        window.getJamLokalMakassar = function(customDateOrMs = null) {
+            const baseDate = customDateOrMs ? new Date(customDateOrMs) : new Date();
+            try {
+                const parts = new Intl.DateTimeFormat('en-GB', {
+                    timeZone: 'Asia/Makassar',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                }).formatToParts(baseDate);
+                const hh = parts.find(p => p.type === 'hour')?.value || '08';
+                const min = parts.find(p => p.type === 'minute')?.value || '00';
+                const ss = parts.find(p => p.type === 'second')?.value || '00';
+                return { hh: parseInt(hh, 10), mm: parseInt(min, 10), hhmm: `${hh}:${min}`, hhmmss: `${hh}:${min}:${ss}` };
+            } catch (e) {
+                const h = String(baseDate.getHours()).padStart(2, '0');
+                const m = String(baseDate.getMinutes()).padStart(2, '0');
+                const s = String(baseDate.getSeconds()).padStart(2, '0');
+                return { hh: baseDate.getHours(), mm: baseDate.getMinutes(), hhmm: `${h}:${m}`, hhmmss: `${h}:${m}:${s}` };
+            }
         };
 
-        // =========================================================================
-        // LOGIKA SIKLUS RESET HARIAN JAM 06:00 PAGI WITA (BUKAN 00:00 TENGAH MALAM)
-        // - Jika jam WITA >= 06:00 pagi -> tanggal_siklus = YYYY-MM-DD hari ini
-        // - Jika jam WITA < 06:00 pagi (00:00 - 05:59 dini hari) -> tanggal_siklus = YYYY-MM-DD kemarin
-        // =========================================================================
         window.getTanggalSiklusAktifWita = function(customDateOrMs = null) {
             const baseDate = customDateOrMs ? new Date(customDateOrMs) : new Date();
-            const utcMs = baseDate.getTime() + (baseDate.getTimezoneOffset() * 60000);
-            // Waktu WITA adalah UTC+8. Kurangi 6 jam agar pergantian tanggal siklus jatuh tepat pukul 06:00 pagi WITA
-            const witaCycleDate = new Date(utcMs + (8 * 3600000) - (6 * 3600000));
-            const yyyy = witaCycleDate.getFullYear();
-            const mm = String(witaCycleDate.getMonth() + 1).padStart(2, '0');
-            const dd = String(witaCycleDate.getDate()).padStart(2, '0');
-            return `${yyyy}-${mm}-${dd}`;
+            const jamInfo = window.getJamLokalMakassar(baseDate);
+            const tanggalLokal = window.getTanggalLokalMakassar(baseDate);
+            // Jika jam WITA >= 06:00 pagi -> gunakan tanggalLokal hari ini ('en-CA' Asia/Makassar)
+            if (jamInfo.hh >= 6) {
+                return tanggalLokal;
+            }
+            // Jika jam WITA < 06:00 pagi (00:00 - 05:59 dini hari) -> masih bagian dari siklus kemarin
+            const prevDayMs = baseDate.getTime() - (12 * 3600000);
+            return window.getTanggalLokalMakassar(prevDayMs);
         };
 
         window.getWitaTimestampISO = function(customDateOrMs = null) {
             const baseDate = customDateOrMs ? new Date(customDateOrMs) : new Date();
-            const utcMs = baseDate.getTime() + (baseDate.getTimezoneOffset() * 60000);
-            const witaDate = new Date(utcMs + (8 * 3600000));
-            const yyyy = witaDate.getFullYear();
-            const mm = String(witaDate.getMonth() + 1).padStart(2, '0');
-            const dd = String(witaDate.getDate()).padStart(2, '0');
-            const hh = String(witaDate.getHours()).padStart(2, '0');
-            const min = String(witaDate.getMinutes()).padStart(2, '0');
-            const ss = String(witaDate.getSeconds()).padStart(2, '0');
-            return `${yyyy}-${mm}-${dd}T${hh}:${min}:${ss}+08:00`;
+            const tglLokal = window.getTanggalLokalMakassar(baseDate);
+            const jamLokal = window.getJamLokalMakassar(baseDate);
+            return `${tglLokal}T${jamLokal.hhmmss}+08:00`;
         };
 
         window.formatJamDariTimestamp = function(tsOrJam) {
@@ -1718,7 +1558,7 @@
             return s;
         };
 
-        // Helper Tanggal Lokal WITA (YYYY-MM-DD) yang Konsisten Mengikuti Siklus Reset Jam 06:00 Pagi WITA
+        // Helper Tanggal Lokal WITA (YYYY-MM-DD) menggunakan Asia/Makassar
         window.getTodayLocalWitaStr = function() {
             return window.getTanggalSiklusAktifWita();
         };
@@ -1727,31 +1567,55 @@
             return window.getTanggalSiklusAktifWita().substring(0, 7);
         };
 
-        // Normalisasi segala format tanggal (DD/MM/YYYY, DD-MM-YYYY, ISO UTC, atau ekstraksi dari ID abs_17629...)
-        // PENTING: Jika string tanggal YYYY-MM-DD sudah valid (misal "2026-11-13"), JANGAN PERNAH digeser mundur oleh timestamp ID!
+        // Normalisasi segala format tanggal & Koreksi Otomatis Bug UTC Pagi Hari (06:00 - 08:00 WITA)
+        // Jika ada record yang ID timestamp-nya (abs_176...) menunjukkan pagi ini di Asia/Makassar,
+        // namun kolom tanggalnya sempat tersimpan tanggal kemarin (karena toISOString UTC),
+        // otomatis perbaiki menjadi tanggalLokal Asia/Makassar yang sebenarnya!
         window.normalizeDateToYMD = function(rawDate, recordId = "") {
-            if (rawDate) {
-                const s = String(rawDate).trim();
-                // 1. Jika sudah berformat YYYY-MM-DD (atau ISO), langsung gunakan tanggal tersebut secara mutlak
-                const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-                if (isoMatch) {
-                    return `${isoMatch[1]}-${String(isoMatch[2]).padStart(2, '0')}-${String(isoMatch[3]).padStart(2, '0')}`;
-                }
-                // 2. Format DD/MM/YYYY atau DD-MM-YYYY
-                const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
-                if (dmyMatch) {
-                    return `${dmyMatch[3]}-${String(dmyMatch[2]).padStart(2, '0')}-${String(dmyMatch[1]).padStart(2, '0')}`;
-                }
-            }
-
-            // 3. Fallback: Hanya jika rawDate kosong, ekstrak dari timestamp milidetik di ID (contoh: abs_1762908000000)
+            // 1. Cek jika recordId memiliki timestamp milidetik asli saat presensi dibuat (misal: abs_1762989600000)
             if (recordId && typeof recordId === 'string') {
                 const matchTs = recordId.match(/(?:abs|rwp|jur|dokkeg|disp)_(\d{12,14})/);
                 if (matchTs && matchTs[1]) {
                     const tsNum = parseInt(matchTs[1], 10);
                     if (!isNaN(tsNum) && tsNum > 1700000000000) {
-                        return window.getTanggalSiklusAktifWita(tsNum);
+                        const trueSiklusMakassar = window.getTanggalSiklusAktifWita(tsNum);
+                        if (rawDate) {
+                            const rawTrim = String(rawDate).trim().substring(0, 10);
+                            // Jika rawDate meleset 1 hari dari timestamp Asia/Makassar yang sebenarnya (akibat UTC bug),
+                            // gunakan tanggal siklus Asia/Makassar yang akurat!
+                            if (rawTrim !== trueSiklusMakassar) {
+                                const dRaw = new Date(rawTrim + "T00:00:00Z");
+                                const dTrue = new Date(trueSiklusMakassar + "T00:00:00Z");
+                                const diffDays = Math.round((dTrue - dRaw) / 86400000);
+                                if (diffDays === 1) {
+                                    return trueSiklusMakassar;
+                                }
+                            }
+                        } else {
+                            return trueSiklusMakassar;
+                        }
                     }
+                }
+            }
+
+            if (rawDate) {
+                const s = String(rawDate).trim();
+                // Jika berupa full ISO string dengan huruf 'Z' (UTC), konversi ke Asia/Makassar
+                if (s.includes('T') && s.endsWith('Z')) {
+                    const parsedDate = new Date(s);
+                    if (!isNaN(parsedDate.getTime())) {
+                        return window.getTanggalSiklusAktifWita(parsedDate.getTime());
+                    }
+                }
+                // Format YYYY-MM-DD
+                const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+                if (isoMatch) {
+                    return `${isoMatch[1]}-${String(isoMatch[2]).padStart(2, '0')}-${String(isoMatch[3]).padStart(2, '0')}`;
+                }
+                // Format DD/MM/YYYY atau DD-MM-YYYY
+                const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+                if (dmyMatch) {
+                    return `${dmyMatch[3]}-${String(dmyMatch[2]).padStart(2, '0')}-${String(dmyMatch[1]).padStart(2, '0')}`;
                 }
             }
 
@@ -1760,6 +1624,16 @@
 
         window.getAbsensiNormalizedDate = function(ab) {
             if (!ab) return "";
+            // Jika record memiliki waktu_masuk / waktu_pulang dengan zona +08:00, ekstrak tanggal lokalnya
+            const refTimeStr = ab.waktu_masuk || ab.waktu_pulang || "";
+            if (refTimeStr && typeof refTimeStr === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(refTimeStr)) {
+                if (refTimeStr.endsWith('+08:00')) {
+                    const tglPart = refTimeStr.substring(0, 10);
+                    ab.tanggal = tglPart;
+                    ab.tanggal_siklus = tglPart;
+                    return tglPart;
+                }
+            }
             const norm = window.normalizeDateToYMD(ab.tanggal_siklus || ab.tanggal, ab.id);
             if (norm) {
                 ab.tanggal = norm;
@@ -3323,6 +3197,7 @@
 
                     // 3. Tarik juga dari tabel SQL `riwayat_presensi` jika tersedia di Supabase
                     try {
+                        const todayLokal = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' });
                         const resp = await fetch(`${baseUrl}/rest/v1/riwayat_presensi?select=*&order=tanggal_siklus.desc&limit=1500`, {
                             method: "GET",
                             headers: {
@@ -3335,6 +3210,20 @@
                         if (resp.ok) {
                             const rowsSql = await resp.json();
                             if (Array.isArray(rowsSql) && rowsSql.length > 0) {
+                                rowsSql.forEach(r => {
+                                    if (!r) return;
+                                    // Pastikan tanggal_siklus dinormalisasi ke format YYYY-MM-DD lokal Asia/Makassar
+                                    if (r.waktu_masuk && String(r.waktu_masuk).includes('T')) {
+                                        const dtMasuk = new Date(r.waktu_masuk);
+                                        if (!isNaN(dtMasuk.getTime())) {
+                                            const tglMakassar = window.getTanggalSiklusAktifWita(dtMasuk.getTime());
+                                            if (tglMakassar === todayLokal && r.tanggal_siklus !== todayLokal) {
+                                                r.tanggal_siklus = todayLokal;
+                                            }
+                                        }
+                                    }
+                                    r.tanggal_siklus = window.normalizeDateToYMD(r.tanggal_siklus, r.id);
+                                });
                                 window.cloudState.riwayat_presensi = window.mergeUniqueArrayById(
                                     window.cloudState.riwayat_presensi || [],
                                     rowsSql,
@@ -7943,9 +7832,12 @@
             const namaResmiSiswa = placementInfo.namaSiswa || profile.nama;
 
             const now = new Date();
-            const jamStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-            const tglStr = window.getTanggalSiklusAktifWita();
-            const witaTimestamp = window.getWitaTimestampISO();
+            const jamInfoMakassar = window.getJamLokalMakassar(now);
+            const jamStr = jamInfoMakassar.hhmm;
+            // Eksplisit gunakan tanggal lokal Asia/Makassar (YYYY-MM-DD) dari sisi frontend, BUKAN UTC!
+            const tanggalLokal = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' });
+            const tglStr = window.getTanggalSiklusAktifWita(now) || tanggalLokal;
+            const witaTimestamp = window.getWitaTimestampISO(now);
 
             let katText = "Hadir di Lokasi Industri";
             let statusKehadiranResmi = "Hadir";
@@ -13144,7 +13036,6 @@
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Masuk', this)" class="btn-action btn-blue">📸 Absen Masuk</button>
                         <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang', this)" class="btn-action btn-emerald">🚪 Absen Pulang</button>
-                        <button onclick="window.segarkanDataPresensiDariCloud(this)" class="btn-action btn-blue">🔄 Segarkan Cloud</button>
                     </div>
                 </div>
 
@@ -13203,8 +13094,9 @@
                 <div class="card">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                         <div>
-                            <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">PESERTA PRAKTIK KERJA LAPANGAN</div>
-                            <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">👥 Daftar Siswa Magang (${profile.nama})</h3>
+                            <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">DAFTAR PESERTA MAGANG DUDI</div>
+                            <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">👥 Daftar Siswa Magang di ${profile.nama}</h3>
+                            <p style="font-size:11px; color:#64748b; margin-top:2px;">Daftar resmi siswa PKL yang ditempatkan di perusahaan/instansi Anda.</p>
                         </div>
                         <span class="badge-status badge-green" style="font-size:11px; font-weight:900;">${counter - 1} Siswa Magang</span>
                     </div>
