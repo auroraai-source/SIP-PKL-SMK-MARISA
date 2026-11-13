@@ -1624,22 +1624,180 @@
 
         window.getAbsensiNormalizedDate = function(ab) {
             if (!ab) return "";
-            // Jika record memiliki waktu_masuk / waktu_pulang dengan zona +08:00, ekstrak tanggal lokalnya
-            const refTimeStr = ab.waktu_masuk || ab.waktu_pulang || "";
-            if (refTimeStr && typeof refTimeStr === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(refTimeStr)) {
-                if (refTimeStr.endsWith('+08:00')) {
-                    const tglPart = refTimeStr.substring(0, 10);
-                    ab.tanggal = tglPart;
-                    ab.tanggal_siklus = tglPart;
-                    return tglPart;
+            // 1. Prioritaskan ekstraksi tanggal lokal (Asia/Makassar) dari kolom timestamp waktu_masuk / waktu_pulang / created_at
+            const tsCandidate = ab.waktu_masuk || ab.waktu_pulang || ab.created_at || "";
+            if (tsCandidate && typeof tsCandidate === 'string' && tsCandidate.includes('T')) {
+                // Jika sudah berformat +08:00 lokal, ambil YYYY-MM-DD di depannya
+                if (tsCandidate.includes('+08:00')) {
+                    const ymdLocal = tsCandidate.substring(0, 10);
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(ymdLocal)) {
+                        ab.tanggal = ymdLocal;
+                        ab.tanggal_siklus = ymdLocal;
+                        return ymdLocal;
+                    }
+                }
+                const parsedTs = new Date(tsCandidate);
+                if (!isNaN(parsedTs.getTime())) {
+                    const makassarYmd = window.getTanggalLokalMakassar(parsedTs.getTime());
+                    if (makassarYmd) {
+                        ab.tanggal = makassarYmd;
+                        ab.tanggal_siklus = makassarYmd;
+                        return makassarYmd;
+                    }
                 }
             }
-            const norm = window.normalizeDateToYMD(ab.tanggal_siklus || ab.tanggal, ab.id);
+            // 2. Jika tanggal_siklus atau tanggal berisi timestamp (misal "2026-11-12T23:30:00.000Z" atau "2026-11-13 07:20:00")
+            const rawDateStr = String(ab.tanggal_siklus || ab.tanggal || "").trim();
+            if (rawDateStr.includes('T') && rawDateStr.endsWith('Z')) {
+                const parsedRaw = new Date(rawDateStr);
+                if (!isNaN(parsedRaw.getTime())) {
+                    const makassarYmd = window.getTanggalLokalMakassar(parsedRaw.getTime());
+                    ab.tanggal = makassarYmd;
+                    ab.tanggal_siklus = makassarYmd;
+                    return makassarYmd;
+                }
+            }
+            const norm = window.normalizeDateToYMD(rawDateStr.substring(0, 10) || rawDateStr, ab.id);
             if (norm) {
                 ab.tanggal = norm;
                 ab.tanggal_siklus = norm;
             }
             return norm;
+        };
+
+        // =========================================================================
+        // HELPER DATE RANGE QUERY & PENCOCOKAN RENTANG WAKTU (00:00:00 s/d 23:59:59 WITA)
+        // Menjamin data tanggal 12 November, 13 November, dan hari lainnya selalu muncul
+        // baik ketika disimpan sebagai TIMESTAMP, DATETIME, maupun DATE/TEXT!
+        // =========================================================================
+        window.getDateRangeBoundsWita = function(tanggalPilihan) {
+            const cleanDate = String(tanggalPilihan || window.getTanggalSiklusAktifWita()).trim().substring(0, 10);
+            const startOfDayLocal = `${cleanDate}T00:00:00`;
+            const endOfDayLocal = `${cleanDate}T23:59:59`;
+            const startOfDayWitaISO = `${cleanDate}T00:00:00+08:00`;
+            const endOfDayWitaISO = `${cleanDate}T23:59:59.999+08:00`;
+            const startMs = new Date(startOfDayWitaISO).getTime();
+            const endMs = new Date(endOfDayWitaISO).getTime();
+            return {
+                cleanDate,
+                startOfDay: startOfDayLocal,
+                endOfDay: endOfDayLocal,
+                startOfDayWitaISO,
+                endOfDayWitaISO,
+                startMs,
+                endMs
+            };
+        };
+
+        window.isRecordInSelectedDateRange = function(record, tanggalPilihan) {
+            if (!record || !tanggalPilihan) return false;
+            const bounds = window.getDateRangeBoundsWita(tanggalPilihan);
+
+            // 1. Cek berdasarkan Date Range Timestamp (00:00:00 s/d 23:59:59 WITA) pada waktu_masuk / waktu_pulang / created_at
+            const timeFields = [record.waktu_masuk, record.waktu_pulang, record.created_at];
+            for (const tf of timeFields) {
+                if (tf && typeof tf === 'string') {
+                    // Jika string diawali langsung dengan YYYY-MM-DD yang sama
+                    if (tf.startsWith(bounds.cleanDate)) return true;
+                    const tMs = new Date(tf).getTime();
+                    if (!isNaN(tMs) && tMs >= bounds.startMs && tMs <= bounds.endMs) {
+                        return true;
+                    }
+                }
+            }
+
+            // 2. Cek berdasarkan timestamp milidetik pada ID record (abs_176..., rwp_...)
+            if (record.id && typeof record.id === 'string') {
+                const matchTs = record.id.match(/(?:abs|rwp)_(\d{12,14})/);
+                if (matchTs && matchTs[1]) {
+                    const idMs = parseInt(matchTs[1], 10);
+                    if (!isNaN(idMs) && idMs >= bounds.startMs && idMs <= bounds.endMs) {
+                        return true;
+                    }
+                }
+            }
+
+            // 3. Cek berdasarkan string tanggal lokal / tanggal_siklus (startsWith YYYY-MM-DD)
+            const normDate = window.getAbsensiNormalizedDate(record);
+            if (normDate && normDate.startsWith(bounds.cleanDate)) return true;
+
+            const rawSiklus = String(record.tanggal_siklus || record.tanggal || "").trim();
+            if (rawSiklus.startsWith(bounds.cleanDate)) return true;
+
+            return false;
+        };
+
+        // Fungsi Query Supabase dengan Date Range (startOfDay 00:00:00 s/d endOfDay 23:59:59)
+        window.queryRiwayatPresensiByDateRangeSupabase = async function(tanggalPilihan) {
+            const bounds = window.getDateRangeBoundsWita(tanggalPilihan);
+            const startOfDay = bounds.startOfDayWitaISO;
+            const endOfDay = bounds.endOfDayWitaISO;
+            let combinedRows = [];
+
+            // 1. Query menggunakan Supabase Client dengan Date Range (.gte & .lte) pada waktu_masuk serta rentang tanggal_siklus
+            if (window.supabaseClient) {
+                try {
+                    const [resByTime, resBySiklus] = await Promise.allSettled([
+                        window.supabaseClient
+                            .from('riwayat_presensi')
+                            .select('*')
+                            .gte('waktu_masuk', startOfDay)
+                            .lte('waktu_masuk', endOfDay),
+                        window.supabaseClient
+                            .from('riwayat_presensi')
+                            .select('*')
+                            .gte('tanggal_siklus', bounds.cleanDate)
+                            .lte('tanggal_siklus', bounds.cleanDate)
+                    ]);
+                    if (resByTime.status === 'fulfilled' && Array.isArray(resByTime.value.data)) {
+                        combinedRows.push(...resByTime.value.data);
+                    }
+                    if (resBySiklus.status === 'fulfilled' && Array.isArray(resBySiklus.value.data)) {
+                        combinedRows.push(...resBySiklus.value.data);
+                    }
+                } catch (e) {}
+            }
+
+            // 2. Fallback Direct REST dengan filter rentang waktu (gte & lte)
+            const creds = window.getSupabaseCredentials();
+            if (creds && creds.url && creds.key) {
+                const baseUrl = String(creds.url).trim().replace(/\/+$/, "");
+                const apiKey = String(creds.key).trim();
+                try {
+                    const urlRange = `${baseUrl}/rest/v1/riwayat_presensi?or=(and(waktu_masuk.gte.${encodeURIComponent(startOfDay)},waktu_masuk.lte.${encodeURIComponent(endOfDay)}),tanggal_siklus.eq.${encodeURIComponent(bounds.cleanDate)})&select=*`;
+                    const resp = await fetch(urlRange, {
+                        method: "GET",
+                        headers: {
+                            "apikey": apiKey,
+                            "Authorization": `Bearer ${apiKey}`,
+                            "Accept": "application/json"
+                        },
+                        cache: "no-store"
+                    });
+                    if (resp.ok) {
+                        const dataRange = await resp.json();
+                        if (Array.isArray(dataRange)) {
+                            combinedRows.push(...dataRange);
+                        }
+                    }
+                } catch (eRest) {}
+            }
+
+            if (combinedRows.length > 0) {
+                combinedRows.forEach(r => {
+                    if (!r) return;
+                    r.tanggal_siklus = bounds.cleanDate;
+                    r.tanggal = bounds.cleanDate;
+                });
+                window.cloudState.riwayat_presensi = window.mergeUniqueArrayById(
+                    window.cloudState.riwayat_presensi || [],
+                    combinedRows,
+                    (r) => r.id || `rwp_${r.tanggal_siklus}_${window.normalizeTextCompact(r.nama_siswa || r.siswa_id)}`
+                );
+                window.sinkronkanTabelRiwayatPresensiPermanen();
+            }
+
+            return combinedRows;
         };
 
         // =========================================================================
@@ -12030,6 +12188,12 @@
                 window.selectedRekapPresensiMonth = window.selectedRekapPresensiDate.substring(0, 7);
             }
             window.openFeature(window.cloudState.currentFeature || "rekap-masuk-pulang", "Rekap Presensi", true);
+            // Jalankan Date Range Query ke Supabase untuk tanggal yang dipilih agar data 12/13 November langsung ditarik
+            window.queryRiwayatPresensiByDateRangeSupabase(window.selectedRekapPresensiDate).then(rows => {
+                if (rows && rows.length > 0 && (window.cloudState.currentFeature === 'rekap-masuk-pulang' || window.cloudState.currentFeature === 'rekap-absensi')) {
+                    window.openFeature(window.cloudState.currentFeature, "Rekap Presensi", true);
+                }
+            }).catch(() => {});
         };
 
         window.ubahTanggalPresensiSiswa = function(tglBaru) {
@@ -12054,6 +12218,8 @@
                 btnEl.innerHTML = "⏳ Menyinkronkan Cloud...";
             }
             try {
+                const targetDate = window.selectedRekapPresensiDate || window.getTodayLocalWitaStr();
+                await window.queryRiwayatPresensiByDateRangeSupabase(targetDate).catch(() => {});
                 await window.tarikLogPresensiKhususDariSupabase();
                 await window.tarikDataDariCloud(true, true);
                 if (Array.isArray(window.cloudState.absensi)) {
@@ -12062,13 +12228,12 @@
                 const currentFeat = window.cloudState.currentFeature || "rekap-masuk-pulang";
                 window.openFeature(currentFeat, "Rekap Presensi", true);
 
-                const todayStr = window.getTodayLocalWitaStr();
                 const totalLogs = (window.cloudState.absensi || []).length;
-                const todayLogs = (window.cloudState.absensi || []).filter(a => window.getAbsensiNormalizedDate(a) === todayStr).length;
+                const dateLogs = (window.cloudState.absensi || []).filter(a => window.isRecordInSelectedDateRange(a, targetDate)).length;
                 window.showModalInfo(
                     "Data Presensi Cloud Disegarkan! ✅",
                     `Berhasil menyinkronkan data presensi terbaru dari server Supabase Cloud.<br><br>` +
-                    `&bull; 📅 Presensi Hari Ini (<b>${window.formatTanggalIndoLengkap(todayStr)}</b>): <b>${todayLogs} catatan</b><br>` +
+                    `&bull; 📅 Presensi Tanggal <b>${window.formatTanggalIndoLengkap(targetDate)}</b>: <b>${dateLogs} catatan</b><br>` +
                     `&bull; 📦 Total Arsip Presensi Tersimpan: <b>${totalLogs} catatan</b>`
                 );
             } catch (err) {
@@ -12106,22 +12271,6 @@
             const profile = window.cloudState.userProfile || { nama: "" };
             const todayStr = window.getTanggalSiklusAktifWita();
 
-            // OTOMATIS TARIK DATA PRESENSI TERBARU DARI SUPABASE SAAT HALAMAN REKAP DIBUKA
-            // (Mencegah tampilan 0 Siswa apabila perangkat Admin baru dibuka atau belum menekan tombol Segarkan)
-            if (Date.now() - (window.lastAutoSyncRekapPresensiAt || 0) > 8000) {
-                window.lastAutoSyncRekapPresensiAt = Date.now();
-                setTimeout(async () => {
-                    const prevCount = (window.cloudState.absensi || []).length + (window.cloudState.riwayat_presensi || []).length;
-                    await window.tarikLogPresensiKhususDariSupabase().catch(() => {});
-                    await window.tarikDataDariCloud(true, true).catch(() => {});
-                    window.sinkronkanTabelRiwayatPresensiPermanen();
-                    const newCount = (window.cloudState.absensi || []).length + (window.cloudState.riwayat_presensi || []).length;
-                    if (newCount !== prevCount && (window.cloudState.currentFeature === 'rekap-masuk-pulang' || window.cloudState.currentFeature === 'rekap-absensi')) {
-                        window.openFeature(window.cloudState.currentFeature, "Rekap Presensi", true);
-                    }
-                }, 80);
-            }
-
             // Pastikan setiap kali halaman dibuka pertama kali, default menampilkan SIKLUS HARI INI (Reset 06:00 Pagi)
             if (!window.selectedRekapPresensiDate) {
                 window.selectedRekapPresensiDate = todayStr;
@@ -12141,6 +12290,22 @@
             const activeIndFilter = window.selectedRekapPresensiIndustri;
             const filterMode = window.selectedRekapFilterMode;
 
+            // OTOMATIS TARIK DATA PRESENSI MENGGUNAKAN DATE RANGE QUERY (00:00:00 s/d 23:59:59) DARI SUPABASE
+            if (Date.now() - (window.lastAutoSyncRekapPresensiAt || 0) > 6000) {
+                window.lastAutoSyncRekapPresensiAt = Date.now();
+                setTimeout(async () => {
+                    const prevCount = (window.cloudState.absensi || []).length + (window.cloudState.riwayat_presensi || []).length;
+                    await window.queryRiwayatPresensiByDateRangeSupabase(activeDate).catch(() => {});
+                    await window.tarikLogPresensiKhususDariSupabase().catch(() => {});
+                    await window.tarikDataDariCloud(true, true).catch(() => {});
+                    window.sinkronkanTabelRiwayatPresensiPermanen();
+                    const newCount = (window.cloudState.absensi || []).length + (window.cloudState.riwayat_presensi || []).length;
+                    if (newCount !== prevCount && (window.cloudState.currentFeature === 'rekap-masuk-pulang' || window.cloudState.currentFeature === 'rekap-absensi')) {
+                        window.openFeature(window.cloudState.currentFeature, "Rekap Presensi", true);
+                    }
+                }, 60);
+            }
+
             // Normalkan seluruh tanggal absensi terlebih dahulu agar tidak ada yang gagal terbaca
             (window.cloudState.absensi || []).forEach(a => window.getAbsensiNormalizedDate(a));
             window.sinkronkanTabelRiwayatPresensiPermanen();
@@ -12158,24 +12323,25 @@
                 });
             }
 
-            // Hitung rekap jumlah siswa per tanggal_siklus yang tersedia di database (untuk tombol pintasan riwayat tanggal sebelumnya)
+            // Hitung rekap jumlah siswa per tanggal yang tersedia di database (untuk tombol pintasan riwayat tanggal 11, 12, 13 Nov, dst.)
             const dateSummaryMap = new Map();
             allRoleAbsensi.forEach(ab => {
                 if (!ab || !ab.nama) return;
                 const dStr = window.getAbsensiNormalizedDate(ab);
                 if (!dStr) return;
-                if (!dateSummaryMap.has(dStr)) {
-                    dateSummaryMap.set(dStr, new Set());
+                const cleanYmd = dStr.substring(0, 10);
+                if (!dateSummaryMap.has(cleanYmd)) {
+                    dateSummaryMap.set(cleanYmd, new Set());
                 }
-                dateSummaryMap.get(dStr).add(window.normalizeTextCompact(ab.nama));
+                dateSummaryMap.get(cleanYmd).add(window.normalizeTextCompact(ab.nama));
             });
 
             const availableDatesSorted = Array.from(dateSummaryMap.keys()).sort((a, b) => b.localeCompare(a));
 
-            // Filter untuk tanggal_siklus yang sedang dipilih (Hari Ini atau Tanggal Sebelumnya, atau Arsip Bulan)
+            // Filter untuk tanggal yang sedang dipilih menggunakan Date Range Query Matcher (00:00:00 s/d 23:59:59 WITA)
             const sourceAbsensiForPair = (filterMode === 'arsip_semua')
                 ? allRoleAbsensi.filter(ab => ab && String(window.getAbsensiNormalizedDate(ab) || '').startsWith(activeMonth))
-                : allRoleAbsensi.filter(ab => ab && window.getAbsensiNormalizedDate(ab) === activeDate);
+                : allRoleAbsensi.filter(ab => ab && window.isRecordInSelectedDateRange(ab, activeDate));
 
             // Hitung total catatan bulan berjalan yang tersimpan aman di database
             const monthlyStoredCount = allRoleAbsensi.filter(ab => ab && String(window.getAbsensiNormalizedDate(ab) || '').startsWith(activeMonth)).length;
@@ -12184,7 +12350,9 @@
 
             sourceAbsensiForPair.forEach(ab => {
                 if (!ab || !ab.nama) return;
-                const dNorm = window.getAbsensiNormalizedDate(ab) || activeDate;
+                const dNorm = (filterMode === 'arsip_semua')
+                    ? (window.getAbsensiNormalizedDate(ab) || activeDate)
+                    : activeDate;
                 const info = window.getStudentPlacementInfo(ab.nama, ab.user_id || ab.nis);
                 const canonicalNama = (info && info.namaSiswa) ? info.namaSiswa : ab.nama;
                 const sKey = window.normalizeTextCompact(canonicalNama);
@@ -12213,13 +12381,14 @@
                     });
                 }
                 const entry = pairMap.get(key);
+                const jamFormatted = ab.jam || window.formatJamDariTimestamp(ab.tipe_absen === 'Pulang' ? ab.waktu_pulang : ab.waktu_masuk);
                 if (ab.tipe_absen === 'Masuk') {
-                    entry.masukJam = ab.jam ? `${ab.jam} WITA` : '-';
+                    entry.masukJam = (jamFormatted && jamFormatted !== '-') ? `${jamFormatted} WITA` : '-';
                     entry.masukStatus = ab.status_kehadiran || ab.kategori_hadir || ab.status || 'Hadir';
                     entry.statusKehadiran = entry.masukStatus;
                     if (ab.foto_url || ab.foto_selfie) entry.masukFoto = ab.foto_url || ab.foto_selfie;
                 } else if (ab.tipe_absen === 'Pulang') {
-                    entry.pulangJam = ab.jam ? `${ab.jam} WITA` : '-';
+                    entry.pulangJam = (jamFormatted && jamFormatted !== '-') ? `${jamFormatted} WITA` : '-';
                     entry.pulangStatus = ab.kategori_hadir || ab.status || 'Sudah Pulang';
                     if (ab.foto_url || ab.foto_selfie) entry.pulangFoto = ab.foto_url || ab.foto_selfie;
                 }
