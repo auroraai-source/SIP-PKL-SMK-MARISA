@@ -1373,23 +1373,42 @@
         };
 
         window.lastLocalWriteTimestamp = 0;
+        window._placementInfoCache = new Map();
+        window._nameMatchCache = new Map();
+        window._lastRiwayatSyncSig = "";
+        window._lastJurnalSyncSig = "";
+        window._persistDebounceTimer = null;
+
+        window.invalidatePerformanceCaches = function() {
+            if (window._placementInfoCache) window._placementInfoCache.clear();
+            window._lastRiwayatSyncSig = "";
+            window._lastJurnalSyncSig = "";
+        };
 
         window.simpanDatabasePersisten = function(syncToCloud = true) {
             try {
                 window.lastLocalWriteTimestamp = Date.now();
                 window.cloudState.lastUpdated = window.lastLocalWriteTimestamp;
-                const cleanPayload = window.getSanitizedCloudPayload();
-                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cleanPayload));
-                localStorage.setItem(STORAGE_KEY_VAULT, JSON.stringify(cleanPayload));
-                if (Array.isArray(cleanPayload.penempatan) && cleanPayload.penempatan.length > 0) {
-                    localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(cleanPayload.penempatan));
-                }
-                if (Array.isArray(cleanPayload.bannerSliderImages) && cleanPayload.bannerSliderImages.length > 0) {
-                    localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(cleanPayload.bannerSliderImages));
-                }
-                if (syncToCloud && typeof window.kirimSnapshotKeSupabase === 'function') {
-                    window.kirimSnapshotKeSupabase(cleanPayload, true).catch(() => {});
-                }
+                window.invalidatePerformanceCaches();
+
+                if (window._persistDebounceTimer) clearTimeout(window._persistDebounceTimer);
+                window._persistDebounceTimer = setTimeout(() => {
+                    try {
+                        const cleanPayload = window.getSanitizedCloudPayload();
+                        const jsonStr = JSON.stringify(cleanPayload);
+                        localStorage.setItem(STORAGE_KEY_DB, jsonStr);
+                        localStorage.setItem(STORAGE_KEY_VAULT, jsonStr);
+                        if (Array.isArray(cleanPayload.penempatan) && cleanPayload.penempatan.length > 0) {
+                            localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(cleanPayload.penempatan));
+                        }
+                        if (Array.isArray(cleanPayload.bannerSliderImages) && cleanPayload.bannerSliderImages.length > 0) {
+                            localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(cleanPayload.bannerSliderImages));
+                        }
+                        if (syncToCloud && typeof window.kirimSnapshotKeSupabase === 'function') {
+                            window.kirimSnapshotKeSupabase(cleanPayload, true).catch(() => {});
+                        }
+                    } catch (errInner) {}
+                }, 60);
             } catch (e) {}
         };
 
@@ -1806,12 +1825,22 @@
         // tanggal_siklus, waktu_masuk, lat_masuk, lng_masuk, foto_masuk,
         // waktu_pulang, lat_pulang, lng_pulang, foto_pulang, status_kehadiran
         // =========================================================================
-        window.sinkronkanTabelRiwayatPresensiPermanen = function() {
+        window.sinkronkanTabelRiwayatPresensiPermanen = function(forceRun = false) {
             if (!Array.isArray(window.cloudState.riwayat_presensi)) {
                 window.cloudState.riwayat_presensi = [];
             }
             if (!Array.isArray(window.cloudState.absensi)) {
                 window.cloudState.absensi = [];
+            }
+
+            const rLen = window.cloudState.riwayat_presensi.length;
+            const aLen = window.cloudState.absensi.length;
+            const firstRId = rLen > 0 ? (window.cloudState.riwayat_presensi[0]?.id || '') : '';
+            const firstAId = aLen > 0 ? (window.cloudState.absensi[0]?.id || '') : '';
+            const sig = `${rLen}_${aLen}_${firstRId}_${firstAId}_${window.cloudState.lastUpdated || 0}`;
+
+            if (!forceRun && window._lastRiwayatSyncSig === sig && rLen > 0) {
+                return window.cloudState.riwayat_presensi;
             }
 
             const mapRiwayat = new Map();
@@ -1981,6 +2010,7 @@
                 String(b.waktu_masuk || '').localeCompare(String(a.waktu_masuk || ''))
             );
 
+            window._lastRiwayatSyncSig = `${window.cloudState.riwayat_presensi.length}_${window.cloudState.absensi.length}_${window.cloudState.riwayat_presensi[0]?.id || ''}_${window.cloudState.absensi[0]?.id || ''}_${window.cloudState.lastUpdated || 0}`;
             return window.cloudState.riwayat_presensi;
         };
 
@@ -2001,12 +2031,22 @@
         // tanggal_kegiatan (DATE), uraian_kegiatan (TEXT), foto_dokumentasi (URL/Text),
         // status_validasi (Menunggu/Disetujui/Revisi), catatan_pembimbing, created_at (TIMESTAMP)
         // =========================================================================
-        window.sinkronkanTabelJurnalHarianPermanen = function() {
+        window.sinkronkanTabelJurnalHarianPermanen = function(forceRun = false) {
             if (!Array.isArray(window.cloudState.jurnal_harian)) {
                 window.cloudState.jurnal_harian = [];
             }
             if (!Array.isArray(window.cloudState.jurnal)) {
                 window.cloudState.jurnal = [];
+            }
+
+            const jhLen = window.cloudState.jurnal_harian.length;
+            const jLen = window.cloudState.jurnal.length;
+            const firstJhId = jhLen > 0 ? `${window.cloudState.jurnal_harian[0]?.id || ''}_${window.cloudState.jurnal_harian[0]?.status_validasi || ''}` : '';
+            const firstJId = jLen > 0 ? `${window.cloudState.jurnal[0]?.id || ''}_${window.cloudState.jurnal[0]?.status || ''}` : '';
+            const sig = `${jhLen}_${jLen}_${firstJhId}_${firstJId}_${window.cloudState.lastUpdated || 0}`;
+
+            if (!forceRun && window._lastJurnalSyncSig === sig && jhLen > 0) {
+                return window.cloudState.jurnal_harian;
             }
 
             const mapJurnal = new Map();
@@ -2112,6 +2152,7 @@
                 created_at: jh.created_at
             }));
 
+            window._lastJurnalSyncSig = `${window.cloudState.jurnal_harian.length}_${window.cloudState.jurnal.length}_${window.cloudState.jurnal_harian[0]?.id || ''}_${window.cloudState.jurnal_harian[0]?.status_validasi || ''}_${window.cloudState.jurnal[0]?.id || ''}_${window.cloudState.jurnal[0]?.status || ''}_${window.cloudState.lastUpdated || 0}`;
             return window.cloudState.jurnal_harian;
         };
 
@@ -2266,6 +2307,11 @@
             const b = String(nameB).toLowerCase().trim();
             if (a === b) return true;
 
+            const cacheKey = a < b ? `${a}|${b}` : `${b}|${a}`;
+            if (window._nameMatchCache && window._nameMatchCache.has(cacheKey)) {
+                return window._nameMatchCache.get(cacheKey);
+            }
+
             // Pembersih semua gelar akademik/kehormatan di depan maupun belakang nama
             const stripTitles = (str) => {
                 let s = String(str || "").toLowerCase();
@@ -2287,33 +2333,40 @@
                     .replace(/sy/g, 's')
                     .replace(/sh/g, 's')
                     .replace(/h/g, '')
-                    .replace(/([a-z])\1+/g, '$1'); // Huruf ganda jadi tunggal (hippi -> hipi, anna -> ana)
+                    .replace(/([a-z])\1+/g, '$1');
+            };
+
+            const saveCache = (res) => {
+                if (window._nameMatchCache) {
+                    if (window._nameMatchCache.size > 4000) window._nameMatchCache.clear();
+                    window._nameMatchCache.set(cacheKey, res);
+                }
+                return res;
             };
 
             const cleanA = stripTitles(a);
             const cleanB = stripTitles(b);
-            if (!cleanA || !cleanB) return false;
-            if (cleanA === cleanB) return true;
+            if (!cleanA || !cleanB) return saveCache(false);
+            if (cleanA === cleanB) return saveCache(true);
 
             const compactA = cleanA.replace(/\s+/g, '');
             const compactB = cleanB.replace(/\s+/g, '');
             if (compactA && compactB) {
-                if (compactA === compactB) return true;
+                if (compactA === compactB) return saveCache(true);
                 if (compactA.length >= 5 && compactB.length >= 5 && (compactA.includes(compactB) || compactB.includes(compactA))) {
-                    return true;
+                    return saveCache(true);
                 }
             }
 
             const phonA = phoneticNormalize(compactA);
             const phonB = phoneticNormalize(compactB);
             if (phonA && phonB) {
-                if (phonA === phonB) return true;
+                if (phonA === phonB) return saveCache(true);
                 if (phonA.length >= 5 && phonB.length >= 5 && (phonA.includes(phonB) || phonB.includes(phonA))) {
-                    return true;
+                    return saveCache(true);
                 }
             }
 
-            // Pencocokan berbasis kata/token (mengabaikan singkatan nama tengah 1-2 huruf seperti "Artur M.F Laluan" vs "Arthur Laluan" atau "Rinto H. Hippi" vs "Rinto Hippi")
             const tokensA = cleanA.split(' ').filter(w => w.length >= 3).map(w => phoneticNormalize(w));
             const tokensB = cleanB.split(' ').filter(w => w.length >= 3).map(w => phoneticNormalize(w));
 
@@ -2321,25 +2374,23 @@
                 const shorter = tokensA.length <= tokensB.length ? tokensA : tokensB;
                 const longer = tokensA.length <= tokensB.length ? tokensB : tokensA;
 
-                // Jika semua kata utama pada nama yang lebih pendek ada di nama yang lebih panjang
                 const allShorterMatch = shorter.every(tShort =>
                     longer.some(tLong => tLong === tShort || (tShort.length >= 4 && (tLong.startsWith(tShort) || tShort.startsWith(tLong))))
                 );
                 if (allShorterMatch && (shorter.length >= 2 || (shorter.length === 1 && shorter[0].length >= 5 && longer.length === 1))) {
-                    return true;
+                    return saveCache(true);
                 }
 
-                // Jika kata pertama DAN kata terakhir cocok secara fonetik (contoh: Rohana ... Evawaty == Rohana Evawati)
                 if (tokensA.length >= 2 && tokensB.length >= 2) {
                     const firstMatch = tokensA[0] === tokensB[0] || tokensA[0].startsWith(tokensB[0]) || tokensB[0].startsWith(tokensA[0]);
                     const lastA = tokensA[tokensA.length - 1];
                     const lastB = tokensB[tokensB.length - 1];
                     const lastMatch = lastA === lastB || (lastA.length >= 4 && lastB.length >= 4 && (lastA.startsWith(lastB) || lastB.startsWith(lastA)));
-                    if (firstMatch && lastMatch) return true;
+                    if (firstMatch && lastMatch) return saveCache(true);
                 }
             }
 
-            return false;
+            return saveCache(false);
         };
 
         // Pencocokan Nama Industri yang Presisi & Toleran (Memastikan semua siswa yang di-plot ke industri terbaca di dashboard industri)
@@ -2581,6 +2632,11 @@
             const targetKey = window.normalizeTextCompact(rawTarget);
             const nisKey = window.normalizeTextCompact(rawNis);
 
+            const cacheLookupKey = `${targetKey}__${nisKey}__${(window.cloudState.siswa || []).length}__${(window.cloudState.penempatan || []).length}`;
+            if (window._placementInfoCache && window._placementInfoCache.has(cacheLookupKey)) {
+                return window._placementInfoCache.get(cacheLookupKey);
+            }
+
             // 1. Cari di Data Master Siswa (Cocokkan Nama atau NIS/Username)
             let sMaster = (window.cloudState.siswa || []).find(s => {
                 if (window.isNameMatch(s.nama, rawTarget)) return true;
@@ -2680,7 +2736,7 @@
                 dataIndustriObj.radius = 100;
             }
 
-            return {
+            const resultObj = {
                 namaSiswa: canonicalName,
                 kelas: (sMaster && sMaster.kelas) ? sMaster.kelas : "-",
                 nis: (sMaster && sMaster.nis) ? sMaster.nis : (rawNis || "-"),
@@ -2689,6 +2745,12 @@
                 industriObj: dataIndustriObj,
                 siswaObj: sMaster
             };
+
+            if (window._placementInfoCache) {
+                if (window._placementInfoCache.size > 1000) window._placementInfoCache.clear();
+                window._placementInfoCache.set(cacheLookupKey, resultObj);
+            }
+            return resultObj;
         };
 
         // Helper untuk mengecek apakah koordinat industri masih berupa koordinat placeholder/default (belum dikunci di lokasi asli)
@@ -3625,32 +3687,29 @@
         window.computeCloudDataSignature = function(dataObj) {
             if (!dataObj || typeof dataObj !== 'object') return "";
             try {
-                return JSON.stringify({
-                    s: dataObj.siswa || [],
-                    g: dataObj.guru || [],
-                    i: dataObj.industri || [],
-                    p: dataObj.penempatan || [],
-                    m: dataObj.penugasanMonitoring || [],
-                    u: dataObj.registeredUsers || [],
-                    aLen: (dataObj.absensi || []).length,
-                    rwpLen: (dataObj.riwayat_presensi || []).length,
-                    jLen: (dataObj.jurnal || []).length,
-                    jhLen: (dataObj.jurnal_harian || []).length,
-                    dLen: (dataObj.dokumen || []).length,
-                    nLen: (dataObj.nilai || []).length,
-                    lLen: (dataObj.laporanAkhir || []).length,
-                    adLen: (dataObj.pengaduan || []).length,
-                    dkLen: (dataObj.disposisiKepsek || []).length,
-                    dokLen: (dataObj.dokumentasiKegiatan || []).length,
-                    ytLen: (dataObj.videoPanduanYoutube || []).length,
-                    ban: dataObj.bannerSliderImages || [],
-                    banTs: dataObj.customBannerUpdatedAt || 0,
-                    obs: dataObj.observasiConfig || {},
-                    hl: dataObj.hotlineConfig || {},
-                    pkl: dataObj.pklConfig || {},
-                    jam: dataObj.jamConfig || {},
-                    gps: dataObj.gpsResetAccess || {}
-                });
+                return [
+                    (dataObj.siswa || []).length,
+                    (dataObj.guru || []).length,
+                    (dataObj.industri || []).length,
+                    (dataObj.penempatan || []).length,
+                    (dataObj.penugasanMonitoring || []).length,
+                    (dataObj.registeredUsers || []).length,
+                    (dataObj.absensi || []).length,
+                    (dataObj.riwayat_presensi || []).length,
+                    (dataObj.jurnal || []).length,
+                    (dataObj.jurnal_harian || []).length,
+                    (dataObj.dokumen || []).length,
+                    (dataObj.nilai || []).length,
+                    (dataObj.laporanAkhir || []).length,
+                    (dataObj.pengaduan || []).length,
+                    (dataObj.disposisiKepsek || []).length,
+                    (dataObj.dokumentasiKegiatan || []).length,
+                    (dataObj.videoPanduanYoutube || []).length,
+                    (dataObj.bannerSliderImages || []).length,
+                    dataObj.customBannerUpdatedAt || 0,
+                    dataObj.gpsResetAccess?.code || '',
+                    dataObj.lastUpdated || 0
+                ].join('|');
             } catch (e) {
                 return "";
             }
@@ -4089,6 +4148,7 @@
 
             window.bersihkanDataDummyLama(window.cloudState);
             window.pastikanRadiusIndustri100Meter(window.cloudState);
+            window.invalidatePerformanceCaches();
             if (typeof window.konsolidasiSatuBarisPerGuru === 'function') {
                 window.konsolidasiSatuBarisPerGuru();
             }
@@ -4898,20 +4958,15 @@
             if (role === 'orangtua') {
                 if (btnSubmit) {
                     btnSubmit.disabled = true;
-                    btnSubmit.innerText = "MEMERIKSA DATABASE SUPABASE (2.5 DETIK)... ⏳";
+                    btnSubmit.innerText = "MEMERIKSA DATA... ⏳";
                 }
-                const startTime = Date.now();
-                try {
-                    if (window.supabaseClient && typeof window.tarikDataDariCloud === 'function') {
+                if ((window.cloudState.siswa || []).length === 0 && window.supabaseClient && typeof window.tarikDataDariCloud === 'function') {
+                    try {
                         await Promise.race([
                             window.tarikDataDariCloud(true),
-                            new Promise(resolve => setTimeout(resolve, 2500))
+                            new Promise(resolve => setTimeout(resolve, 1200))
                         ]);
-                    }
-                } catch (e) {}
-                const elapsed = Date.now() - startTime;
-                if (elapsed < 2200) {
-                    await new Promise(resolve => setTimeout(resolve, 2200 - elapsed));
+                    } catch (e) {}
                 }
                 if (btnSubmit) {
                     btnSubmit.disabled = false;
@@ -4945,34 +5000,26 @@
 
             if (!pass) return window.showModalInfo("Kata Sandi Kosong", "Silakan masukkan kata sandi Anda!");
 
-            // PROSES MEMERIKSA KE DATABASE SUPABASE SELAMA 2.5 DETIK AGAR SINKRON & AKURAT
-            if (btnSubmit) {
-                btnSubmit.disabled = true;
-                btnSubmit.innerText = "MEMERIKSA DATABASE SUPABASE... ⏳";
-            }
-
-            const startCheckTime = Date.now();
-            try {
-                if (window.supabaseClient && typeof window.tarikDataDariCloud === 'function') {
+            // Cek lokal terlebih dahulu agar login instan (< 0.05 detik). Jika belum ditemukan lokal, tarik cepat dari Cloud.
+            let matchedProfile = window.cariAkunLoginAntiGagal(role, username, pass);
+            if (!matchedProfile && window.supabaseClient && typeof window.tarikDataDariCloud === 'function') {
+                if (btnSubmit) {
+                    btnSubmit.disabled = true;
+                    btnSubmit.innerText = "MENYINKRONKAN DATABASE... ⏳";
+                }
+                try {
                     await Promise.race([
                         window.tarikDataDariCloud(true),
-                        new Promise(resolve => setTimeout(resolve, 2800))
+                        new Promise(resolve => setTimeout(resolve, 1500))
                     ]);
+                } catch (e) {}
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerText = origBtnText;
                 }
-            } catch (e) {}
-
-            // Pastikan durasi pemeriksaan berada di kisaran 2.3 - 2.5 detik sesuai permintaan
-            const elapsedCheck = Date.now() - startCheckTime;
-            if (elapsedCheck < 2300) {
-                await new Promise(resolve => setTimeout(resolve, 2300 - elapsedCheck));
+                matchedProfile = window.cariAkunLoginAntiGagal(role, username, pass);
             }
 
-            if (btnSubmit) {
-                btnSubmit.disabled = false;
-                btnSubmit.innerText = origBtnText;
-            }
-
-            let matchedProfile = window.cariAkunLoginAntiGagal(role, username, pass);
             if (matchedProfile) {
                 window.suksesLogin(matchedProfile);
                 return;
@@ -12290,25 +12337,20 @@
             const activeIndFilter = window.selectedRekapPresensiIndustri;
             const filterMode = window.selectedRekapFilterMode;
 
-            // OTOMATIS TARIK DATA PRESENSI MENGGUNAKAN DATE RANGE QUERY (00:00:00 s/d 23:59:59) DARI SUPABASE
-            if (Date.now() - (window.lastAutoSyncRekapPresensiAt || 0) > 6000) {
+            // OTOMATIS TARIK DATA PRESENSI DI LATAR BELAKANG (MAKSIMAL 1 KALI SETIAP 30 DETIK AGAR UI TETAP RINGAN & INSTAN)
+            if (Date.now() - (window.lastAutoSyncRekapPresensiAt || 0) > 30000) {
                 window.lastAutoSyncRekapPresensiAt = Date.now();
                 setTimeout(async () => {
                     const prevCount = (window.cloudState.absensi || []).length + (window.cloudState.riwayat_presensi || []).length;
                     await window.queryRiwayatPresensiByDateRangeSupabase(activeDate).catch(() => {});
                     await window.tarikLogPresensiKhususDariSupabase().catch(() => {});
-                    await window.tarikDataDariCloud(true, true).catch(() => {});
-                    window.sinkronkanTabelRiwayatPresensiPermanen();
+                    window.sinkronkanTabelRiwayatPresensiPermanen(true);
                     const newCount = (window.cloudState.absensi || []).length + (window.cloudState.riwayat_presensi || []).length;
                     if (newCount !== prevCount && (window.cloudState.currentFeature === 'rekap-masuk-pulang' || window.cloudState.currentFeature === 'rekap-absensi')) {
                         window.openFeature(window.cloudState.currentFeature, "Rekap Presensi", true);
                     }
-                }, 60);
+                }, 150);
             }
-
-            // Normalkan seluruh tanggal absensi terlebih dahulu agar tidak ada yang gagal terbaca
-            (window.cloudState.absensi || []).forEach(a => window.getAbsensiNormalizedDate(a));
-            window.sinkronkanTabelRiwayatPresensiPermanen();
 
             // Ambil seluruh riwayat absensi sesuai peran (Admin/Panitia/Kepsek semua siswa; Guru/Industri sesuai bimbingan/magang)
             let allRoleAbsensi = window.filterAbsensiByRoleAndProfile(window.cloudState.absensi || [], role, profile);
@@ -15589,15 +15631,19 @@
                 } catch(e) {}
             }
             if (window.supabaseClient) {
-                await window.tarikBannerMasterDariSupabase();
-                await window.tarikLogPresensiKhususDariSupabase();
-                await window.tarikLogJurnalKhususDariSupabase();
-                await window.tarikDataDariCloud(true);
-                if (typeof window.perbaruiDomBannerCarouselLangsung === 'function') {
-                    window.perbaruiDomBannerCarouselLangsung();
-                }
+                // Jalankan sinkronisasi awal secara paralel di latar belakang (non-blocking) agar layar langsung responsif seketika
+                Promise.allSettled([
+                    window.tarikBannerMasterDariSupabase(),
+                    window.tarikLogPresensiKhususDariSupabase(),
+                    window.tarikLogJurnalKhususDariSupabase(),
+                    window.tarikDataDariCloud(true)
+                ]).then(() => {
+                    if (typeof window.perbaruiDomBannerCarouselLangsung === 'function') {
+                        window.perbaruiDomBannerCarouselLangsung();
+                    }
+                });
 
-                // Sinkronisasi Realtime Halus di Belakang Layar (Tanpa Mengganggu Ketikan & Tanpa Menggeser Layar)
+                // Sinkronisasi Realtime Ringan di Belakang Layar (Setiap 45 Detik & Non-Blocking)
                 setInterval(async () => {
                     const now = Date.now();
                     const isRecentlyTypingOrTouching = (now - (window.lastUserActivityAt || 0) < 12000);
@@ -15618,16 +15664,13 @@
                     const isDrawerOpen = document.getElementById('appSidebar')?.classList.contains('open');
 
                     if (!isInteracting && !isRecentlyTypingOrTouching && !isRecentlyScrolling && !isRecentlyWriting && !isModalOpen && !isDrawerOpen && !document.hidden) {
-                        await window.tarikBannerMasterDariSupabase();
-                        await window.tarikLogPresensiKhususDariSupabase();
-                        await window.tarikLogJurnalKhususDariSupabase();
                         await window.tarikDataDariCloud(true);
                     }
-                }, 20000);
+                }, 45000);
                 let lastFocusSync = 0;
                 const triggerGentleSync = () => {
                     const now = Date.now();
-                    if (now - lastFocusSync < 25000) return;
+                    if (now - lastFocusSync < 45000) return;
                     if (now - (window.lastUserActivityAt || 0) < 10000) return;
                     if (now - (window.lastLocalWriteTimestamp || 0) < 15000) return;
                     const isModalOpen = (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex');
