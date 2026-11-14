@@ -1636,34 +1636,8 @@
 
             const fileName = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}.jpg`;
             const bucketsToTry = ['foto_presensi', 'berkas_pkl', 'bukti_jurnal'];
-            const creds = typeof window.getSupabaseCredentials === 'function' ? window.getSupabaseCredentials() : null;
 
-            // 1. Jalur Utama: Direct REST Storage Upload
-            if (creds && creds.url && creds.key) {
-                const baseUrl = String(creds.url).trim().replace(/\/+$/, "");
-                const apiKey = String(creds.key).trim();
-                for (const bucketName of bucketsToTry) {
-                    try {
-                        const uploadEndpoint = `${baseUrl}/storage/v1/object/${bucketName}/${fileName}`;
-                        const resp = await fetch(uploadEndpoint, {
-                            method: 'POST',
-                            headers: {
-                                'apikey': apiKey,
-                                'Authorization': `Bearer ${apiKey}`,
-                                'Content-Type': 'image/jpeg',
-                                'x-upsert': 'true'
-                            },
-                            body: blob,
-                            mode: 'cors'
-                        });
-                        if (resp.ok) {
-                            return `${baseUrl}/storage/v1/object/public/${bucketName}/${fileName}`;
-                        }
-                    } catch (errRest) {}
-                }
-            }
-
-            // 2. Jalur Kedua: Supabase SDK Storage Upload
+            // 1. Jalur Utama: Gunakan Supabase JS SDK Resmi (100% kompatibel dengan sb_publishable_ key)
             if (window.supabaseClient) {
                 for (const bucketName of bucketsToTry) {
                     try {
@@ -1685,6 +1659,34 @@
                             }
                         }
                     } catch (e) {}
+                }
+            }
+
+            // 2. Jalur Kedua: Direct REST Storage Upload (Tanpa Bearer jika menggunakan sb_publishable_)
+            const creds = typeof window.getSupabaseCredentials === 'function' ? window.getSupabaseCredentials() : null;
+            if (creds && creds.url && creds.key) {
+                const baseUrl = String(creds.url).trim().replace(/\/+$/, "");
+                const apiKey = String(creds.key).trim();
+                const isJwt = apiKey.startsWith("eyJ");
+                for (const bucketName of bucketsToTry) {
+                    try {
+                        const uploadEndpoint = `${baseUrl}/storage/v1/object/${bucketName}/${fileName}`;
+                        const headers = {
+                            'apikey': apiKey,
+                            'Content-Type': 'image/jpeg',
+                            'x-upsert': 'true'
+                        };
+                        if (isJwt) headers['Authorization'] = `Bearer ${apiKey}`;
+                        const resp = await fetch(uploadEndpoint, {
+                            method: 'POST',
+                            headers: headers,
+                            body: blob,
+                            mode: 'cors'
+                        });
+                        if (resp.ok) {
+                            return `${baseUrl}/storage/v1/object/public/${bucketName}/${fileName}`;
+                        }
+                    } catch (errRest) {}
                 }
             }
 
@@ -2896,14 +2898,42 @@
             return results;
         };
 
-        // Fungsi Pemindai Total Seluruh Tabel dari KEDUA Server Supabase (PMX + TOBY)
+        window.lastClusterDiagnosticInfo = {
+            pmxAbsensi: 0,
+            tobyAbsensi: 0,
+            cloudDbRows: 0,
+            sqlPresensiRows: 0,
+            sqlJurnalRows: 0,
+            lastScanTime: "-"
+        };
+
+        // Fungsi Pemindai Total Seluruh Tabel dari KEDUA Server Supabase (PMX + TOBY) - TUNGGAL & TANPA DUPLIKASI!
         window.omniScanSeluruhDataPresensiDanJurnalCloud = async function() {
             let allCloudDbRows = [];
             let allSqlPresensiRows = [];
             let allSqlJurnalRows = [];
             let appStateRows = [];
+            let pmxCount = 0;
+            let tobyCount = 0;
 
-            const scanClient = async (client, nodeInfo) => {
+            const countLogsInRows = (rows) => {
+                let c = 0;
+                (rows || []).forEach(r => {
+                    const p = r && r.payload ? r.payload : r;
+                    if (!p) return;
+                    if (Array.isArray(p.absensi)) c += p.absensi.length;
+                    else if (p.nama && (p.tipe_absen || p.jam)) c += 1;
+                    else if (p.nama_siswa && (p.waktu_masuk || p.tanggal_siklus)) c += 1;
+                });
+                return c;
+            };
+
+            const scanClient = async (client, nodeInfo, isPrimaryNode) => {
+                let nodeCloudRows = [];
+                let nodeStateRows = [];
+                let nodeSqlAbs = [];
+                let nodeSqlJur = [];
+
                 if (client) {
                     try {
                         const [resCloudDb, resState, resSqlAbs, resSqlJur] = await Promise.all([
@@ -2912,38 +2942,60 @@
                             client.from('riwayat_presensi').select('*').limit(2500),
                             client.from('jurnal_harian').select('*').limit(2500)
                         ]);
-                        if (resCloudDb && Array.isArray(resCloudDb.data)) allCloudDbRows.push(...resCloudDb.data);
-                        if (resState && Array.isArray(resState.data)) appStateRows.push(...resState.data);
-                        if (resSqlAbs && Array.isArray(resSqlAbs.data)) allSqlPresensiRows.push(...resSqlAbs.data);
-                        if (resSqlJur && Array.isArray(resSqlJur.data)) allSqlJurnalRows.push(...resSqlJur.data);
+                        if (resCloudDb && Array.isArray(resCloudDb.data)) nodeCloudRows.push(...resCloudDb.data);
+                        if (resState && Array.isArray(resState.data)) nodeStateRows.push(...resState.data);
+                        if (resSqlAbs && Array.isArray(resSqlAbs.data)) nodeSqlAbs.push(...resSqlAbs.data);
+                        if (resSqlJur && Array.isArray(resSqlJur.data)) nodeSqlJur.push(...resSqlJur.data);
                     } catch (eSdk) {}
                 }
-                if (nodeInfo) {
+                if (nodeInfo && (nodeCloudRows.length === 0 || nodeStateRows.length === 0)) {
                     const [rCloud, rState, rAbs, rJur] = await Promise.all([
                         window.directRestGetQueryFromNode(nodeInfo.url, nodeInfo.key, 'app_cloud_db?select=id,payload,updated_at&limit=2500').catch(() => null),
                         window.directRestGetQueryFromNode(nodeInfo.url, nodeInfo.key, 'app_state?select=id,payload,updated_at&limit=10').catch(() => null),
                         window.directRestGetQueryFromNode(nodeInfo.url, nodeInfo.key, 'riwayat_presensi?select=*&limit=2500').catch(() => null),
                         window.directRestGetQueryFromNode(nodeInfo.url, nodeInfo.key, 'jurnal_harian?select=*&limit=2500').catch(() => null)
                     ]);
-                    if (Array.isArray(rCloud)) allCloudDbRows.push(...rCloud);
-                    if (Array.isArray(rState)) appStateRows.push(...rState);
-                    if (Array.isArray(rAbs)) allSqlPresensiRows.push(...rAbs);
-                    if (Array.isArray(rJur)) allSqlJurnalRows.push(...rJur);
+                    if (Array.isArray(rCloud)) nodeCloudRows.push(...rCloud);
+                    if (Array.isArray(rState)) nodeStateRows.push(...rState);
+                    if (Array.isArray(rAbs)) nodeSqlAbs.push(...rAbs);
+                    if (Array.isArray(rJur)) nodeSqlJur.push(...rJur);
                 }
+
+                const totalNodeLogs = countLogsInRows(nodeCloudRows) + countLogsInRows(nodeStateRows) + nodeSqlAbs.length;
+                if (isPrimaryNode) pmxCount = totalNodeLogs;
+                else tobyCount = totalNodeLogs;
+
+                allCloudDbRows.push(...nodeCloudRows);
+                appStateRows.push(...nodeStateRows);
+                allSqlPresensiRows.push(...nodeSqlAbs);
+                allSqlJurnalRows.push(...nodeSqlJur);
             };
+
+            // Pastikan kedua client sudah diinisialisasi
+            if (!window.supabaseClient || !window.secondarySupabaseClient) {
+                window.inisialisasiSupabaseClient();
+            }
 
             // Pindai KEDUA Server secara paralel (pmxwnudmaszwcncizklp & tobyuffkjowdmcvygwht)
             await Promise.all([
-                scanClient(window.supabaseClient, window.SUPABASE_CLUSTER_NODES[0]),
-                scanClient(window.secondarySupabaseClient, window.SUPABASE_CLUSTER_NODES[1])
+                scanClient(window.supabaseClient, window.SUPABASE_CLUSTER_NODES[0], true),
+                scanClient(window.secondarySupabaseClient, window.SUPABASE_CLUSTER_NODES[1], false)
             ]);
+
+            window.lastClusterDiagnosticInfo = {
+                pmxAbsensi: pmxCount,
+                tobyAbsensi: tobyCount,
+                cloudDbRows: allCloudDbRows.length,
+                sqlPresensiRows: allSqlPresensiRows.length,
+                sqlJurnalRows: allSqlJurnalRows.length,
+                lastScanTime: new Date().toLocaleTimeString('it-IT', { timeZone: 'Asia/Makassar' }) + " WITA"
+            };
 
             let foundAbsensi = [];
             let foundJurnal = [];
 
             const extractFromPayload = (p, rowUpdatedAt = null) => {
                 if (!p || typeof p !== 'object') return;
-                // Sinkronkan juga akun & master siswa jika ada di salah satu server
                 if (Array.isArray(p.registeredUsers) && p.registeredUsers.length > 0) {
                     window.cloudState.registeredUsers = window.mergeUniqueArrayById(
                         window.cloudState.registeredUsers || [],
@@ -3051,7 +3103,6 @@
                 localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cleanSnap));
             } catch (e) {}
 
-            // Jika ditemukan data baru dari hasil penggabungan lintas server, langsung tulis balik ke kedua server agar sinkron 100%!
             const newAbsLen = (window.cloudState.absensi || []).length;
             const newJurLen = (window.cloudState.jurnal || []).length;
             if (newAbsLen > prevAbsLen || newJurLen > prevJurLen) {
@@ -3068,326 +3119,6 @@
             return {
                 totalAbsensi: newAbsLen,
                 totalJurnal: newJurLen
-            };
-        };
-
-        window.inisialisasiSupabaseClient = function() {
-            if (typeof supabase !== 'undefined') {
-                try {
-                    const creds = window.getSupabaseCredentials();
-                    const cleanUrl = String(creds.url || "").trim().replace(/\/+$/, "");
-                    const cleanKey = String(creds.key || "").trim();
-                    window.supabaseClient = supabase.createClient(cleanUrl, cleanKey, {
-                        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-                    });
-                    window.isCloudConnected = true;
-                } catch(err) {
-                    window.isCloudConnected = false;
-                }
-            }
-        };
-
-        // =========================================================================
-        // JALUR DIRECT REST FETCH FALLBACK (ANTI "TypeError: Failed to fetch")
-        // Mendukung penuh baik Anon JWT Key (eyJ...) maupun Publishable Key (sb_publishable_...)
-        // =========================================================================
-        window.buildSupabaseHeaders = function(includePreferUpsert = false) {
-            const creds = window.getSupabaseCredentials();
-            const cleanKey = String(creds.key || "").trim();
-            const headers = {
-                "apikey": cleanKey,
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            };
-            // PENTING: Hanya kirim Authorization Bearer jika key berformat JWT (eyJ...).
-            // Jika menggunakan sb_publishable_..., cukup kirim apikey agar tidak ditolak 401 oleh Supabase Gateway!
-            if (cleanKey.startsWith("eyJ")) {
-                headers["Authorization"] = `Bearer ${cleanKey}`;
-            }
-            if (includePreferUpsert) {
-                headers["Prefer"] = "resolution=merge-duplicates,return=minimal";
-            }
-            return headers;
-        };
-
-        window.directRestFetchRow = async function(tableName, idColumn, idValue) {
-            // PRIORITAS 1: Gunakan Supabase JS SDK resmi (Paling kompatibel dengan sb_publishable_ key)
-            if (window.supabaseClient) {
-                try {
-                    const { data, error } = await window.supabaseClient
-                        .from(tableName)
-                        .select('payload, updated_at')
-                        .eq(idColumn, idValue)
-                        .maybeSingle();
-                    if (!error && data) return data;
-                } catch (sdkErr) {}
-            }
-
-            // PRIORITAS 2: Fallback Direct REST Fetch
-            const creds = window.getSupabaseCredentials();
-            const baseUrl = String(creds.url || "").trim().replace(/\/+$/, "");
-            const cleanKey = String(creds.key || "").trim();
-            const isJwt = cleanKey.startsWith("eyJ");
-            const endpoint = `${baseUrl}/rest/v1/${tableName}?${idColumn}=eq.${encodeURIComponent(idValue)}&select=payload,updated_at&limit=1`;
-
-            const tryFetch = async (withAuthBearer) => {
-                const headers = {
-                    "apikey": cleanKey,
-                    "Accept": "application/json"
-                };
-                if (withAuthBearer) {
-                    headers["Authorization"] = `Bearer ${cleanKey}`;
-                }
-                const resp = await fetch(endpoint, {
-                    method: "GET",
-                    headers: headers,
-                    mode: "cors",
-                    cache: "no-store"
-                });
-                if (!resp.ok) {
-                    const errTxt = await resp.text().catch(() => "");
-                    throw new Error(`HTTP ${resp.status}: ${errTxt || resp.statusText}`);
-                }
-                const arr = await resp.json();
-                return (Array.isArray(arr) && arr.length > 0) ? arr[0] : null;
-            };
-
-            try {
-                return await tryFetch(isJwt);
-            } catch (e1) {
-                return await tryFetch(!isJwt);
-            }
-        };
-
-        window.directRestUpsertRow = async function(tableName, rowObject, conflictColumn) {
-            // PRIORITAS 1: Gunakan Supabase JS SDK resmi (Menjamin 100% tembus untuk sb_publishable_ key)
-            if (window.supabaseClient) {
-                try {
-                    const { error } = await window.supabaseClient
-                        .from(tableName)
-                        .upsert(rowObject, { onConflict: conflictColumn || 'id' });
-                    if (!error) return true;
-                } catch (sdkErr) {}
-            }
-
-            // PRIORITAS 2: Fallback Direct REST Upsert
-            const creds = window.getSupabaseCredentials();
-            const baseUrl = String(creds.url || "").trim().replace(/\/+$/, "");
-            const cleanKey = String(creds.key || "").trim();
-            const isJwt = cleanKey.startsWith("eyJ");
-            const endpoint = `${baseUrl}/rest/v1/${tableName}?on_conflict=${encodeURIComponent(conflictColumn)}`;
-            const bodyStr = JSON.stringify(rowObject);
-
-            const tryPost = async (withAuthBearer) => {
-                const headers = {
-                    "apikey": cleanKey,
-                    "Content-Type": "application/json",
-                    "Prefer": "resolution=merge-duplicates,return=minimal"
-                };
-                if (withAuthBearer) {
-                    headers["Authorization"] = `Bearer ${cleanKey}`;
-                }
-                const resp = await fetch(endpoint, {
-                    method: "POST",
-                    headers: headers,
-                    body: bodyStr,
-                    mode: "cors"
-                });
-                if (!resp.ok) {
-                    const errTxt = await resp.text().catch(() => "");
-                    throw new Error(`HTTP ${resp.status}: ${errTxt || resp.statusText}`);
-                }
-                return true;
-            };
-
-            try {
-                return await tryPost(isJwt);
-            } catch (e1) {
-                return await tryPost(!isJwt);
-            }
-        };
-
-        // =========================================================================
-        // OMNI-SYNC ENGINE V3: PENARIKAN & PENGIRIMAN MULTI-TABEL SUPABASE
-        // Mengatasi masalah data membeku di tanggal 11 November (80 Log) dengan memindai
-        // seluruh baris di app_cloud_db, app_state, riwayat_presensi, dan jurnal_harian
-        // =========================================================================
-        window.directRestGetQuery = async function(queryPath) {
-            const creds = window.getSupabaseCredentials();
-            if (!creds || !creds.url || !creds.key) return null;
-            const baseUrl = String(creds.url || "").trim().replace(/\/+$/, "");
-            const endpoint = `${baseUrl}/rest/v1/${queryPath}`;
-            const cleanKey = String(creds.key || "").trim();
-            const isJwt = cleanKey.startsWith("eyJ");
-
-            const tryGet = async (withBearer) => {
-                const headers = {
-                    "apikey": cleanKey,
-                    "Accept": "application/json"
-                };
-                if (withBearer) headers["Authorization"] = `Bearer ${cleanKey}`;
-                const resp = await fetch(endpoint, {
-                    method: "GET",
-                    headers: headers,
-                    mode: "cors",
-                    cache: "no-store"
-                });
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                return await resp.json();
-            };
-
-            try {
-                return await tryGet(isJwt);
-            } catch (e1) {
-                try {
-                    return await tryGet(!isJwt);
-                } catch (e2) {
-                    return null;
-                }
-            }
-        };
-
-        // Fungsi Pemindai Total Seluruh Tabel Supabase menggunakan SDK Resmi + REST Fallback
-        window.omniScanSeluruhDataPresensiDanJurnalCloud = async function() {
-            let allCloudDbRows = [];
-            let allSqlPresensiRows = [];
-            let allSqlJurnalRows = [];
-            let appStateRow = null;
-
-            // 1. Gunakan Supabase SDK Resmi terlebih dahulu (paling stabil untuk sb_publishable_...)
-            if (window.supabaseClient) {
-                try {
-                    const [resCloudDb, resState, resSqlAbs, resSqlJur] = await Promise.all([
-                        window.supabaseClient.from('app_cloud_db').select('id, payload, updated_at').limit(2500),
-                        window.supabaseClient.from('app_state').select('id, payload, updated_at').eq('id', 1).maybeSingle(),
-                        window.supabaseClient.from('riwayat_presensi').select('*').limit(2500),
-                        window.supabaseClient.from('jurnal_harian').select('*').limit(2500)
-                    ]);
-                    if (resCloudDb && Array.isArray(resCloudDb.data)) allCloudDbRows = resCloudDb.data;
-                    if (resState && resState.data) appStateRow = resState.data;
-                    if (resSqlAbs && Array.isArray(resSqlAbs.data)) allSqlPresensiRows = resSqlAbs.data;
-                    if (resSqlJur && Array.isArray(resSqlJur.data)) allSqlJurnalRows = resSqlJur.data;
-                } catch (eSdk) {}
-            }
-
-            // 2. Jika SDK belum mengembalikan baris, gunakan Direct REST Fallback
-            if (allCloudDbRows.length === 0) {
-                const rowsRest = await window.directRestGetQuery('app_cloud_db?select=id,payload,updated_at&limit=2500').catch(() => null);
-                if (Array.isArray(rowsRest)) allCloudDbRows = rowsRest;
-            }
-            if (!appStateRow) {
-                appStateRow = await window.directRestFetchRow('app_state', 'id', 1).catch(() => null);
-            }
-            if (allSqlPresensiRows.length === 0) {
-                const rowsAbsRest = await window.directRestGetQuery('riwayat_presensi?select=*&limit=2500').catch(() => null);
-                if (Array.isArray(rowsAbsRest)) allSqlPresensiRows = rowsAbsRest;
-            }
-            if (allSqlJurnalRows.length === 0) {
-                const rowsJurRest = await window.directRestGetQuery('jurnal_harian?select=*&limit=2500').catch(() => null);
-                if (Array.isArray(rowsJurRest)) allSqlJurnalRows = rowsJurRest;
-            }
-
-            let foundAbsensi = [];
-            let foundJurnal = [];
-
-            const extractFromPayload = (p, rowUpdatedAt = null) => {
-                if (!p || typeof p !== 'object') return;
-                if (Array.isArray(p.absensi)) {
-                    p.absensi.forEach(item => {
-                        if (item && typeof item === 'object') {
-                            if (!item.tanggal && rowUpdatedAt) {
-                                const conv = window.timestampToWitaDateAndTime(rowUpdatedAt);
-                                if (conv && conv.tanggal) item.tanggal = conv.tanggal;
-                            }
-                            foundAbsensi.push(item);
-                        }
-                    });
-                }
-                if (Array.isArray(p.riwayat_presensi)) {
-                    foundAbsensi.push(...window.konversiBarisRiwayatPresensiKeAbsensi(p.riwayat_presensi));
-                }
-                if (Array.isArray(p.jurnal)) {
-                    p.jurnal.forEach(item => {
-                        if (item && typeof item === 'object') {
-                            if (!item.tanggal && rowUpdatedAt) {
-                                const conv = window.timestampToWitaDateAndTime(rowUpdatedAt);
-                                if (conv && conv.tanggal) item.tanggal = conv.tanggal;
-                            }
-                            foundJurnal.push(item);
-                        }
-                    });
-                }
-                if (Array.isArray(p.jurnal_harian)) {
-                    foundJurnal.push(...window.konversiBarisJurnalHarianKeJurnal(p.jurnal_harian));
-                }
-
-                // Jika payload itu sendiri adalah objek item presensi tunggal
-                if (p.nama && (p.tipe_absen || p.jam) && !Array.isArray(p.siswa)) {
-                    foundAbsensi.push(p);
-                } else if (p.nama_siswa && (p.waktu_masuk || p.tanggal_siklus)) {
-                    foundAbsensi.push(...window.konversiBarisRiwayatPresensiKeAbsensi([p]));
-                }
-
-                // Jika payload itu sendiri adalah objek item jurnal tunggal
-                if (p.siswa && p.kegiatan && !Array.isArray(p.siswa)) {
-                    foundJurnal.push(p);
-                } else if (p.nama_siswa && p.uraian_kegiatan) {
-                    foundJurnal.push(...window.konversiBarisJurnalHarianKeJurnal([p]));
-                }
-            };
-
-            if (appStateRow && appStateRow.payload) {
-                extractFromPayload(appStateRow.payload, appStateRow.updated_at);
-            }
-            allCloudDbRows.forEach(row => {
-                if (row && row.payload) extractFromPayload(row.payload, row.updated_at);
-            });
-            if (allSqlPresensiRows.length > 0) {
-                foundAbsensi.push(...window.konversiBarisRiwayatPresensiKeAbsensi(allSqlPresensiRows));
-            }
-            if (allSqlJurnalRows.length > 0) {
-                foundJurnal.push(...window.konversiBarisJurnalHarianKeJurnal(allSqlJurnalRows));
-            }
-
-            // Bersihkan base64 dari memori & normalisasi tanggal setiap item
-            const cleanAbsensiList = foundAbsensi.filter(a => a && a.nama).map(a => {
-                const copy = Object.assign({}, a);
-                copy.tanggal = window.normalizeTanggalStr(copy.tanggal, copy.id) || window.getTodayLocalWitaStr();
-                if (copy.foto_selfie && copy.foto_selfie.startsWith('data:')) copy.foto_selfie = "";
-                if (copy.foto_url && copy.foto_url.startsWith('data:')) copy.foto_url = "";
-                return copy;
-            });
-
-            const cleanJurnalList = foundJurnal.filter(j => j && j.siswa && j.kegiatan).map(j => {
-                const copy = Object.assign({}, j);
-                copy.tanggal = window.normalizeTanggalStr(copy.tanggal, copy.id) || window.getTodayLocalWitaStr();
-                return copy;
-            });
-
-            if (cleanAbsensiList.length > 0) {
-                window.cloudState.absensi = window.mergeUniqueArrayById(
-                    window.cloudState.absensi || [],
-                    cleanAbsensiList,
-                    (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen || 'Masuk'}`
-                );
-            }
-
-            if (cleanJurnalList.length > 0) {
-                window.cloudState.jurnal = window.mergeUniqueArrayById(
-                    window.cloudState.jurnal || [],
-                    cleanJurnalList,
-                    (j) => `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
-                );
-            }
-
-            try {
-                const cleanSnap = window.getSanitizedCloudPayload();
-                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cleanSnap));
-            } catch (e) {}
-
-            return {
-                totalAbsensi: (window.cloudState.absensi || []).length,
-                totalJurnal: (window.cloudState.jurnal || []).length
             };
         };
 
@@ -11858,6 +11589,10 @@
                                 📅 ${tgl} (${cnt} Log)
                             </button>`;
                         }).join('')}
+                    </div>
+                    <div style="padding-top:6px; border-top:1px dashed #bae6fd; font-size:10px; color:#0369a1; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                        <span>📡 <b>Status Pemindaian Lintas Server:</b> Server Utama (PMX): <b>${window.lastClusterDiagnosticInfo?.pmxAbsensi || 0} Log</b> &bull; Server Lama (TOBY): <b>${window.lastClusterDiagnosticInfo?.tobyAbsensi || 0} Log</b> &bull; Baris CloudDB: <b>${window.lastClusterDiagnosticInfo?.cloudDbRows || 0}</b></span>
+                        <span style="color:#15803d; font-weight:850;">Update: ${window.lastClusterDiagnosticInfo?.lastScanTime || 'Realtime'}</span>
                     </div>
                     ` : ''}
 
