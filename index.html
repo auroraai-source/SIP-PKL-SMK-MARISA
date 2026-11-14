@@ -1766,7 +1766,20 @@
             const payload = window.getSanitizedCloudPayload();
             try {
                 localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(payload));
-                localStorage.setItem(STORAGE_KEY_VAULT, JSON.stringify(payload));
+            } catch(eQuota) {
+                // Jika kuota localStorage penuh (di atas 80 log karena cache lama), bersihkan residu foto base64 & vault ganda agar penyimpanan tidak pernah terkunci di 80 log!
+                try {
+                    localStorage.removeItem(STORAGE_KEY_VAULT);
+                    if (Array.isArray(payload.absensi)) {
+                        payload.absensi.forEach(a => {
+                            if (a && a.foto_selfie && a.foto_selfie.startsWith('data:')) a.foto_selfie = "";
+                            if (a && a.foto_url && a.foto_url.startsWith('data:')) a.foto_url = "";
+                        });
+                    }
+                    localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(payload));
+                } catch(e2) {}
+            }
+            try {
                 if (Array.isArray(payload.penempatan)) {
                     localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(payload.penempatan));
                 }
@@ -2670,6 +2683,19 @@
         };
 
         window.directRestFetchRow = async function(tableName, idColumn, idValue) {
+            // PRIORITAS 1: Gunakan Supabase JS SDK resmi (Paling kompatibel dengan sb_publishable_ key)
+            if (window.supabaseClient) {
+                try {
+                    const { data, error } = await window.supabaseClient
+                        .from(tableName)
+                        .select('payload, updated_at')
+                        .eq(idColumn, idValue)
+                        .maybeSingle();
+                    if (!error && data) return data;
+                } catch (sdkErr) {}
+            }
+
+            // PRIORITAS 2: Fallback Direct REST Fetch
             const creds = window.getSupabaseCredentials();
             const baseUrl = String(creds.url || "").trim().replace(/\/+$/, "");
             const cleanKey = String(creds.key || "").trim();
@@ -2706,6 +2732,17 @@
         };
 
         window.directRestUpsertRow = async function(tableName, rowObject, conflictColumn) {
+            // PRIORITAS 1: Gunakan Supabase JS SDK resmi (Menjamin 100% tembus untuk sb_publishable_ key)
+            if (window.supabaseClient) {
+                try {
+                    const { error } = await window.supabaseClient
+                        .from(tableName)
+                        .upsert(rowObject, { onConflict: conflictColumn || 'id' });
+                    if (!error) return true;
+                } catch (sdkErr) {}
+            }
+
+            // PRIORITAS 2: Fallback Direct REST Upsert
             const creds = window.getSupabaseCredentials();
             const baseUrl = String(creds.url || "").trim().replace(/\/+$/, "");
             const cleanKey = String(creds.key || "").trim();
@@ -2743,9 +2780,9 @@
         };
 
         // =========================================================================
-        // PENARIKAN & PENGIRIMAN MULTI-TABEL SUPABASE (riwayat_presensi, jurnal_harian, app_cloud_db)
-        // Memulihkan seluruh riwayat tanggal 12, 13, 14 November dst. yang tersimpan di tabel SQL
-        // maupun baris individual app_cloud_db agar 100% sinkron secara realtime di semua ekosistem
+        // OMNI-SYNC ENGINE V3: PENARIKAN & PENGIRIMAN MULTI-TABEL SUPABASE
+        // Mengatasi masalah data membeku di tanggal 11 November (80 Log) dengan memindai
+        // seluruh baris di app_cloud_db, app_state, riwayat_presensi, dan jurnal_harian
         // =========================================================================
         window.directRestGetQuery = async function(queryPath) {
             const creds = window.getSupabaseCredentials();
@@ -2780,6 +2817,150 @@
                     return null;
                 }
             }
+        };
+
+        // Fungsi Pemindai Total Seluruh Tabel Supabase menggunakan SDK Resmi + REST Fallback
+        window.omniScanSeluruhDataPresensiDanJurnalCloud = async function() {
+            let allCloudDbRows = [];
+            let allSqlPresensiRows = [];
+            let allSqlJurnalRows = [];
+            let appStateRow = null;
+
+            // 1. Gunakan Supabase SDK Resmi terlebih dahulu (paling stabil untuk sb_publishable_...)
+            if (window.supabaseClient) {
+                try {
+                    const [resCloudDb, resState, resSqlAbs, resSqlJur] = await Promise.all([
+                        window.supabaseClient.from('app_cloud_db').select('id, payload, updated_at').limit(2500),
+                        window.supabaseClient.from('app_state').select('id, payload, updated_at').eq('id', 1).maybeSingle(),
+                        window.supabaseClient.from('riwayat_presensi').select('*').limit(2500),
+                        window.supabaseClient.from('jurnal_harian').select('*').limit(2500)
+                    ]);
+                    if (resCloudDb && Array.isArray(resCloudDb.data)) allCloudDbRows = resCloudDb.data;
+                    if (resState && resState.data) appStateRow = resState.data;
+                    if (resSqlAbs && Array.isArray(resSqlAbs.data)) allSqlPresensiRows = resSqlAbs.data;
+                    if (resSqlJur && Array.isArray(resSqlJur.data)) allSqlJurnalRows = resSqlJur.data;
+                } catch (eSdk) {}
+            }
+
+            // 2. Jika SDK belum mengembalikan baris, gunakan Direct REST Fallback
+            if (allCloudDbRows.length === 0) {
+                const rowsRest = await window.directRestGetQuery('app_cloud_db?select=id,payload,updated_at&limit=2500').catch(() => null);
+                if (Array.isArray(rowsRest)) allCloudDbRows = rowsRest;
+            }
+            if (!appStateRow) {
+                appStateRow = await window.directRestFetchRow('app_state', 'id', 1).catch(() => null);
+            }
+            if (allSqlPresensiRows.length === 0) {
+                const rowsAbsRest = await window.directRestGetQuery('riwayat_presensi?select=*&limit=2500').catch(() => null);
+                if (Array.isArray(rowsAbsRest)) allSqlPresensiRows = rowsAbsRest;
+            }
+            if (allSqlJurnalRows.length === 0) {
+                const rowsJurRest = await window.directRestGetQuery('jurnal_harian?select=*&limit=2500').catch(() => null);
+                if (Array.isArray(rowsJurRest)) allSqlJurnalRows = rowsJurRest;
+            }
+
+            let foundAbsensi = [];
+            let foundJurnal = [];
+
+            const extractFromPayload = (p, rowUpdatedAt = null) => {
+                if (!p || typeof p !== 'object') return;
+                if (Array.isArray(p.absensi)) {
+                    p.absensi.forEach(item => {
+                        if (item && typeof item === 'object') {
+                            if (!item.tanggal && rowUpdatedAt) {
+                                const conv = window.timestampToWitaDateAndTime(rowUpdatedAt);
+                                if (conv && conv.tanggal) item.tanggal = conv.tanggal;
+                            }
+                            foundAbsensi.push(item);
+                        }
+                    });
+                }
+                if (Array.isArray(p.riwayat_presensi)) {
+                    foundAbsensi.push(...window.konversiBarisRiwayatPresensiKeAbsensi(p.riwayat_presensi));
+                }
+                if (Array.isArray(p.jurnal)) {
+                    p.jurnal.forEach(item => {
+                        if (item && typeof item === 'object') {
+                            if (!item.tanggal && rowUpdatedAt) {
+                                const conv = window.timestampToWitaDateAndTime(rowUpdatedAt);
+                                if (conv && conv.tanggal) item.tanggal = conv.tanggal;
+                            }
+                            foundJurnal.push(item);
+                        }
+                    });
+                }
+                if (Array.isArray(p.jurnal_harian)) {
+                    foundJurnal.push(...window.konversiBarisJurnalHarianKeJurnal(p.jurnal_harian));
+                }
+
+                // Jika payload itu sendiri adalah objek item presensi tunggal
+                if (p.nama && (p.tipe_absen || p.jam) && !Array.isArray(p.siswa)) {
+                    foundAbsensi.push(p);
+                } else if (p.nama_siswa && (p.waktu_masuk || p.tanggal_siklus)) {
+                    foundAbsensi.push(...window.konversiBarisRiwayatPresensiKeAbsensi([p]));
+                }
+
+                // Jika payload itu sendiri adalah objek item jurnal tunggal
+                if (p.siswa && p.kegiatan && !Array.isArray(p.siswa)) {
+                    foundJurnal.push(p);
+                } else if (p.nama_siswa && p.uraian_kegiatan) {
+                    foundJurnal.push(...window.konversiBarisJurnalHarianKeJurnal([p]));
+                }
+            };
+
+            if (appStateRow && appStateRow.payload) {
+                extractFromPayload(appStateRow.payload, appStateRow.updated_at);
+            }
+            allCloudDbRows.forEach(row => {
+                if (row && row.payload) extractFromPayload(row.payload, row.updated_at);
+            });
+            if (allSqlPresensiRows.length > 0) {
+                foundAbsensi.push(...window.konversiBarisRiwayatPresensiKeAbsensi(allSqlPresensiRows));
+            }
+            if (allSqlJurnalRows.length > 0) {
+                foundJurnal.push(...window.konversiBarisJurnalHarianKeJurnal(allSqlJurnalRows));
+            }
+
+            // Bersihkan base64 dari memori & normalisasi tanggal setiap item
+            const cleanAbsensiList = foundAbsensi.filter(a => a && a.nama).map(a => {
+                const copy = Object.assign({}, a);
+                copy.tanggal = window.normalizeTanggalStr(copy.tanggal, copy.id) || window.getTodayLocalWitaStr();
+                if (copy.foto_selfie && copy.foto_selfie.startsWith('data:')) copy.foto_selfie = "";
+                if (copy.foto_url && copy.foto_url.startsWith('data:')) copy.foto_url = "";
+                return copy;
+            });
+
+            const cleanJurnalList = foundJurnal.filter(j => j && j.siswa && j.kegiatan).map(j => {
+                const copy = Object.assign({}, j);
+                copy.tanggal = window.normalizeTanggalStr(copy.tanggal, copy.id) || window.getTodayLocalWitaStr();
+                return copy;
+            });
+
+            if (cleanAbsensiList.length > 0) {
+                window.cloudState.absensi = window.mergeUniqueArrayById(
+                    window.cloudState.absensi || [],
+                    cleanAbsensiList,
+                    (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen || 'Masuk'}`
+                );
+            }
+
+            if (cleanJurnalList.length > 0) {
+                window.cloudState.jurnal = window.mergeUniqueArrayById(
+                    window.cloudState.jurnal || [],
+                    cleanJurnalList,
+                    (j) => `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
+                );
+            }
+
+            try {
+                const cleanSnap = window.getSanitizedCloudPayload();
+                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cleanSnap));
+            } catch (e) {}
+
+            return {
+                totalAbsensi: (window.cloudState.absensi || []).length,
+                totalJurnal: (window.cloudState.jurnal || []).length
+            };
         };
 
         // Konversi baris dari tabel SQL `riwayat_presensi` menjadi item `absensi` standar (Masuk & Pulang)
@@ -2951,13 +3132,12 @@
                 const tglNorm = window.normalizeTanggalStr(itemJurnal.tanggal, itemJurnal.id) || window.getTodayLocalWitaStr();
                 const sKey = window.normalizeTextCompact(itemJurnal.siswa);
                 const rowId = itemJurnal.id || `jh_${tglNorm}_${sKey}`;
-
                 const sqlRow = {
                     id: rowId,
                     siswa_id: String(itemJurnal.user_id || itemJurnal.nis || itemJurnal.siswa),
                     nama_siswa: itemJurnal.siswa,
                     kelas: itemJurnal.kelas || "-",
-                    industri_id: itemJurnal.industri || "DUDI Mitra",
+                    industri_id: itemJurnal.industri || "Belum Ditentukan",
                     pembimbing_id: itemJurnal.guru || "-",
                     tanggal_kegiatan: tglNorm,
                     uraian_kegiatan: itemJurnal.kegiatan || "-",
@@ -2966,7 +3146,6 @@
                     status_validasi: itemJurnal.status || "Menunggu Verifikasi",
                     catatan_pembimbing: itemJurnal.catatan_pembimbing || ""
                 };
-
                 await Promise.all([
                     window.directRestUpsertRow('jurnal_harian', sqlRow, 'id').catch(() => {}),
                     window.directRestUpsertRow('app_cloud_db', {
@@ -2980,23 +3159,49 @@
             }
         };
 
-        // Saluran Khusus Log Presensi Terpusat di Supabase (app_cloud_db + riwayat_presensi + baris atomik)
+        // Saluran Khusus Log Presensi Terpusat di Supabase (app_cloud_db + Kantong Harian + riwayat_presensi + baris atomik)
         // Menjamin presensi dari puluhan HP siswa tidak pernah hilang/tertimpa dan langsung muncul di Admin, Guru, Industri & Orang Tua
         window.simpanLogPresensiKhususKeSupabase = async function(newAbsenItem = null) {
             try {
+                let cleanItem = null;
                 if (newAbsenItem) {
-                    await window.upsertItemPresensiKeTabelSql(newAbsenItem).catch(() => {});
+                    cleanItem = Object.assign({}, newAbsenItem);
+                    cleanItem.tanggal = window.normalizeTanggalStr(cleanItem.tanggal, cleanItem.id) || window.getTodayLocalWitaStr();
+                    if (cleanItem.foto_selfie && cleanItem.foto_selfie.startsWith('data:')) cleanItem.foto_selfie = "";
+                    if (cleanItem.foto_url && cleanItem.foto_url.startsWith('data:')) cleanItem.foto_url = "";
+                    await window.upsertItemPresensiKeTabelSql(cleanItem).catch(() => {});
                 }
+
+                // 1. Simpan ke Kantong Harian Khusus Tanggal tersebut (misal: absensi_day_2026-11-14)
+                // Ini mencegah tabel utama yang besar memblokir presensi hari baru!
+                const targetDay = cleanItem ? cleanItem.tanggal : window.getTodayLocalWitaStr();
+                const dayBucketId = `absensi_day_${targetDay}`;
+                let rowDay = await window.directRestFetchRow('app_cloud_db', 'id', dayBucketId).catch(() => null);
+                let remoteDayList = (rowDay && rowDay.payload && Array.isArray(rowDay.payload.absensi)) ? rowDay.payload.absensi : [];
+                let localDayList = (window.cloudState.absensi || []).filter(a => a && window.normalizeTanggalStr(a.tanggal, a.id) === targetDay);
+                if (cleanItem) localDayList.unshift(cleanItem);
+
+                const mergedDayList = window.mergeUniqueArrayById(
+                    localDayList,
+                    remoteDayList,
+                    (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen || 'Masuk'}`
+                );
+                await window.directRestUpsertRow('app_cloud_db', {
+                    id: dayBucketId,
+                    payload: { updatedAt: Date.now(), tanggal: targetDay, absensi: mergedDayList }
+                }, 'id').catch(() => {});
+
+                // 2. Simpan juga ke absensi_master_log
                 let rowAbs = await window.directRestFetchRow('app_cloud_db', 'id', 'absensi_master_log').catch(() => null);
                 let remoteList = (rowAbs && rowAbs.payload && Array.isArray(rowAbs.payload.absensi)) ? rowAbs.payload.absensi : [];
                 let localList = Array.isArray(window.cloudState.absensi) ? window.cloudState.absensi : [];
-                if (newAbsenItem) {
-                    localList = [newAbsenItem, ...localList];
+                if (cleanItem) {
+                    localList = [cleanItem, ...localList];
                 }
                 const mergedAbsensi = window.mergeUniqueArrayById(
                     localList,
                     remoteList,
-                    (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen}`
+                    (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen || 'Masuk'}`
                 );
                 window.cloudState.absensi = mergedAbsensi;
                 const absPayload = {
@@ -3021,82 +3226,47 @@
 
         window.tarikLogPresensiKhususDariSupabase = async function() {
             try {
-                const [rowAbs, sqlRiwayatRows, cloudExtraRows] = await Promise.all([
-                    window.directRestFetchRow('app_cloud_db', 'id', 'absensi_master_log').catch(() => null),
-                    window.directRestGetQuery('riwayat_presensi?select=*&order=tanggal_siklus.desc&limit=2000').catch(() => null),
-                    window.directRestGetQuery('app_cloud_db?select=id,payload&limit=1000').catch(() => null)
-                ]);
-
-                let collectedAbsensi = Array.isArray(window.cloudState.absensi) ? [...window.cloudState.absensi] : [];
-
-                if (rowAbs && rowAbs.payload && Array.isArray(rowAbs.payload.absensi)) {
-                    collectedAbsensi = window.mergeUniqueArrayById(
-                        collectedAbsensi,
-                        rowAbs.payload.absensi,
-                        (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen}`
-                    );
-                }
-
-                // Gabungkan seluruh data dari tabel SQL `riwayat_presensi` (Memulihkan tanggal 12, 13, 14 November dst.)
-                if (Array.isArray(sqlRiwayatRows) && sqlRiwayatRows.length > 0) {
-                    const convertedSqlAbs = window.konversiBarisRiwayatPresensiKeAbsensi(sqlRiwayatRows);
-                    collectedAbsensi = window.mergeUniqueArrayById(
-                        collectedAbsensi,
-                        convertedSqlAbs,
-                        (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen}`
-                    );
-                }
-
-                // Gabungkan seluruh baris presensi atomik (`absitem_*` / `abslog_*` / dll.) yang ada di `app_cloud_db`
-                if (Array.isArray(cloudExtraRows) && cloudExtraRows.length > 0) {
-                    const extraAbsList = [];
-                    cloudExtraRows.forEach(r => {
-                        if (!r || !r.payload) return;
-                        const p = r.payload;
-                        if (Array.isArray(p.absensi)) {
-                            extraAbsList.push(...p.absensi);
-                        } else if (Array.isArray(p.riwayat_presensi)) {
-                            extraAbsList.push(...window.konversiBarisRiwayatPresensiKeAbsensi(p.riwayat_presensi));
-                        } else if (p.nama && (p.tipe_absen || p.jam)) {
-                            extraAbsList.push(p);
-                        } else if (p.nama_siswa && (p.waktu_masuk || p.tanggal_siklus)) {
-                            extraAbsList.push(...window.konversiBarisRiwayatPresensiKeAbsensi([p]));
-                        }
-                    });
-                    if (extraAbsList.length > 0) {
-                        collectedAbsensi = window.mergeUniqueArrayById(
-                            collectedAbsensi,
-                            extraAbsList,
-                            (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen}`
-                        );
-                    }
-                }
-
-                // Normalisasi setiap atribut tanggal pada seluruh item absensi
-                collectedAbsensi.forEach(a => {
-                    if (a) {
-                        a.tanggal = window.normalizeTanggalStr(a.tanggal, a.id) || window.getTodayLocalWitaStr();
-                    }
-                });
-
-                window.cloudState.absensi = collectedAbsensi;
+                await window.omniScanSeluruhDataPresensiDanJurnalCloud();
                 return true;
             } catch (e) {}
             return false;
         };
 
-        // Saluran Khusus Log Jurnal Harian Terpusat di Supabase (app_cloud_db + jurnal_harian + baris atomik)
+        // Saluran Khusus Log Jurnal Harian Terpusat di Supabase (app_cloud_db + Kantong Harian + jurnal_harian + baris atomik)
         // Menjamin jurnal yang dikirim siswa langsung terintegrasi ke Guru, Industri, Orang Tua, Kepsek & Admin/Panitia
         window.simpanLogJurnalKhususKeSupabase = async function(newJurnalItem = null) {
             try {
+                let cleanItem = null;
                 if (newJurnalItem) {
-                    await window.upsertItemJurnalKeTabelSql(newJurnalItem).catch(() => {});
+                    cleanItem = Object.assign({}, newJurnalItem);
+                    cleanItem.tanggal = window.normalizeTanggalStr(cleanItem.tanggal, cleanItem.id) || window.getTodayLocalWitaStr();
+                    await window.upsertItemJurnalKeTabelSql(cleanItem).catch(() => {});
                 }
+
+                // 1. Simpan ke Kantong Jurnal Harian Khusus Tanggal tersebut (misal: jurnal_day_2026-11-14)
+                const targetDay = cleanItem ? cleanItem.tanggal : window.getTodayLocalWitaStr();
+                const dayBucketId = `jurnal_day_${targetDay}`;
+                let rowDay = await window.directRestFetchRow('app_cloud_db', 'id', dayBucketId).catch(() => null);
+                let remoteDayList = (rowDay && rowDay.payload && Array.isArray(rowDay.payload.jurnal)) ? rowDay.payload.jurnal : [];
+                let localDayList = (window.cloudState.jurnal || []).filter(j => j && window.normalizeTanggalStr(j.tanggal, j.id) === targetDay);
+                if (cleanItem) localDayList.unshift(cleanItem);
+
+                const mergedDayList = window.mergeUniqueArrayById(
+                    localDayList,
+                    remoteDayList,
+                    (j) => `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
+                );
+                await window.directRestUpsertRow('app_cloud_db', {
+                    id: dayBucketId,
+                    payload: { updatedAt: Date.now(), tanggal: targetDay, jurnal: mergedDayList }
+                }, 'id').catch(() => {});
+
+                // 2. Simpan ke jurnal_master_log
                 let rowJur = await window.directRestFetchRow('app_cloud_db', 'id', 'jurnal_master_log').catch(() => null);
                 let remoteList = (rowJur && rowJur.payload && Array.isArray(rowJur.payload.jurnal)) ? rowJur.payload.jurnal : [];
                 let localList = Array.isArray(window.cloudState.jurnal) ? window.cloudState.jurnal : [];
-                if (newJurnalItem) {
-                    localList = [newJurnalItem, ...localList];
+                if (cleanItem) {
+                    localList = [cleanItem, ...localList];
                 }
                 const mergedJurnal = window.mergeUniqueArrayById(
                     localList,
@@ -3126,64 +3296,7 @@
 
         window.tarikLogJurnalKhususDariSupabase = async function() {
             try {
-                const [rowJur, sqlJurnalRows, cloudExtraRows] = await Promise.all([
-                    window.directRestFetchRow('app_cloud_db', 'id', 'jurnal_master_log').catch(() => null),
-                    window.directRestGetQuery('jurnal_harian?select=*&order=tanggal_kegiatan.desc&limit=2000').catch(() => null),
-                    window.directRestGetQuery('app_cloud_db?select=id,payload&limit=1000').catch(() => null)
-                ]);
-
-                let collectedJurnal = Array.isArray(window.cloudState.jurnal) ? [...window.cloudState.jurnal] : [];
-
-                if (rowJur && rowJur.payload && Array.isArray(rowJur.payload.jurnal)) {
-                    collectedJurnal = window.mergeUniqueArrayById(
-                        collectedJurnal,
-                        rowJur.payload.jurnal,
-                        (j) => `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
-                    );
-                }
-
-                // Gabungkan seluruh data dari tabel SQL `jurnal_harian`
-                if (Array.isArray(sqlJurnalRows) && sqlJurnalRows.length > 0) {
-                    const convertedSqlJur = window.konversiBarisJurnalHarianKeJurnal(sqlJurnalRows);
-                    collectedJurnal = window.mergeUniqueArrayById(
-                        collectedJurnal,
-                        convertedSqlJur,
-                        (j) => `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
-                    );
-                }
-
-                // Gabungkan seluruh baris jurnal atomik (`juritem_*` / `jurlog_*` / dll.) yang ada di `app_cloud_db`
-                if (Array.isArray(cloudExtraRows) && cloudExtraRows.length > 0) {
-                    const extraJurList = [];
-                    cloudExtraRows.forEach(r => {
-                        if (!r || !r.payload) return;
-                        const p = r.payload;
-                        if (Array.isArray(p.jurnal)) {
-                            extraJurList.push(...p.jurnal);
-                        } else if (Array.isArray(p.jurnal_harian)) {
-                            extraJurList.push(...window.konversiBarisJurnalHarianKeJurnal(p.jurnal_harian));
-                        } else if (p.siswa && p.kegiatan) {
-                            extraJurList.push(p);
-                        } else if (p.nama_siswa && p.uraian_kegiatan) {
-                            extraJurList.push(...window.konversiBarisJurnalHarianKeJurnal([p]));
-                        }
-                    });
-                    if (extraJurList.length > 0) {
-                        collectedJurnal = window.mergeUniqueArrayById(
-                            collectedJurnal,
-                            extraJurList,
-                            (j) => `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
-                        );
-                    }
-                }
-
-                collectedJurnal.forEach(j => {
-                    if (j) {
-                        j.tanggal = window.normalizeTanggalStr(j.tanggal, j.id) || window.getTodayLocalWitaStr();
-                    }
-                });
-
-                window.cloudState.jurnal = collectedJurnal;
+                await window.omniScanSeluruhDataPresensiDanJurnalCloud();
                 return true;
             } catch (e) {}
             return false;
@@ -7861,15 +7974,26 @@
         };
 
         window.selectedRekapJurnalDate = "";
+        window.selectedRekapJurnalViewMode = "tanggal"; // 'tanggal' | 'belum' | 'semua'
         window.lastOpenedRekapJurnalFeature = "";
 
         window.ubahTanggalFilterRekapJurnal = function(tglBaru) {
             window.selectedRekapJurnalDate = window.normalizeTanggalStr(tglBaru) || window.getTodayLocalWitaStr();
+            window.selectedRekapJurnalViewMode = "tanggal";
+            window.openFeature("rekap-jurnal", "Rekap Jurnal Siswa", true);
+        };
+
+        window.ubahModeTampilanRekapJurnal = function(modeBaru) {
+            window.selectedRekapJurnalViewMode = modeBaru || "tanggal";
+            if (modeBaru === "hari_ini") {
+                window.selectedRekapJurnalDate = window.getTodayLocalWitaStr();
+                window.selectedRekapJurnalViewMode = "tanggal";
+            }
             window.openFeature("rekap-jurnal", "Rekap Jurnal Siswa", true);
         };
 
         window.segarkanDataJurnalDariCloud = async function() {
-            await window.tarikLogJurnalKhususDariSupabase();
+            await window.omniScanSeluruhDataPresensiDanJurnalCloud();
             await window.tarikDataDariCloud(true, true);
             window.openFeature(window.cloudState.currentFeature || "rekap-jurnal", "Rekap Jurnal Siswa", true);
         };
@@ -7882,11 +8006,11 @@
             const todayStr = window.getTodayLocalWitaStr();
             const isAdminKepsekPanitia = (role === 'admin' || role === 'panitia' || role === 'kepsek');
 
-            // Auto-pull dari Supabase setiap kali halaman Rekap Jurnal dibuka (cooldown 8 detik agar ringan)
-            if (Date.now() - (window.lastAutoPullRekapJurnalAt || 0) > 8000) {
+            // Auto-pull menyeluruh dengan Omni-Scan setiap kali halaman Rekap Jurnal dibuka
+            if (Date.now() - (window.lastAutoPullRekapJurnalAt || 0) > 6000) {
                 window.lastAutoPullRekapJurnalAt = Date.now();
                 Promise.all([
-                    window.tarikLogJurnalKhususDariSupabase(),
+                    window.omniScanSeluruhDataPresensiDanJurnalCloud(),
                     window.tarikDataDariCloud(true, true)
                 ]).then(() => {
                     if (window.cloudState.currentFeature === 'rekap-jurnal') {
@@ -7927,24 +8051,16 @@
                 });
             }
 
-            // PERILAKU BERDASARKAN ROLE:
-            // - Admin / Panitia PKL / Kepsek: DIRESET SETIAP HARI (Default tampil HANYA jurnal hari ini, riwayat hari sebelumnya tersimpan rapi berdasarkan tanggal).
-            // - Guru Pembimbing & Instansi Industri: TIDAK DIRESET HARIAN (Tampil terus seluruh riwayat jurnal dari hari ke hari).
-            let listToRender = [];
-            let activeDate = todayStr;
-
-            if (isAdminKepsekPanitia) {
-                if (!window.selectedRekapJurnalDate || window.lastOpenedRekapJurnalFeature !== 'rekap-jurnal') {
-                    window.selectedRekapJurnalDate = todayStr;
-                    window.lastOpenedRekapJurnalFeature = 'rekap-jurnal';
-                }
-                activeDate = window.selectedRekapJurnalDate;
-                listToRender = allJurnal.filter(j => j && window.normalizeTanggalStr(j.tanggal, j.id) === activeDate);
-            } else {
-                listToRender = [...allJurnal].sort((a, b) => (window.normalizeTanggalStr(b.tanggal, b.id) || '').localeCompare(window.normalizeTanggalStr(a.tanggal, a.id) || ''));
+            if (isAdminKepsekPanitia && (!window.selectedRekapJurnalDate || window.lastOpenedRekapJurnalFeature !== 'rekap-jurnal')) {
+                window.selectedRekapJurnalDate = todayStr;
+                window.selectedRekapJurnalViewMode = "tanggal";
+                window.lastOpenedRekapJurnalFeature = 'rekap-jurnal';
             }
 
-            // Kumpulkan daftar tanggal yang memiliki arsip jurnal tersimpan (untuk pintasan buka arsip di Admin/Panitia)
+            const activeDate = window.selectedRekapJurnalDate || todayStr;
+            const viewMode = isAdminKepsekPanitia ? (window.selectedRekapJurnalViewMode || "tanggal") : "semua";
+
+            // Kumpulkan daftar tanggal yang memiliki arsip jurnal tersimpan + rentang tanggal bulan berjalan (11 s/d hari ini)
             const storedDatesMap = new Map();
             allJurnal.forEach(j => {
                 if (!j) return;
@@ -7953,30 +8069,75 @@
                     storedDatesMap.set(dNorm, (storedDatesMap.get(dNorm) || 0) + 1);
                 }
             });
+
+            // Pastikan tombol tanggal 11, 12, 13, 14 November s/d hari ini selalu muncul agar mudah dicek Panitia PKL
+            const curYm = todayStr.substring(0, 7);
+            const curDayNum = parseInt(todayStr.substring(8, 10), 10) || 14;
+            for (let d = Math.max(1, curDayNum - 5); d <= curDayNum; d++) {
+                const dStr = `${curYm}-${String(d).padStart(2, '0')}`;
+                if (!storedDatesMap.has(dStr)) storedDatesMap.set(dStr, 0);
+            }
             const sortedStoredDates = Array.from(storedDatesMap.keys()).sort((a, b) => b.localeCompare(a));
 
-            let rows = "";
-            listToRender.forEach((j, idx) => {
-                const info = window.getStudentPlacementInfo(j.siswa, j.user_id);
-                const kls = (j.kelas && j.kelas !== '-') ? j.kelas : ((info && info.kelas && info.kelas !== '-') ? info.kelas : '');
-                const kelasBadge = kls ? ` <span style="color:#0284c7; font-weight:850; font-size:11px;">(${kls})</span>` : '';
-                const indName = (j.industri && j.industri !== '-' && j.industri !== 'DUDI Mitra') ? j.industri : (info.industri || '-');
-                const tglNorm = window.normalizeTanggalStr(j.tanggal, j.id) || j.tanggal;
-                rows += `<tr>
-                    <td>${idx + 1}</td>
-                    <td><b>${j.siswa}</b>${kelasBadge}</td>
-                    <td>${indName}</td>
-                    <td><b>${tglNorm}</b></td>
-                    <td style="white-space:normal; min-width:180px;">${j.kegiatan}</td>
-                    <td><span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span></td>
-                </tr>`;
+            const jurnalPadaTanggalAktif = allJurnal.filter(j => j && window.normalizeTanggalStr(j.tanggal, j.id) === activeDate);
+
+            // Hitung siswa yang BELUM mengisi jurnal pada tanggal aktif
+            const semuaSiswaMaster = window.cloudState.siswa || [];
+            const belumIsiJurnalList = semuaSiswaMaster.filter(s => {
+                if (!s || !s.nama) return false;
+                return !jurnalPadaTanggalAktif.some(j => window.isNameMatch(j.siswa, s.nama));
             });
 
+            let listToRender = [];
+            if (!isAdminKepsekPanitia || viewMode === "semua") {
+                listToRender = [...allJurnal].sort((a, b) => (window.normalizeTanggalStr(b.tanggal, b.id) || '').localeCompare(window.normalizeTanggalStr(a.tanggal, a.id) || ''));
+            } else {
+                listToRender = [...jurnalPadaTanggalAktif].sort((a, b) => (a.siswa || '').localeCompare(b.siswa || ''));
+            }
+
+            let rows = "";
+            if (isAdminKepsekPanitia && viewMode === "belum") {
+                belumIsiJurnalList.forEach((s, idx) => {
+                    const info = window.getStudentPlacementInfo(s.nama, s.nis);
+                    const waLink = window.formatNoWaLink(s.noHp, `Halo ${s.nama}, diingatkan oleh Panitia PKL SMKN 1 Marisa untuk segera mengisi dan mengirimkan Jurnal Harian PKL tanggal ${activeDate}.`);
+                    rows += `<tr>
+                        <td>${idx + 1}</td>
+                        <td><b>${s.nama}</b> <span style="color:#0284c7; font-weight:850; font-size:11px;">(${s.kelas || info.kelas || '-'})</span></td>
+                        <td>${info.industri || s.industri || '-'}</td>
+                        <td><b>${activeDate}</b></td>
+                        <td><span class="badge-status badge-red">⚠️ Belum Mengirim Jurnal</span></td>
+                        <td>
+                            ${waLink ? `<a href="${waLink}" target="_blank" class="btn-action btn-emerald" style="text-decoration:none; font-size:10.5px;">📲 Ingatkan WA</a>` : '<span style="color:#94a3b8; font-size:10px;">No WA Kosong</span>'}
+                        </td>
+                    </tr>`;
+                });
+            } else {
+                listToRender.forEach((j, idx) => {
+                    const info = window.getStudentPlacementInfo(j.siswa, j.user_id);
+                    const kls = (j.kelas && j.kelas !== '-') ? j.kelas : ((info && info.kelas && info.kelas !== '-') ? info.kelas : '');
+                    const kelasBadge = kls ? ` <span style="color:#0284c7; font-weight:850; font-size:11px;">(${kls})</span>` : '';
+                    const indName = (j.industri && j.industri !== '-' && j.industri !== 'DUDI Mitra') ? j.industri : (info.industri || '-');
+                    const tglNorm = window.normalizeTanggalStr(j.tanggal, j.id) || j.tanggal;
+                    rows += `<tr>
+                        <td>${idx + 1}</td>
+                        <td><b>${j.siswa}</b>${kelasBadge}</td>
+                        <td>${indName}</td>
+                        <td><b>${tglNorm}</b></td>
+                        <td style="white-space:normal; min-width:180px;">${j.kegiatan}</td>
+                        <td><span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span></td>
+                    </tr>`;
+                });
+            }
+
             const subTitle = isAdminKepsekPanitia
-                ? "SISTEM REKAP JURNAL HARIAN (RESET OTOMATIS SETIAP HARI & ARSIP TERSIMPAN PER TANGGAL)"
+                ? "PUSAT MONITORING & ARSIP JURNAL HARIAN PKL (OMNI-SYNC V3)"
                 : "LOGBOOK BERKELANJUTAN SISWA BIMBINGAN (TERISI TERUS SETIAP HARI TANPA RESET)";
             const mainTitle = isAdminKepsekPanitia
-                ? `📖 Rekap Jurnal Harian PKL (${window.formatTanggalIndoLengkap(activeDate)})`
+                ? (viewMode === "semua"
+                    ? `📖 Seluruh Riwayat Jurnal Semua Tanggal (${allJurnal.length} Total Log)`
+                    : (viewMode === "belum"
+                        ? `⚠️ Daftar Siswa Belum Isi Jurnal (${window.formatTanggalIndoLengkap(activeDate)})`
+                        : `📖 Rekap Jurnal Harian PKL (${window.formatTanggalIndoLengkap(activeDate)})`))
                 : "📖 Rekap Seluruh Jurnal Harian Siswa Bimbingan";
 
             return `
@@ -7987,12 +8148,12 @@
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">${mainTitle}</h3>
                         <p style="font-size:11px; color:#475569; margin-top:2px;">
                             ${isAdminKepsekPanitia
-                                ? `Menampilkan jurnal yang dikirim siswa pada hari/tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>. Saat berganti hari, tabel otomatis di-reset untuk hari baru sedangkan seluruh riwayat jurnal hari sebelumnya tetap tersimpan aman berdasarkan tanggal (${allJurnal.length} total jurnal tersimpan).`
+                                ? `Sistem otomatis mereset lembar harian setiap berganti hari dan menyimpan seluruh arsip tanggal sebelumnya secara utuh (${allJurnal.length} total jurnal terdeteksi di Cloud).`
                                 : `Menampilkan seluruh riwayat jurnal harian siswa bimbingan Anda dari hari ke hari secara berkelanjutan tanpa di-reset harian (${listToRender.length} total jurnal).`}
                         </p>
                     </div>
                     <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-                        <button type="button" onclick="window.unduhExcelRekapJurnal('${isAdminKepsekPanitia ? 'harian' : 'semua'}')" class="btn-action btn-emerald">📊 Export Excel ${isAdminKepsekPanitia ? 'Tanggal Ini' : ''}</button>
+                        <button type="button" onclick="window.unduhExcelRekapJurnal('${isAdminKepsekPanitia && viewMode !== 'semua' ? 'harian' : 'semua'}')" class="btn-action btn-emerald">📊 Export Excel ${isAdminKepsekPanitia && viewMode !== 'semua' ? `(${activeDate})` : 'Semua'}</button>
                         ${isAdminKepsekPanitia ? `
                             <button type="button" onclick="window.unduhExcelRekapJurnal('semua')" class="btn-action btn-amber" style="font-size:11px;">📦 Export Semua Tanggal (${allJurnal.length})</button>
                         ` : ''}
@@ -8000,7 +8161,19 @@
                 </div>
 
                 ${isAdminKepsekPanitia ? `
-                <!-- FILTER HARI/TANGGAL KHUSUS ADMIN, PANITIA & KEPSEK -->
+                <!-- TAB MODE TAMPILAN & FILTER TANGGAL KHUSUS PANITIA PKL / ADMIN / KEPSEK -->
+                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+                    <button type="button" onclick="window.ubahModeTampilanRekapJurnal('tanggal')" class="btn-action" style="padding:8px 12px; font-size:11px; font-weight:900; background:${viewMode === 'tanggal' ? '#0284c7' : '#e0f2fe'}; color:${viewMode === 'tanggal' ? '#ffffff' : '#0369a1'};">
+                        ✅ Sudah Isi Jurnal Tanggal ${activeDate} (${jurnalPadaTanggalAktif.length})
+                    </button>
+                    <button type="button" onclick="window.ubahModeTampilanRekapJurnal('belum')" class="btn-action" style="padding:8px 12px; font-size:11px; font-weight:900; background:${viewMode === 'belum' ? '#dc2626' : '#fee2e2'}; color:${viewMode === 'belum' ? '#ffffff' : '#b91c1c'};">
+                        ⚠️ Belum Isi Jurnal Tanggal ${activeDate} (${belumIsiJurnalList.length})
+                    </button>
+                    <button type="button" onclick="window.ubahModeTampilanRekapJurnal('semua')" class="btn-action" style="padding:8px 12px; font-size:11px; font-weight:900; background:${viewMode === 'semua' ? '#10b981' : '#dcfce7'}; color:${viewMode === 'semua' ? '#ffffff' : '#15803d'};">
+                        🗂️ Tampilkan Semua Tanggal Tanpa Filter (${allJurnal.length} Log)
+                    </button>
+                </div>
+
                 <div style="background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:16px; padding:12px; margin-bottom:12px; display:flex; flex-direction:column; gap:8px;">
                     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                         <span style="font-size:11.5px; font-weight:900; color:#0369a1;">📅 Pilih Hari / Tanggal Jurnal:</span>
@@ -8009,17 +8182,19 @@
                             <button type="button" onclick="window.ubahTanggalFilterRekapJurnal('${todayStr}')" class="btn-action btn-blue" style="padding:6px 10px; font-size:10.5px;">
                                 📍 Kembali ke Hari Ini (${todayStr})
                             </button>
-                        ` : `<span class="badge-status badge-green" style="font-size:10px;">📍 Hari Ini (${listToRender.length} Jurnal Masuk)</span>`}
+                        ` : `<span class="badge-status badge-green" style="font-size:10px;">📍 Siklus Hari Ini (${jurnalPadaTanggalAktif.length} Sudah / ${belumIsiJurnalList.length} Belum)</span>`}
                     </div>
-                    ${sortedStoredDates.length > 0 ? `
                     <div style="padding-top:8px; border-top:1px dashed #bae6fd; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                        <span style="font-size:10.5px; font-weight:850; color:#475569;">🗄️ Arsip Tanggal Tersimpan:</span>
-                        ${sortedStoredDates.slice(0, 10).map(tgl => `
-                            <button type="button" onclick="window.ubahTanggalFilterRekapJurnal('${tgl}')" class="btn-action" style="padding:4px 9px; font-size:10px; background:${tgl === activeDate ? '#0284c7' : '#ffffff'}; color:${tgl === activeDate ? '#ffffff' : '#0369a1'}; border:1px solid #7dd3fc;">
-                                📅 ${tgl} (${storedDatesMap.get(tgl)})
-                            </button>
-                        `).join('')}
-                    </div>` : ''}
+                        <span style="font-size:10.5px; font-weight:850; color:#475569;">🗄️ Pintasan Tanggal & Arsip Jurnal:</span>
+                        ${sortedStoredDates.slice(0, 14).map(tgl => {
+                            const cnt = storedDatesMap.get(tgl) || 0;
+                            const isSel = (viewMode !== 'semua' && tgl === activeDate);
+                            return `
+                            <button type="button" onclick="window.ubahTanggalFilterRekapJurnal('${tgl}')" class="btn-action" style="padding:5px 10px; font-size:10.5px; font-weight:850; background:${isSel ? '#0284c7' : (cnt > 0 ? '#ffffff' : '#f8fafc')}; color:${isSel ? '#ffffff' : (cnt > 0 ? '#0369a1' : '#64748b')}; border:1.5px solid ${isSel ? '#0284c7' : (cnt > 0 ? '#38bdf8' : '#cbd5e1')};">
+                                📅 ${tgl} (${cnt} Log)
+                            </button>`;
+                        }).join('')}
+                    </div>
                 </div>
                 ` : ''}
 
@@ -8031,12 +8206,18 @@
                                 <th>Nama Siswa & Kelas</th>
                                 <th>Industri</th>
                                 <th>Hari / Tanggal</th>
-                                <th>Uraian Kegiatan Harian</th>
-                                <th>Status</th>
+                                <th>${isAdminKepsekPanitia && viewMode === 'belum' ? 'Status Jurnal' : 'Uraian Kegiatan Harian'}</th>
+                                <th>${isAdminKepsekPanitia && viewMode === 'belum' ? 'Tindak Lanjut WA' : 'Status'}</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || `<tr><td colspan="6" class="empty-placeholder">Belum ada jurnal siswa pada tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>.<br><span style="font-size:11px; color:#64748b;">(Riwayat jurnal hari-hari sebelumnya tetap tersimpan aman berdasarkan tanggal di atas)</span></td></tr>`}
+                            ${rows || `<tr><td colspan="6" class="empty-placeholder">
+                                Belum ada catatan jurnal yang masuk untuk tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>.<br>
+                                <div style="margin-top:8px; display:flex; justify-content:center; gap:8px; flex-wrap:wrap;">
+                                    <button type="button" onclick="window.ubahModeTampilanRekapJurnal('belum')" class="btn-action btn-red" style="font-size:11px;">⚠️ Lihat ${belumIsiJurnalList.length} Siswa yang Belum Isi Jurnal</button>
+                                    <button type="button" onclick="window.ubahModeTampilanRekapJurnal('semua')" class="btn-action btn-emerald" style="font-size:11px;">🗂️ Buka Semua Riwayat Jurnal (${allJurnal.length} Log)</button>
+                                </div>
+                            </td></tr>`}
                         </tbody>
                     </table>
                 </div>
@@ -10974,11 +11155,22 @@
 
         window.selectedRekapPresensiDate = "";
         window.selectedRekapPresensiMonth = "";
+        window.selectedRekapPresensiViewMode = "tanggal"; // 'tanggal' | 'belum' | 'semua'
 
         window.ubahTanggalFilterRekapPresensi = function(tglBaru) {
-            window.selectedRekapPresensiDate = tglBaru || window.getTodayLocalWitaStr();
+            window.selectedRekapPresensiDate = window.normalizeTanggalStr(tglBaru) || window.getTodayLocalWitaStr();
+            window.selectedRekapPresensiViewMode = "tanggal";
             if (window.selectedRekapPresensiDate.length >= 7) {
                 window.selectedRekapPresensiMonth = window.selectedRekapPresensiDate.substring(0, 7);
+            }
+            window.openFeature(window.cloudState.currentFeature || "rekap-masuk-pulang", "Rekap Presensi", true);
+        };
+
+        window.ubahModeTampilanRekapPresensi = function(modeBaru) {
+            window.selectedRekapPresensiViewMode = modeBaru || "tanggal";
+            if (modeBaru === "hari_ini") {
+                window.selectedRekapPresensiDate = window.getTodayLocalWitaStr();
+                window.selectedRekapPresensiViewMode = "tanggal";
             }
             window.openFeature(window.cloudState.currentFeature || "rekap-masuk-pulang", "Rekap Presensi", true);
         };
@@ -10988,7 +11180,7 @@
         };
 
         window.segarkanDataPresensiDariCloud = async function() {
-            await window.tarikLogPresensiKhususDariSupabase();
+            await window.omniScanSeluruhDataPresensiDanJurnalCloud();
             await window.tarikDataDariCloud(true, true);
             window.openFeature(window.cloudState.currentFeature || "rekap-masuk-pulang", "Rekap Presensi", true);
         };
@@ -11016,11 +11208,11 @@
             const todayStr = window.getTodayLocalWitaStr();
             const isAdminKepsekPanitia = (role === 'admin' || role === 'panitia' || role === 'kepsek');
 
-            // Auto-pull dari Supabase setiap kali halaman Rekap Presensi dibuka (cooldown 8 detik agar ringan)
-            if (Date.now() - (window.lastAutoPullRekapPresensiAt || 0) > 8000) {
+            // Auto-pull menyeluruh dengan Omni-Scan setiap kali halaman Rekap Presensi dibuka
+            if (Date.now() - (window.lastAutoPullRekapPresensiAt || 0) > 6000) {
                 window.lastAutoPullRekapPresensiAt = Date.now();
                 Promise.all([
-                    window.tarikLogPresensiKhususDariSupabase(),
+                    window.omniScanSeluruhDataPresensiDanJurnalCloud(),
                     window.tarikDataDariCloud(true, true)
                 ]).then(() => {
                     const cf = window.cloudState.currentFeature;
@@ -11034,11 +11226,12 @@
             const allRoleAbsensi = window.filterAbsensiByRoleAndProfile(window.cloudState.absensi || [], role, profile);
 
             // PERILAKU BERDASARKAN ROLE:
-            // 1. Admin / Panitia PKL / Kepala Sekolah: DIRESET SETIAP HARI (Secara otomatis hanya menampilkan presensi hari ini, sedangkan riwayat hari-hari sebelumnya tetap tersimpan berdasarkan tanggal dan tidak ditimpa).
+            // 1. Admin / Panitia PKL / Kepala Sekolah: DIRESET SETIAP HARI (Secara otomatis menampilkan hari berjalan, dilengkapi tab Belum Presensi & Semua Tanggal).
             // 2. Guru Pembimbing & Mitra Industri (Instansi): TIDAK DIRESET HARIAN (Tetap terisi terus setiap hari dari awal hingga akhir PKL).
             const curFeat = window.cloudState.currentFeature || 'rekap-masuk-pulang';
             if (!window.selectedRekapPresensiDate || window.lastOpenedRekapPresensiFeature !== curFeat) {
                 window.selectedRekapPresensiDate = todayStr;
+                window.selectedRekapPresensiViewMode = "tanggal";
                 window.lastOpenedRekapPresensiFeature = curFeat;
             }
             if (!window.selectedRekapPresensiMonth) {
@@ -11047,12 +11240,9 @@
 
             const activeDate = window.selectedRekapPresensiDate;
             const activeMonth = window.selectedRekapPresensiMonth;
+            const viewMode = isAdminKepsekPanitia ? (window.selectedRekapPresensiViewMode || "tanggal") : "semua";
 
-            const targetAbsensiList = isAdminKepsekPanitia
-                ? allRoleAbsensi.filter(ab => ab && window.normalizeTanggalStr(ab.tanggal, ab.id) === activeDate)
-                : allRoleAbsensi;
-
-            // Hitung daftar tanggal yang tersimpan di dalam database (Arsip Harian yang Tidak Pernah Ditimpa)
+            // Hitung daftar tanggal yang tersimpan di dalam database + pastikan tanggal 11, 12, 13, 14 November selalu tampil di tombol pintasan
             const storedDatesMap = new Map();
             allRoleAbsensi.forEach(ab => {
                 if (!ab) return;
@@ -11061,9 +11251,27 @@
                     storedDatesMap.set(dNorm, (storedDatesMap.get(dNorm) || 0) + 1);
                 }
             });
+            const curYm = todayStr.substring(0, 7);
+            const curDayNum = parseInt(todayStr.substring(8, 10), 10) || 14;
+            for (let d = Math.max(1, curDayNum - 5); d <= curDayNum; d++) {
+                const dStr = `${curYm}-${String(d).padStart(2, '0')}`;
+                if (!storedDatesMap.has(dStr)) storedDatesMap.set(dStr, 0);
+            }
             const sortedStoredDates = Array.from(storedDatesMap.keys()).sort((a, b) => b.localeCompare(a));
 
             const monthlyStoredCount = allRoleAbsensi.filter(ab => ab && String(window.normalizeTanggalStr(ab.tanggal, ab.id) || '').startsWith(activeMonth)).length;
+
+            const absensiPadaTanggalAktif = allRoleAbsensi.filter(ab => ab && window.normalizeTanggalStr(ab.tanggal, ab.id) === activeDate);
+            const targetAbsensiList = (!isAdminKepsekPanitia || viewMode === "semua")
+                ? allRoleAbsensi
+                : absensiPadaTanggalAktif;
+
+            // Hitung siswa yang BELUM melakukan presensi pada tanggal aktif
+            const semuaSiswaMaster = window.cloudState.siswa || [];
+            const belumPresensiList = semuaSiswaMaster.filter(s => {
+                if (!s || !s.nama) return false;
+                return !absensiPadaTanggalAktif.some(ab => window.isNameMatch(ab.nama, s.nama));
+            });
 
             const pairMap = new Map();
 
@@ -11092,49 +11300,79 @@
                     });
                 }
                 const entry = pairMap.get(key);
-                if (ab.tipe_absen === 'Masuk') {
-                    entry.masukJam = ab.jam ? `${ab.jam} WITA` : '-';
-                    entry.masukStatus = ab.kategori_hadir || ab.status || 'Sudah Presensi Masuk';
-                    if (ab.foto_url || ab.foto_selfie) entry.masukFoto = ab.foto_url || ab.foto_selfie;
-                } else if (ab.tipe_absen === 'Pulang') {
+                if (ab.tipe_absen === 'Pulang') {
                     entry.pulangJam = ab.jam ? `${ab.jam} WITA` : '-';
                     entry.pulangStatus = ab.kategori_hadir || ab.status || 'Sudah Presensi Pulang';
                     if (ab.foto_url || ab.foto_selfie) entry.pulangFoto = ab.foto_url || ab.foto_selfie;
+                } else {
+                    entry.masukJam = ab.jam ? `${ab.jam} WITA` : '-';
+                    entry.masukStatus = ab.kategori_hadir || ab.status || 'Sudah Presensi Masuk';
+                    if (ab.foto_url || ab.foto_selfie) entry.masukFoto = ab.foto_url || ab.foto_selfie;
                 }
             });
 
+            // Hitung jumlah siswa unik yang sudah presensi pada activeDate
+            const uniqueStudentsOnActiveDate = new Set(
+                absensiPadaTanggalAktif.map(ab => window.normalizeTextCompact(ab.nama)).filter(Boolean)
+            ).size;
+
             let rows = "";
             let counter = 1;
-            const sortedEntries = Array.from(pairMap.values()).sort((a, b) =>
-                (b.tanggal || '').localeCompare(a.tanggal || '') || (a.nama || '').localeCompare(b.nama || '')
-            );
 
-            sortedEntries.forEach(item => {
-                const kelasBadge = item.kelas ? ` <span style="color:#0284c7; font-weight:850; font-size:11px;">(${item.kelas})</span>` : '';
-                const safeNama = (item.nama || '').replace(/'/g, "\\'");
-                const btnFotoMasuk = item.masukFoto ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${item.masukFoto}', '${safeNama}', 'Masuk', '${item.tanggal}', '${item.masukJam}')" class="btn-action btn-blue" style="padding:2px 6px; font-size:9.5px; margin-left:4px;">📷</button>` : '';
-                const btnFotoPulang = item.pulangFoto ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${item.pulangFoto}', '${safeNama}', 'Pulang', '${item.tanggal}', '${item.pulangJam}')" class="btn-action btn-emerald" style="padding:2px 6px; font-size:9.5px; margin-left:4px;">📷</button>` : '';
+            if (isAdminKepsekPanitia && viewMode === "belum") {
+                belumPresensiList.forEach(s => {
+                    const info = window.getStudentPlacementInfo(s.nama, s.nis);
+                    const kls = s.kelas || info.kelas || '';
+                    const kelasBadge = kls ? ` <span style="color:#0284c7; font-weight:850; font-size:11px;">(${kls})</span>` : '';
+                    const indName = info.industri || s.industri || '-';
+                    const waLink = window.formatNoWaLink(s.noHp, `Halo ${s.nama}, diingatkan oleh Panitia PKL SMKN 1 Marisa bahwa Anda belum tercatat melakukan Presensi Digital pada tanggal ${activeDate}. Mohon segera melakukan presensi.`);
+                    rows += `<tr>
+                        <td>${counter++}</td>
+                        <td><b>${s.nama}</b>${kelasBadge}</td>
+                        <td>${indName}</td>
+                        <td><b>${activeDate}</b></td>
+                        <td><span class="badge-status badge-red">⚠️ Belum Presensi Masuk</span></td>
+                        <td>
+                            ${waLink ? `<a href="${waLink}" target="_blank" class="btn-action btn-emerald" style="text-decoration:none; font-size:10.5px;">📲 Tegur via WA</a>` : '<span style="color:#94a3b8; font-size:10px;">No WA Kosong</span>'}
+                        </td>
+                    </tr>`;
+                });
+            } else {
+                const sortedEntries = Array.from(pairMap.values()).sort((a, b) =>
+                    (b.tanggal || '').localeCompare(a.tanggal || '') || (a.nama || '').localeCompare(b.nama || '')
+                );
 
-                rows += `<tr>
-                    <td>${counter++}</td>
-                    <td><b>${item.nama}</b>${kelasBadge}</td>
-                    <td>${item.industri}</td>
-                    <td><b>${item.tanggal}</b></td>
-                    <td>
-                        <span class="badge-status ${item.masukJam !== '-' ? 'badge-green' : 'badge-amber'}">${item.masukJam !== '-' ? '✅ ' + item.masukJam : 'Belum Absen'}</span>${btnFotoMasuk}
-                    </td>
-                    <td>
-                        <span class="badge-status ${item.pulangJam !== '-' ? 'badge-green' : 'badge-amber'}">${item.pulangJam !== '-' ? '✅ ' + item.pulangJam : 'Belum Absen'}</span>${btnFotoPulang}
-                    </td>
-                </tr>`;
-            });
+                sortedEntries.forEach(item => {
+                    const kelasBadge = item.kelas ? ` <span style="color:#0284c7; font-weight:850; font-size:11px;">(${item.kelas})</span>` : '';
+                    const safeNama = (item.nama || '').replace(/'/g, "\\'");
+                    const btnFotoMasuk = item.masukFoto ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${item.masukFoto}', '${safeNama}', 'Masuk', '${item.tanggal}', '${item.masukJam}')" class="btn-action btn-blue" style="padding:2px 6px; font-size:9.5px; margin-left:4px;">📷</button>` : '';
+                    const btnFotoPulang = item.pulangFoto ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${item.pulangFoto}', '${safeNama}', 'Pulang', '${item.tanggal}', '${item.pulangJam}')" class="btn-action btn-emerald" style="padding:2px 6px; font-size:9.5px; margin-left:4px;">📷</button>` : '';
+
+                    rows += `<tr>
+                        <td>${counter++}</td>
+                        <td><b>${item.nama}</b>${kelasBadge}</td>
+                        <td>${item.industri}</td>
+                        <td><b>${item.tanggal}</b></td>
+                        <td>
+                            <span class="badge-status ${item.masukJam !== '-' ? 'badge-green' : 'badge-amber'}">${item.masukJam !== '-' ? '✅ ' + item.masukJam : 'Belum Absen'}</span>${btnFotoMasuk}
+                        </td>
+                        <td>
+                            <span class="badge-status ${item.pulangJam !== '-' ? 'badge-green' : 'badge-amber'}">${item.pulangJam !== '-' ? '✅ ' + item.pulangJam : 'Belum Absen'}</span>${btnFotoPulang}
+                        </td>
+                    </tr>`;
+                });
+            }
 
             const headerTitle = isAdminKepsekPanitia
-                ? `⏱️ Rekap Riwayat Presensi Masuk & Pulang (${window.formatTanggalIndoLengkap(activeDate)})`
+                ? (viewMode === "semua"
+                    ? `⏱️ Seluruh Riwayat Presensi Semua Tanggal (${allRoleAbsensi.length} Total Log)`
+                    : (viewMode === "belum"
+                        ? `⚠️ Siswa Belum Melakukan Presensi (${window.formatTanggalIndoLengkap(activeDate)})`
+                        : `⏱️ Rekap Riwayat Presensi Masuk & Pulang (${window.formatTanggalIndoLengkap(activeDate)})`))
                 : "📈 Riwayat & Rekap Presensi Siswa (Akumulasi Berkelanjutan)";
             const subLabel = (role === 'guru')
                 ? "RIWAYAT PRESENSI SISWA BIMBINGAN (TERISI TERUS SETIAP HARI TANPA RESET)"
-                : (role === 'industri' ? "RIWAYAT PRESENSI SISWA MAGANG (TERISI TERUS SETIAP HARI TANPA RESET)" : "SISTEM REKAP PRESENSI HARIAN (RESET SETIAP HARI & TERSIMPAN PER TANGGAL)");
+                : (role === 'industri' ? "RIWAYAT PRESENSI SISWA MAGANG (TERISI TERUS SETIAP HARI TANPA RESET)" : "PUSAT MONITORING & ARSIP PRESENSI HARIAN PKL (OMNI-SYNC V3)");
 
             return `
             <div class="card">
@@ -11144,11 +11382,26 @@
                         <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">${headerTitle}</h3>
                         <p style="font-size:11px; color:#475569; margin-top:2px;">
                             ${isAdminKepsekPanitia
-                                ? `Menampilkan presensi siswa pada tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>. Saat berganti hari, tabel otomatis di-reset untuk hari baru sedangkan seluruh riwayat hari-hari sebelumnya tetap tersimpan utuh berdasarkan tanggal (${allRoleAbsensi.length} total log).`
-                                : `Menampilkan seluruh riwayat presensi masuk & pulang siswa secara terus-menerus setiap hari tanpa reset harian (${sortedEntries.length} catatan harian).`}
+                                ? `Lembar harian otomatis di-reset setiap berganti hari sementara seluruh arsip tanggal sebelumnya tetap tersimpan utuh (${allRoleAbsensi.length} total log terdeteksi di Cloud).`
+                                : `Menampilkan seluruh riwayat presensi masuk & pulang siswa secara terus-menerus setiap hari tanpa reset harian.`}
                         </p>
                     </div>
                 </div>
+
+                ${isAdminKepsekPanitia ? `
+                <!-- TAB MODE TAMPILAN LANGSUNG KHUSUS PANITIA PKL / ADMIN / KEPSEK -->
+                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+                    <button type="button" onclick="window.ubahModeTampilanRekapPresensi('tanggal')" class="btn-action" style="padding:8px 12px; font-size:11px; font-weight:900; background:${viewMode === 'tanggal' ? '#0284c7' : '#e0f2fe'}; color:${viewMode === 'tanggal' ? '#ffffff' : '#0369a1'};">
+                        ✅ Sudah Presensi Tanggal ${activeDate} (${uniqueStudentsOnActiveDate} Siswa / ${absensiPadaTanggalAktif.length} Log)
+                    </button>
+                    <button type="button" onclick="window.ubahModeTampilanRekapPresensi('belum')" class="btn-action" style="padding:8px 12px; font-size:11px; font-weight:900; background:${viewMode === 'belum' ? '#dc2626' : '#fee2e2'}; color:${viewMode === 'belum' ? '#ffffff' : '#b91c1c'};">
+                        ⚠️ Belum Presensi Tanggal ${activeDate} (${belumPresensiList.length} Siswa)
+                    </button>
+                    <button type="button" onclick="window.ubahModeTampilanRekapPresensi('semua')" class="btn-action" style="padding:8px 12px; font-size:11px; font-weight:900; background:${viewMode === 'semua' ? '#10b981' : '#dcfce7'}; color:${viewMode === 'semua' ? '#ffffff' : '#15803d'};">
+                        🗂️ Tampilkan Semua Tanggal Tanpa Filter (${allRoleAbsensi.length} Log)
+                    </button>
+                </div>
+                ` : ''}
 
                 <!-- KONTROL FILTER HARIAN & EXPORT REKAP BULANAN -->
                 <div style="background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:16px; padding:12px; margin-bottom:12px; display:flex; flex-direction:column; gap:10px;">
@@ -11161,21 +11414,23 @@
                                 <button type="button" onclick="window.ubahTanggalFilterRekapPresensi('${todayStr}')" class="btn-action btn-blue" style="padding:6px 10px; font-size:10.5px;">
                                     📍 Kembali ke Hari Ini (${todayStr})
                                 </button>
-                            ` : `<span class="badge-status badge-green" style="font-size:10px;">📍 Hari Ini (${counter - 1} Siswa Tercatat)</span>`}
+                            ` : `<span class="badge-status badge-green" style="font-size:10px;">📍 Hari Ini (${uniqueStudentsOnActiveDate} Sudah / ${belumPresensiList.length} Belum)</span>`}
                         </div>
                         <button type="button" onclick="window.unduhExcelRekapMasukPulang('harian')" class="btn-action btn-blue" style="font-size:11px; font-weight:850;">
                             📄 Export Harian (${activeDate})
                         </button>
                     </div>
-                    ${sortedStoredDates.length > 0 ? `
                     <div style="padding-top:8px; border-top:1px dashed #bae6fd; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                        <span style="font-size:10.5px; font-weight:850; color:#475569;">🗄️ Arsip Tanggal Tersimpan:</span>
-                        ${sortedStoredDates.slice(0, 14).map(tgl => `
-                            <button type="button" onclick="window.ubahTanggalFilterRekapPresensi('${tgl}')" class="btn-action" style="padding:4px 9px; font-size:10px; background:${tgl === activeDate ? '#0284c7' : '#ffffff'}; color:${tgl === activeDate ? '#ffffff' : '#0369a1'}; border:1px solid #7dd3fc;">
-                                📅 ${tgl} (${storedDatesMap.get(tgl)} Log)
-                            </button>
-                        `).join('')}
-                    </div>` : ''}
+                        <span style="font-size:10.5px; font-weight:850; color:#475569;">🗄️ Pintasan Tanggal & Arsip Presensi:</span>
+                        ${sortedStoredDates.slice(0, 14).map(tgl => {
+                            const cnt = storedDatesMap.get(tgl) || 0;
+                            const isSel = (viewMode !== 'semua' && tgl === activeDate);
+                            return `
+                            <button type="button" onclick="window.ubahTanggalFilterRekapPresensi('${tgl}')" class="btn-action" style="padding:5px 10px; font-size:10.5px; font-weight:850; background:${isSel ? '#0284c7' : (cnt > 0 ? '#ffffff' : '#f8fafc')}; color:${isSel ? '#ffffff' : (cnt > 0 ? '#0369a1' : '#64748b')}; border:1.5px solid ${isSel ? '#0284c7' : (cnt > 0 ? '#38bdf8' : '#cbd5e1')};">
+                                📅 ${tgl} (${cnt} Log)
+                            </button>`;
+                        }).join('')}
+                    </div>
                     ` : ''}
 
                     <div style="${isAdminKepsekPanitia ? 'padding-top:10px; border-top:1.5px dashed #bae6fd;' : ''} display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
@@ -11198,12 +11453,18 @@
                                 <th>Nama Siswa & Kelas</th>
                                 <th>Tempat PKL</th>
                                 <th>Hari / Tanggal</th>
-                                <th>Jam Masuk</th>
-                                <th>Jam Pulang</th>
+                                <th>${isAdminKepsekPanitia && viewMode === 'belum' ? 'Status Kehadiran' : 'Jam Masuk'}</th>
+                                <th>${isAdminKepsekPanitia && viewMode === 'belum' ? 'Tindak Lanjut WA' : 'Jam Pulang'}</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || `<tr><td colspan="6" class="empty-placeholder">Belum ada siswa yang tercatat melakukan presensi ${isAdminKepsekPanitia ? `pada tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>` : ''}.<br><span style="font-size:11px; color:#64748b;">(Seluruh riwayat presensi hari-hari sebelumnya tetap tersimpan aman berdasarkan tanggal)</span></td></tr>`}
+                            ${rows || `<tr><td colspan="6" class="empty-placeholder">
+                                Belum ada catatan presensi siswa yang masuk pada tanggal <b>${window.formatTanggalIndoLengkap(activeDate)}</b>.<br>
+                                <div style="margin-top:8px; display:flex; justify-content:center; gap:8px; flex-wrap:wrap;">
+                                    <button type="button" onclick="window.ubahModeTampilanRekapPresensi('belum')" class="btn-action btn-red" style="font-size:11px;">⚠️ Lihat ${belumPresensiList.length} Siswa yang Belum Presensi</button>
+                                    <button type="button" onclick="window.ubahModeTampilanRekapPresensi('semua')" class="btn-action btn-emerald" style="font-size:11px;">🗂️ Buka Semua Riwayat Presensi (${allRoleAbsensi.length} Log)</button>
+                                </div>
+                            </td></tr>`}
                         </tbody>
                     </table>
                 </div>
