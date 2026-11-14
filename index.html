@@ -2623,6 +2623,22 @@
 
         window.isCloudConnected = false;
         window.supabaseClient = null;
+        window.secondarySupabaseClient = null;
+
+        // DAFTAR KEDUA SERVER SUPABASE (SERVER UTAMA BARU & SERVER LAMA TEMPAT SISWA ABSEN TGL 12-14 NOV)
+        // Ini menjamin seluruh data dari kedua server ditarik & disatukan tanpa ada 1 pun yang tertinggal!
+        window.SUPABASE_CLUSTER_NODES = [
+            {
+                name: "Primary_Cluster_PMX",
+                url: "https://pmxwnudmaszwcncizklp.supabase.co",
+                key: "sb_publishable_cVFUoNE6w-5ABPNmTrvJ9Q_7AfsxcnC"
+            },
+            {
+                name: "Legacy_Cluster_TOBY",
+                url: "https://tobyuffkjowdmcvygwht.supabase.co",
+                key: "sb_publishable_RWHKkL2iW9UpPKIm7boZIQ_sft-6be_"
+            }
+        ];
 
         window.getSupabaseCredentials = function() {
             try {
@@ -2638,8 +2654,420 @@
                 }
             } catch(e) {}
             return {
-                url: "https://tobyuffkjowdmcvygwht.supabase.co",
-                key: "sb_publishable_RWHKkL2iW9UpPKIm7boZIQ_sft-6be_"
+                url: "https://pmxwnudmaszwcncizklp.supabase.co",
+                key: "sb_publishable_cVFUoNE6w-5ABPNmTrvJ9Q_7AfsxcnC"
+            };
+        };
+
+        window.inisialisasiSupabaseClient = function() {
+            if (typeof supabase !== 'undefined') {
+                try {
+                    const creds = window.getSupabaseCredentials();
+                    const cleanUrl = String(creds.url || "").trim().replace(/\/+$/, "");
+                    const cleanKey = String(creds.key || "").trim();
+                    window.supabaseClient = supabase.createClient(cleanUrl, cleanKey, {
+                        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+                    });
+
+                    // Inisialisasi juga koneksi jembatan ke server kedua (agar data siswa di server lama otomatis tersedot masuk!)
+                    const otherNode = window.SUPABASE_CLUSTER_NODES.find(n => !cleanUrl.includes(n.url.replace("https://", ""))) || window.SUPABASE_CLUSTER_NODES[1];
+                    if (otherNode) {
+                        window.secondarySupabaseClient = supabase.createClient(otherNode.url, otherNode.key, {
+                            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+                        });
+                    }
+                    window.isCloudConnected = true;
+                } catch(err) {
+                    window.isCloudConnected = false;
+                }
+            }
+        };
+
+        // =========================================================================
+        // JALUR DIRECT REST FETCH FALLBACK & DUAL-SERVER BRIDGE
+        // =========================================================================
+        window.buildSupabaseHeaders = function(includePreferUpsert = false, customKey = null) {
+            const creds = window.getSupabaseCredentials();
+            const cleanKey = String(customKey || creds.key || "").trim();
+            const headers = {
+                "apikey": cleanKey,
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            };
+            if (cleanKey.startsWith("eyJ")) {
+                headers["Authorization"] = `Bearer ${cleanKey}`;
+            }
+            if (includePreferUpsert) {
+                headers["Prefer"] = "resolution=merge-duplicates,return=minimal";
+            }
+            return headers;
+        };
+
+        // Helper Fetch dari satu Node Server tertentu (SDK + REST Fallback)
+        window.fetchRowFromSpecificNode = async function(nodeClient, nodeUrl, nodeKey, tableName, idColumn, idValue) {
+            if (nodeClient) {
+                try {
+                    const { data, error } = await nodeClient
+                        .from(tableName)
+                        .select('payload, updated_at')
+                        .eq(idColumn, idValue)
+                        .maybeSingle();
+                    if (!error && data) return data;
+                } catch (e) {}
+            }
+            const baseUrl = String(nodeUrl || "").trim().replace(/\/+$/, "");
+            const cleanKey = String(nodeKey || "").trim();
+            const isJwt = cleanKey.startsWith("eyJ");
+            const endpoint = `${baseUrl}/rest/v1/${tableName}?${idColumn}=eq.${encodeURIComponent(idValue)}&select=payload,updated_at&limit=1`;
+
+            const tryFetch = async (withBearer) => {
+                const headers = { "apikey": cleanKey, "Accept": "application/json" };
+                if (withBearer) headers["Authorization"] = `Bearer ${cleanKey}`;
+                const resp = await fetch(endpoint, { method: "GET", headers, mode: "cors", cache: "no-store" });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const arr = await resp.json();
+                return (Array.isArray(arr) && arr.length > 0) ? arr[0] : null;
+            };
+            try {
+                return await tryFetch(isJwt);
+            } catch (e1) {
+                try { return await tryFetch(!isJwt); } catch (e2) { return null; }
+            }
+        };
+
+        window.directRestFetchRow = async function(tableName, idColumn, idValue) {
+            const creds = window.getSupabaseCredentials();
+            const primaryRes = await window.fetchRowFromSpecificNode(
+                window.supabaseClient,
+                creds.url,
+                creds.key,
+                tableName,
+                idColumn,
+                idValue
+            );
+
+            // Baca juga dari server kedua (agar jika data ada di server lama tobyuffkjowdmcvygwht atau pmxwnudmaszwcncizklp, otomatis digabung!)
+            const otherNode = window.SUPABASE_CLUSTER_NODES.find(n => !creds.url.includes(n.url.replace("https://", "")));
+            let secondaryRes = null;
+            if (otherNode) {
+                secondaryRes = await window.fetchRowFromSpecificNode(
+                    window.secondarySupabaseClient,
+                    otherNode.url,
+                    otherNode.key,
+                    tableName,
+                    idColumn,
+                    idValue
+                ).catch(() => null);
+            }
+
+            if (primaryRes && secondaryRes && primaryRes.payload && secondaryRes.payload) {
+                const p1 = primaryRes.payload;
+                const p2 = secondaryRes.payload;
+                const mergedPayload = Object.assign({}, p2, p1);
+                if (Array.isArray(p1.absensi) || Array.isArray(p2.absensi)) {
+                    mergedPayload.absensi = window.mergeUniqueArrayById(
+                        p1.absensi || [],
+                        p2.absensi || [],
+                        (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen || 'Masuk'}`
+                    );
+                }
+                if (Array.isArray(p1.jurnal) || Array.isArray(p2.jurnal)) {
+                    mergedPayload.jurnal = window.mergeUniqueArrayById(
+                        p1.jurnal || [],
+                        p2.jurnal || [],
+                        (j) => `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
+                    );
+                }
+                if (Array.isArray(p1.registeredUsers) || Array.isArray(p2.registeredUsers)) {
+                    mergedPayload.registeredUsers = window.mergeUniqueArrayById(
+                        p1.registeredUsers || [],
+                        p2.registeredUsers || [],
+                        (u) => `${u.role}_${window.normalizeTextCompact(u.username || u.nama)}`
+                    );
+                }
+                if (Array.isArray(p1.siswa) || Array.isArray(p2.siswa)) {
+                    mergedPayload.siswa = window.mergeUniqueArrayById(
+                        p1.siswa || [],
+                        p2.siswa || [],
+                        (s) => window.normalizeTextCompact(s.nama) || window.normalizeTextCompact(s.nis)
+                    );
+                }
+                return {
+                    payload: mergedPayload,
+                    updated_at: primaryRes.updated_at || secondaryRes.updated_at
+                };
+            }
+            return primaryRes || secondaryRes || null;
+        };
+
+        window.directRestUpsertRow = async function(tableName, rowObject, conflictColumn) {
+            let successAny = false;
+
+            // 1. Tulis ke Server Utama (SDK + REST)
+            if (window.supabaseClient) {
+                try {
+                    const { error } = await window.supabaseClient
+                        .from(tableName)
+                        .upsert(rowObject, { onConflict: conflictColumn || 'id' });
+                    if (!error) successAny = true;
+                } catch (sdkErr) {}
+            }
+
+            // 2. Tulis juga secara paralel ke Server Kedua (Jembatan Sinkronisasi bagi HP siswa yang belum di-refresh)
+            if (window.secondarySupabaseClient) {
+                window.secondarySupabaseClient
+                    .from(tableName)
+                    .upsert(rowObject, { onConflict: conflictColumn || 'id' })
+                    .then(() => {})
+                    .catch(() => {});
+            }
+
+            if (successAny) return true;
+
+            // Fallback Direct REST Upsert ke semua node
+            const creds = window.getSupabaseCredentials();
+            const baseUrl = String(creds.url || "").trim().replace(/\/+$/, "");
+            const cleanKey = String(creds.key || "").trim();
+            const isJwt = cleanKey.startsWith("eyJ");
+            const endpoint = `${baseUrl}/rest/v1/${tableName}?on_conflict=${encodeURIComponent(conflictColumn)}`;
+            const bodyStr = JSON.stringify(rowObject);
+
+            const tryPost = async (withAuthBearer) => {
+                const headers = {
+                    "apikey": cleanKey,
+                    "Content-Type": "application/json",
+                    "Prefer": "resolution=merge-duplicates,return=minimal"
+                };
+                if (withAuthBearer) {
+                    headers["Authorization"] = `Bearer ${cleanKey}`;
+                }
+                const resp = await fetch(endpoint, {
+                    method: "POST",
+                    headers: headers,
+                    body: bodyStr,
+                    mode: "cors"
+                });
+                if (!resp.ok) {
+                    const errTxt = await resp.text().catch(() => "");
+                    throw new Error(`HTTP ${resp.status}: ${errTxt || resp.statusText}`);
+                }
+                return true;
+            };
+
+            try {
+                return await tryPost(isJwt);
+            } catch (e1) {
+                return await tryPost(!isJwt);
+            }
+        };
+
+        // =========================================================================
+        // OMNI-SYNC ENGINE V4 (DUAL-SERVER HARVESTER):
+        // Memindai & menyatukan seluruh data dari KEDUA server Supabase:
+        // 1. https://pmxwnudmaszwcncizklp.supabase.co (Server Admin Gambar 2)
+        // 2. https://tobyuffkjowdmcvygwht.supabase.co (Server Default tempat HP Siswa absen tgl 12-14 Nov)
+        // =========================================================================
+        window.directRestGetQueryFromNode = async function(nodeUrl, nodeKey, queryPath) {
+            const baseUrl = String(nodeUrl || "").trim().replace(/\/+$/, "");
+            const endpoint = `${baseUrl}/rest/v1/${queryPath}`;
+            const cleanKey = String(nodeKey || "").trim();
+            const isJwt = cleanKey.startsWith("eyJ");
+
+            const tryGet = async (withBearer) => {
+                const headers = { "apikey": cleanKey, "Accept": "application/json" };
+                if (withBearer) headers["Authorization"] = `Bearer ${cleanKey}`;
+                const resp = await fetch(endpoint, { method: "GET", headers, mode: "cors", cache: "no-store" });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                return await resp.json();
+            };
+            try {
+                return await tryGet(isJwt);
+            } catch (e1) {
+                try { return await tryGet(!isJwt); } catch (e2) { return null; }
+            }
+        };
+
+        window.directRestGetQuery = async function(queryPath) {
+            const results = [];
+            for (const node of window.SUPABASE_CLUSTER_NODES) {
+                const arr = await window.directRestGetQueryFromNode(node.url, node.key, queryPath).catch(() => null);
+                if (Array.isArray(arr)) results.push(...arr);
+            }
+            return results;
+        };
+
+        // Fungsi Pemindai Total Seluruh Tabel dari KEDUA Server Supabase (PMX + TOBY)
+        window.omniScanSeluruhDataPresensiDanJurnalCloud = async function() {
+            let allCloudDbRows = [];
+            let allSqlPresensiRows = [];
+            let allSqlJurnalRows = [];
+            let appStateRows = [];
+
+            const scanClient = async (client, nodeInfo) => {
+                if (client) {
+                    try {
+                        const [resCloudDb, resState, resSqlAbs, resSqlJur] = await Promise.all([
+                            client.from('app_cloud_db').select('id, payload, updated_at').limit(2500),
+                            client.from('app_state').select('id, payload, updated_at').limit(10),
+                            client.from('riwayat_presensi').select('*').limit(2500),
+                            client.from('jurnal_harian').select('*').limit(2500)
+                        ]);
+                        if (resCloudDb && Array.isArray(resCloudDb.data)) allCloudDbRows.push(...resCloudDb.data);
+                        if (resState && Array.isArray(resState.data)) appStateRows.push(...resState.data);
+                        if (resSqlAbs && Array.isArray(resSqlAbs.data)) allSqlPresensiRows.push(...resSqlAbs.data);
+                        if (resSqlJur && Array.isArray(resSqlJur.data)) allSqlJurnalRows.push(...resSqlJur.data);
+                    } catch (eSdk) {}
+                }
+                if (nodeInfo) {
+                    const [rCloud, rState, rAbs, rJur] = await Promise.all([
+                        window.directRestGetQueryFromNode(nodeInfo.url, nodeInfo.key, 'app_cloud_db?select=id,payload,updated_at&limit=2500').catch(() => null),
+                        window.directRestGetQueryFromNode(nodeInfo.url, nodeInfo.key, 'app_state?select=id,payload,updated_at&limit=10').catch(() => null),
+                        window.directRestGetQueryFromNode(nodeInfo.url, nodeInfo.key, 'riwayat_presensi?select=*&limit=2500').catch(() => null),
+                        window.directRestGetQueryFromNode(nodeInfo.url, nodeInfo.key, 'jurnal_harian?select=*&limit=2500').catch(() => null)
+                    ]);
+                    if (Array.isArray(rCloud)) allCloudDbRows.push(...rCloud);
+                    if (Array.isArray(rState)) appStateRows.push(...rState);
+                    if (Array.isArray(rAbs)) allSqlPresensiRows.push(...rAbs);
+                    if (Array.isArray(rJur)) allSqlJurnalRows.push(...rJur);
+                }
+            };
+
+            // Pindai KEDUA Server secara paralel (pmxwnudmaszwcncizklp & tobyuffkjowdmcvygwht)
+            await Promise.all([
+                scanClient(window.supabaseClient, window.SUPABASE_CLUSTER_NODES[0]),
+                scanClient(window.secondarySupabaseClient, window.SUPABASE_CLUSTER_NODES[1])
+            ]);
+
+            let foundAbsensi = [];
+            let foundJurnal = [];
+
+            const extractFromPayload = (p, rowUpdatedAt = null) => {
+                if (!p || typeof p !== 'object') return;
+                // Sinkronkan juga akun & master siswa jika ada di salah satu server
+                if (Array.isArray(p.registeredUsers) && p.registeredUsers.length > 0) {
+                    window.cloudState.registeredUsers = window.mergeUniqueArrayById(
+                        window.cloudState.registeredUsers || [],
+                        p.registeredUsers,
+                        (u) => `${u.role}_${window.normalizeTextCompact(u.username || u.nama)}`
+                    );
+                }
+                if (Array.isArray(p.siswa) && p.siswa.length > 0) {
+                    window.cloudState.siswa = window.mergeUniqueArrayById(
+                        window.cloudState.siswa || [],
+                        p.siswa,
+                        (s) => window.normalizeTextCompact(s.nama) || window.normalizeTextCompact(s.nis)
+                    );
+                }
+                if (Array.isArray(p.absensi)) {
+                    p.absensi.forEach(item => {
+                        if (item && typeof item === 'object') {
+                            if (!item.tanggal && rowUpdatedAt) {
+                                const conv = window.timestampToWitaDateAndTime(rowUpdatedAt);
+                                if (conv && conv.tanggal) item.tanggal = conv.tanggal;
+                            }
+                            foundAbsensi.push(item);
+                        }
+                    });
+                }
+                if (Array.isArray(p.riwayat_presensi)) {
+                    foundAbsensi.push(...window.konversiBarisRiwayatPresensiKeAbsensi(p.riwayat_presensi));
+                }
+                if (Array.isArray(p.jurnal)) {
+                    p.jurnal.forEach(item => {
+                        if (item && typeof item === 'object') {
+                            if (!item.tanggal && rowUpdatedAt) {
+                                const conv = window.timestampToWitaDateAndTime(rowUpdatedAt);
+                                if (conv && conv.tanggal) item.tanggal = conv.tanggal;
+                            }
+                            foundJurnal.push(item);
+                        }
+                    });
+                }
+                if (Array.isArray(p.jurnal_harian)) {
+                    foundJurnal.push(...window.konversiBarisJurnalHarianKeJurnal(p.jurnal_harian));
+                }
+
+                if (p.nama && (p.tipe_absen || p.jam) && !Array.isArray(p.siswa)) {
+                    foundAbsensi.push(p);
+                } else if (p.nama_siswa && (p.waktu_masuk || p.tanggal_siklus)) {
+                    foundAbsensi.push(...window.konversiBarisRiwayatPresensiKeAbsensi([p]));
+                }
+
+                if (p.siswa && p.kegiatan && !Array.isArray(p.siswa)) {
+                    foundJurnal.push(p);
+                } else if (p.nama_siswa && p.uraian_kegiatan) {
+                    foundJurnal.push(...window.konversiBarisJurnalHarianKeJurnal([p]));
+                }
+            };
+
+            appStateRows.forEach(row => {
+                if (row && row.payload) extractFromPayload(row.payload, row.updated_at);
+            });
+            allCloudDbRows.forEach(row => {
+                if (row && row.payload) extractFromPayload(row.payload, row.updated_at);
+            });
+            if (allSqlPresensiRows.length > 0) {
+                foundAbsensi.push(...window.konversiBarisRiwayatPresensiKeAbsensi(allSqlPresensiRows));
+            }
+            if (allSqlJurnalRows.length > 0) {
+                foundJurnal.push(...window.konversiBarisJurnalHarianKeJurnal(allSqlJurnalRows));
+            }
+
+            const prevAbsLen = (window.cloudState.absensi || []).length;
+            const prevJurLen = (window.cloudState.jurnal || []).length;
+
+            const cleanAbsensiList = foundAbsensi.filter(a => a && a.nama).map(a => {
+                const copy = Object.assign({}, a);
+                copy.tanggal = window.normalizeTanggalStr(copy.tanggal, copy.id) || window.getTodayLocalWitaStr();
+                if (copy.foto_selfie && copy.foto_selfie.startsWith('data:')) copy.foto_selfie = "";
+                if (copy.foto_url && copy.foto_url.startsWith('data:')) copy.foto_url = "";
+                return copy;
+            });
+
+            const cleanJurnalList = foundJurnal.filter(j => j && j.siswa && j.kegiatan).map(j => {
+                const copy = Object.assign({}, j);
+                copy.tanggal = window.normalizeTanggalStr(copy.tanggal, copy.id) || window.getTodayLocalWitaStr();
+                return copy;
+            });
+
+            if (cleanAbsensiList.length > 0) {
+                window.cloudState.absensi = window.mergeUniqueArrayById(
+                    window.cloudState.absensi || [],
+                    cleanAbsensiList,
+                    (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen || 'Masuk'}`
+                );
+            }
+
+            if (cleanJurnalList.length > 0) {
+                window.cloudState.jurnal = window.mergeUniqueArrayById(
+                    window.cloudState.jurnal || [],
+                    cleanJurnalList,
+                    (j) => `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
+                );
+            }
+
+            try {
+                const cleanSnap = window.getSanitizedCloudPayload();
+                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cleanSnap));
+            } catch (e) {}
+
+            // Jika ditemukan data baru dari hasil penggabungan lintas server, langsung tulis balik ke kedua server agar sinkron 100%!
+            const newAbsLen = (window.cloudState.absensi || []).length;
+            const newJurLen = (window.cloudState.jurnal || []).length;
+            if (newAbsLen > prevAbsLen || newJurLen > prevJurLen) {
+                window.directRestUpsertRow('app_cloud_db', {
+                    id: 'absensi_master_log',
+                    payload: { updatedAt: Date.now(), absensi: window.cloudState.absensi }
+                }, 'id').catch(() => {});
+                window.directRestUpsertRow('app_cloud_db', {
+                    id: 'jurnal_master_log',
+                    payload: { updatedAt: Date.now(), jurnal: window.cloudState.jurnal }
+                }, 'id').catch(() => {});
+            }
+
+            return {
+                totalAbsensi: newAbsLen,
+                totalJurnal: newJurLen
             };
         };
 
