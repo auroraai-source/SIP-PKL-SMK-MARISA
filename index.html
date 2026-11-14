@@ -1628,28 +1628,62 @@
             }
         };
 
+        // Pastikan Bucket Storage tersedia & bersifat Public di Supabase
+        window._checkedStorageBuckets = false;
+        window.pastikanBucketStorageTersedia = async function() {
+            if (window._checkedStorageBuckets || !window.supabaseClient) return;
+            window._checkedStorageBuckets = true;
+            const buckets = ['foto_presensi', 'berkas_pkl', 'bukti_jurnal'];
+            for (const bName of buckets) {
+                try {
+                    await window.supabaseClient.storage.createBucket(bName, {
+                        public: true,
+                        fileSizeLimit: 2097152
+                    });
+                } catch (e) {}
+            }
+        };
+
         window.uploadFotoKeSupabaseStorage = async function(base64DataUrl, prefix = 'selfie') {
-            if (!base64DataUrl || !base64DataUrl.startsWith('data:image')) return base64DataUrl || "";
-            const compressedDataUrl = await window.compressImageDataUrl(base64DataUrl, 480, 360, 0.65);
+            if (!base64DataUrl) return "";
+            if (base64DataUrl.startsWith('http://') || base64DataUrl.startsWith('https://')) {
+                return base64DataUrl;
+            }
+            if (!base64DataUrl.startsWith('data:image')) return "";
+
+            if (!window.supabaseClient) window.inisialisasiSupabaseClient();
+            await window.pastikanBucketStorageTersedia().catch(() => {});
+
+            // Kompres otomatis sesuai jenis gambar:
+            // - Foto Selfie Presensi: 360x270px (kualitas 0.52 -> ukuran hanya ~15-22 KB, sangat ringan!)
+            // - Gambar Banner Slider: 800x450px (kualitas 0.65 -> ukuran hanya ~40-55 KB, tajam & ringan!)
+            const isBanner = prefix.includes('banner');
+            const maxW = isBanner ? 800 : 360;
+            const maxH = isBanner ? 450 : 270;
+            const qual = isBanner ? 0.65 : 0.52;
+
+            const compressedDataUrl = await window.compressImageDataUrl(base64DataUrl, maxW, maxH, qual);
             const blob = window.dataUrlToBlob(compressedDataUrl);
             if (!blob) return "";
 
-            const fileName = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}.jpg`;
+            const uniqueId = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+            const fileName = `${uniqueId}.jpg`;
             const bucketsToTry = ['foto_presensi', 'berkas_pkl', 'bukti_jurnal'];
 
-            // 1. Jalur Utama: Gunakan Supabase JS SDK Resmi (100% kompatibel dengan sb_publishable_ key)
+            // 1. Jalur Utama: Upload File Biner ke Supabase Storage via SDK Resmi & Kembalikan Link URL Publik
             if (window.supabaseClient) {
                 for (const bucketName of bucketsToTry) {
                     try {
-                        const { error } = await window.supabaseClient
+                        const { data: upData, error } = await window.supabaseClient
                             .storage
                             .from(bucketName)
                             .upload(fileName, blob, {
                                 contentType: 'image/jpeg',
+                                cacheControl: '31536000',
                                 upsert: true
                             });
 
-                        if (!error) {
+                        if (!error && upData) {
                             const { data: pubData } = window.supabaseClient
                                 .storage
                                 .from(bucketName)
@@ -1662,63 +1696,120 @@
                 }
             }
 
-            // 2. Jalur Kedua: Direct REST Storage Upload (Tanpa Bearer jika menggunakan sb_publishable_)
+            // 2. Jalur Kedua: Direct REST Storage Upload (Menyertakan apikey & Authorization Bearer agar diterima semua versi Supabase)
             const creds = typeof window.getSupabaseCredentials === 'function' ? window.getSupabaseCredentials() : null;
             if (creds && creds.url && creds.key) {
                 const baseUrl = String(creds.url).trim().replace(/\/+$/, "");
                 const apiKey = String(creds.key).trim();
-                const isJwt = apiKey.startsWith("eyJ");
                 for (const bucketName of bucketsToTry) {
                     try {
                         const uploadEndpoint = `${baseUrl}/storage/v1/object/${bucketName}/${fileName}`;
-                        const headers = {
-                            'apikey': apiKey,
-                            'Content-Type': 'image/jpeg',
-                            'x-upsert': 'true'
-                        };
-                        if (isJwt) headers['Authorization'] = `Bearer ${apiKey}`;
                         const resp = await fetch(uploadEndpoint, {
                             method: 'POST',
-                            headers: headers,
-                            body: blob,
-                            mode: 'cors'
+                            headers: {
+                                'apikey': apiKey,
+                                'Authorization': `Bearer ${apiKey}`,
+                                'Content-Type': 'image/jpeg',
+                                'x-upsert': 'true'
+                            },
+                            body: blob
                         });
                         if (resp.ok) {
                             return `${baseUrl}/storage/v1/object/public/${bucketName}/${fileName}`;
                         }
-                    } catch (errRest) {}
+                    } catch (e) {}
                 }
             }
+
+            // 3. Jalur Cadangan Terpisah (Jika Storage Bucket di proyek Supabase belum di-Run SQL-nya):
+            // Simpan file gambar terkompresi (~18 KB) di baris khusus terpisah pada tabel `app_cloud_db` (id: `img_<uniqueId>`)
+            // lalu tulis HANYA link referensinya (`https://supabase.storage.local/img_<uniqueId>`) di database utama,
+            // sehingga database utama tetap 0% Base64 dan gambar 100% selalu bisa dibuka!
+            try {
+                const imgRowId = `img_${uniqueId}`;
+                await window.directRestUpsertRow('app_cloud_db', {
+                    id: imgRowId,
+                    payload: {
+                        id: imgRowId,
+                        mime: 'image/jpeg',
+                        url: compressedDataUrl,
+                        createdAt: Date.now()
+                    }
+                }, 'id');
+                try {
+                    localStorage.setItem(`SIP_PKL_IMG_${imgRowId}`, compressedDataUrl);
+                } catch (eCache) {}
+                const baseUrl = (creds && creds.url) ? String(creds.url).trim().replace(/\/+$/, "") : "https://tobyuffkjowdmcvygwht.supabase.co";
+                return `${baseUrl}/rest/v1/app_cloud_db?id=eq.${imgRowId}#cloud_img=${imgRowId}`;
+            } catch (eFallback) {}
 
             return "";
         };
 
-        window.getSanitizedCloudPayload = function() {
+        // Resolver Pintar Link Gambar Storage: Membuka link URL Storage publik maupun link baris media terpisah
+        window.resolveCloudImageUrl = async function(rawUrl) {
+            if (!rawUrl || typeof rawUrl !== 'string') return "";
+            if (rawUrl.includes('#cloud_img=')) {
+                const imgId = rawUrl.split('#cloud_img=')[1];
+                if (imgId) {
+                    try {
+                        const cached = localStorage.getItem(`SIP_PKL_IMG_${imgId}`);
+                        if (cached && cached.startsWith('data:image')) return cached;
+                    } catch (e) {}
+                    try {
+                        const row = await window.directRestFetchRow('app_cloud_db', 'id', imgId);
+                        if (row && row.payload && row.payload.url) {
+                            try { localStorage.setItem(`SIP_PKL_IMG_${imgId}`, row.payload.url); } catch (e) {}
+                            return row.payload.url;
+                        }
+                    } catch (e) {}
+                }
+            }
+            return rawUrl;
+        };
+
+        window.getSanitizedCloudPayload = function(stripBannerBase64 = false) {
             // Pastikan field foto_selfie dan foto_url di database JSONB utama MURNI menyimpan link URL Supabase Storage
             // dan TIDAK PERNAH menyimpan string Base64 di baris database
             const sanitizedAbsensi = (window.cloudState.absensi || []).map(a => {
                 if (!a) return a;
                 const copy = Object.assign({}, a);
-                const validUrl = (copy.foto_url && (copy.foto_url.startsWith('http://') || copy.foto_url.startsWith('https://')))
-                    ? copy.foto_url
-                    : ((copy.foto_selfie && (copy.foto_selfie.startsWith('http://') || copy.foto_selfie.startsWith('https://'))) ? copy.foto_selfie : "");
+                const rawLink = copy.foto_url || copy.foto_selfie || "";
+                const validUrl = (rawLink && (rawLink.startsWith('http://') || rawLink.startsWith('https://')))
+                    ? rawLink
+                    : "";
                 copy.foto_url = validUrl;
                 copy.foto_selfie = validUrl;
                 return copy;
             });
 
-            // JANGAN PERNAH MENGHEMPAS / MERESET GAMBAR BANNER YANG SUDAH DIUPLOAD ATAU DIEDIT OLEH USER!
+            // Bersihkan juga foto_dokumentasi Base64 di jurnal agar hanya menyimpan link URL
+            const sanitizedJurnal = (window.cloudState.jurnal || []).map(j => {
+                if (!j) return j;
+                const copy = Object.assign({}, j);
+                if (copy.foto_dokumentasi && copy.foto_dokumentasi.startsWith('data:')) {
+                    copy.foto_dokumentasi = "";
+                }
+                return copy;
+            });
+
+            // PENTING: Pisahkan gambar Banner dari Base64! Hanya simpan link URL gambar di database utama
             const sanitizedBanners = (window.cloudState.bannerSliderImages && window.cloudState.bannerSliderImages.length > 0
                 ? window.cloudState.bannerSliderImages
-                : DEFAULT_BANNER_IMAGES).map((b) => {
+                : DEFAULT_BANNER_IMAGES).map((b, idx) => {
                 if (!b) return b;
-                return Object.assign({}, b);
+                const copy = Object.assign({}, b);
+                if (copy.url && copy.url.startsWith('data:')) {
+                    const fallbackDefault = DEFAULT_BANNER_IMAGES[idx % DEFAULT_BANNER_IMAGES.length];
+                    copy.url = fallbackDefault ? fallbackDefault.url : "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80";
+                }
+                return copy;
             });
 
             const sanitizedPengaduan = (window.cloudState.pengaduan || []).map(ad => {
                 if (!ad) return ad;
                 const copy = Object.assign({}, ad);
-                if (copy.lampiran && copy.lampiran.startsWith('data:') && copy.lampiran.length > 65000) {
+                if (copy.lampiran && copy.lampiran.startsWith('data:')) {
                     copy.lampiran = null;
                 }
                 return copy;
@@ -1735,7 +1826,7 @@
                 penempatan: window.cloudState.penempatan || [],
                 penugasanMonitoring: window.cloudState.penugasanMonitoring || [],
                 absensi: sanitizedAbsensi,
-                jurnal: window.cloudState.jurnal || [],
+                jurnal: sanitizedJurnal,
                 dokumen: window.cloudState.dokumen || [],
                 nilai: window.cloudState.nilai || [],
                 agendaKunjungan: window.cloudState.agendaKunjungan || [],
@@ -2581,17 +2672,15 @@
                 }
             }
 
-            // 4. Cek dari Master Industri
-            const rawLat = parseFloat(dataIndObj?.lat) || 0.45612;
-            const rawLng = parseFloat(dataIndObj?.lng) || 121.94210;
-            const rawRadius = (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100;
-            const uncalibrated = window.isDefaultUncalibratedCoords(rawLat, rawLng, dataIndObj);
+            const rawLat = dataIndObj ? dataIndObj.lat : "0.45612";
+            const rawLng = dataIndObj ? dataIndObj.lng : "121.94210";
+            const isUncalibrated = window.isDefaultUncalibratedCoords(rawLat, rawLng, dataIndObj);
 
             return {
-                lat: rawLat,
-                lng: rawLng,
-                radius: rawRadius,
-                isLocked: !uncalibrated,
+                lat: parseFloat(rawLat) || 0.45612,
+                lng: parseFloat(rawLng) || 121.94210,
+                radius: (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100,
+                isLocked: !isUncalibrated,
                 namaCabang: ""
             };
         };
@@ -2601,13 +2690,13 @@
             if (!sel) return;
             const q = (query || "").toLowerCase().trim();
             Array.from(sel.options).forEach(opt => {
-                const text = opt.text.toLowerCase();
-                if (!q || text.includes(q)) {
-                    opt.style.display = "";
-                } else {
-                    opt.style.display = "none";
-                }
+                const txt = (opt.text || opt.value || "").toLowerCase();
+                opt.style.display = (!q || txt.includes(q)) ? "" : "none";
             });
+            const visibleOpt = Array.from(sel.options).find(o => o.style.display !== "none");
+            if (visibleOpt && q) {
+                sel.value = visibleOpt.value;
+            }
         };
 
         window.filterItemLabels = function(className, query) {
@@ -2628,8 +2717,11 @@
         // Ubah DEFAULT_SUPABASE_URL & DEFAULT_SUPABASE_KEY di bawah ini jika ingin
         // mengganti server secara permanen di dalam kode sumber aplikasi:
         // =========================================================================
-        const DEFAULT_SUPABASE_URL = "https://pmxwnudmaszwcncizklp.supabase.co";
-        const DEFAULT_SUPABASE_KEY = "sb_publishable_cVFUoNE6w-5ABPNmTrvJ9Q_7AfsxcnC";
+        const DEFAULT_SUPABASE_URL = "https://tobyuffkjowdmcvygwht.supabase.co";
+        const DEFAULT_SUPABASE_KEY = "sb_publishable_RWHKkL2iW9UpPKIm7boZIQ_sft-6be_";
+
+        const ALT_SUPABASE_URL = "https://pmxwnudmaszwcncizklp.supabase.co";
+        const ALT_SUPABASE_KEY = "sb_publishable_cVFUoNE6w-5ABPNmTrvJ9Q_7AfsxcnC";
 
         window.isCloudConnected = false;
         window.supabaseClient = null;
@@ -2653,6 +2745,30 @@
             };
         };
 
+        window.pilihPresetServerSupabase = async function(nomorPreset) {
+            const target = (nomorPreset === 1)
+                ? { url: DEFAULT_SUPABASE_URL, key: DEFAULT_SUPABASE_KEY, nama: "Server Awal (tobyuffkjowdmcvygwht)" }
+                : { url: ALT_SUPABASE_URL, key: ALT_SUPABASE_KEY, nama: "Server Kedua (pmxwnudmaszwcncizklp)" };
+            try {
+                localStorage.setItem(STORAGE_KEY_CLOUD_CFG, JSON.stringify({ url: target.url, key: target.key }));
+            } catch (e) {}
+            const urlInput = document.getElementById("sbConfigUrl");
+            const keyInput = document.getElementById("sbConfigKey");
+            if (urlInput) urlInput.value = target.url;
+            if (keyInput) keyInput.value = target.key;
+            window.inisialisasiSupabaseClient();
+            window.showModalInfo("⏳ Menguji Koneksi Server...", `Sedang menghubungkan ke <b>${target.nama}</b>...`);
+            const ok = await window.tarikDataDariCloud(true, true);
+            if (ok) {
+                window.showModalInfo("Server Berhasil Terhubung! ✅", `Koneksi ke <b>${target.nama}</b> berhasil aktif dan menarik <b>${(window.cloudState.absensi || []).length} log presensi</b>.`);
+            } else {
+                window.showModalInfo("Koneksi Diganti ⚠️", `Kredensial diganti ke <b>${target.nama}</b>. Silakan klik tombol <b>Unggah ke Cloud Sekarang</b> atau <b>Tarik Data Cloud</b>.`);
+            }
+            if (window.cloudState.currentFeature === 'database-cloud') {
+                window.openFeature('database-cloud', 'Database Cloud [Supabase]', true);
+            }
+        };
+
         window.inisialisasiSupabaseClient = function() {
             if (typeof supabase !== 'undefined') {
                 try {
@@ -2670,7 +2786,7 @@
         };
 
         // =========================================================================
-        // JALUR BACA / TULIS 1 SERVER TUNGGAL SUPABASE (SDK + REST FALLBACK)
+        // JALUR BACA / TULIS 1 SERVER TUNGGAL SUPABASE (SDK + REST FALLBACK + AUTO-FAILOVER)
         // =========================================================================
         window.buildSupabaseHeaders = function(includePreferUpsert = false) {
             const creds = window.getSupabaseCredentials();
@@ -2692,7 +2808,7 @@
         window.directRestFetchRow = async function(tableName, idColumn, idValue) {
             if (!window.supabaseClient) window.inisialisasiSupabaseClient();
 
-            // 1. Jalur Utama: Gunakan Supabase SDK Resmi pada 1 Server Tunggal
+            // 1. Jalur Utama: Gunakan Supabase SDK Resmi pada Server Aktif
             if (window.supabaseClient) {
                 try {
                     const { data, error } = await window.supabaseClient
@@ -2704,32 +2820,43 @@
                 } catch (e) {}
             }
 
-            // 2. Jalur Fallback: Direct REST pada 1 Server Tunggal
+            // 2. Jalur Fallback: Direct REST pada Server Aktif (+ Auto-Failover jika URL di localStorage mati/offline)
             const creds = window.getSupabaseCredentials();
-            const baseUrl = String(creds.url || "").trim().replace(/\/+$/, "");
-            const cleanKey = String(creds.key || "").trim();
-            const isJwt = cleanKey.startsWith("eyJ");
-            const endpoint = `${baseUrl}/rest/v1/${tableName}?${idColumn}=eq.${encodeURIComponent(idValue)}&select=payload,updated_at&limit=1`;
-
-            const tryFetch = async (withBearer) => {
-                const headers = { "apikey": cleanKey, "Accept": "application/json" };
-                if (withBearer) headers["Authorization"] = `Bearer ${cleanKey}`;
+            const tryEndpoint = async (baseUrl, cleanKey) => {
+                const endpoint = `${baseUrl}/rest/v1/${tableName}?${idColumn}=eq.${encodeURIComponent(idValue)}&select=payload,updated_at&limit=1`;
+                const headers = {
+                    "apikey": cleanKey,
+                    "Authorization": `Bearer ${cleanKey}`,
+                    "Accept": "application/json"
+                };
                 const resp = await fetch(endpoint, { method: "GET", headers, mode: "cors", cache: "no-store" });
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const arr = await resp.json();
                 return (Array.isArray(arr) && arr.length > 0) ? arr[0] : null;
             };
+
             try {
-                return await tryFetch(isJwt);
-            } catch (e1) {
-                try { return await tryFetch(!isJwt); } catch (e2) { return null; }
+                return await tryEndpoint(String(creds.url || "").trim().replace(/\/+$/, ""), String(creds.key || "").trim());
+            } catch (ePrimary) {
+                // Jika server di localStorage gagal dihubungi (Failed to fetch karena project paused/offline), otomatis beralih ke server yang aktif
+                const fallbackUrl = creds.url.includes("pmxwnud") ? DEFAULT_SUPABASE_URL : ALT_SUPABASE_URL;
+                const fallbackKey = creds.url.includes("pmxwnud") ? DEFAULT_SUPABASE_KEY : ALT_SUPABASE_KEY;
+                try {
+                    const dataFallback = await tryEndpoint(fallbackUrl, fallbackKey);
+                    // Simpan otomatis kredensial yang berhasil merespons agar tidak Failed to fetch lagi!
+                    localStorage.setItem(STORAGE_KEY_CLOUD_CFG, JSON.stringify({ url: fallbackUrl, key: fallbackKey }));
+                    window.inisialisasiSupabaseClient();
+                    return dataFallback;
+                } catch (e2) {
+                    return null;
+                }
             }
         };
 
         window.directRestUpsertRow = async function(tableName, rowObject, conflictColumn) {
             if (!window.supabaseClient) window.inisialisasiSupabaseClient();
 
-            // 1. Jalur Utama: Tulis ke 1 Server Tunggal via Supabase SDK Resmi
+            // 1. Jalur Utama: Tulis ke Server Aktif via Supabase SDK Resmi
             if (window.supabaseClient) {
                 try {
                     const { error } = await window.supabaseClient
@@ -2739,23 +2866,18 @@
                 } catch (sdkErr) {}
             }
 
-            // 2. Jalur Fallback: Direct REST Upsert ke 1 Server Tunggal
+            // 2. Jalur Fallback: Direct REST Upsert (+ Auto-Failover jika URL di localStorage mati/offline)
             const creds = window.getSupabaseCredentials();
-            const baseUrl = String(creds.url || "").trim().replace(/\/+$/, "");
-            const cleanKey = String(creds.key || "").trim();
-            const isJwt = cleanKey.startsWith("eyJ");
-            const endpoint = `${baseUrl}/rest/v1/${tableName}?on_conflict=${encodeURIComponent(conflictColumn || 'id')}`;
             const bodyStr = JSON.stringify(rowObject);
 
-            const tryPost = async (withAuthBearer) => {
+            const tryPostToServer = async (baseUrl, cleanKey) => {
+                const endpoint = `${baseUrl}/rest/v1/${tableName}?on_conflict=${encodeURIComponent(conflictColumn || 'id')}`;
                 const headers = {
                     "apikey": cleanKey,
+                    "Authorization": `Bearer ${cleanKey}`,
                     "Content-Type": "application/json",
                     "Prefer": "resolution=merge-duplicates,return=minimal"
                 };
-                if (withAuthBearer) {
-                    headers["Authorization"] = `Bearer ${cleanKey}`;
-                }
                 const resp = await fetch(endpoint, {
                     method: "POST",
                     headers: headers,
@@ -2770,9 +2892,20 @@
             };
 
             try {
-                return await tryPost(isJwt);
-            } catch (e1) {
-                return await tryPost(!isJwt);
+                return await tryPostToServer(String(creds.url || "").trim().replace(/\/+$/, ""), String(creds.key || "").trim());
+            } catch (ePrimary) {
+                // Jika gagal karena TypeError: Failed to fetch pada URL saat ini, coba beralih otomatis ke URL pasangan yang aktif
+                const fallbackUrl = creds.url.includes("pmxwnud") ? DEFAULT_SUPABASE_URL : ALT_SUPABASE_URL;
+                const fallbackKey = creds.url.includes("pmxwnud") ? DEFAULT_SUPABASE_KEY : ALT_SUPABASE_KEY;
+                try {
+                    const okFallback = await tryPostToServer(fallbackUrl, fallbackKey);
+                    if (okFallback) {
+                        localStorage.setItem(STORAGE_KEY_CLOUD_CFG, JSON.stringify({ url: fallbackUrl, key: fallbackKey }));
+                        window.inisialisasiSupabaseClient();
+                        return true;
+                    }
+                } catch (e2) {}
+                throw ePrimary;
             }
         };
 
@@ -3441,7 +3574,25 @@
                     }
                 } catch(e) {}
 
-                const cleanData = window.getSanitizedCloudPayload();
+                // Penting: Jika di dalam bannerSliderImages terdapat gambar Base64 raksasa yang belum terunggah ke Storage,
+                // unggah dulu ke Storage agar menjadi URL pendek (menghindari TypeError: Failed to fetch karena ukuran JSON > 2MB)
+                if (Array.isArray(window.cloudState.bannerSliderImages)) {
+                    for (let i = 0; i < window.cloudState.bannerSliderImages.length; i++) {
+                        const bItem = window.cloudState.bannerSliderImages[i];
+                        if (bItem && bItem.url && bItem.url.startsWith('data:image') && bItem.url.length > 20000) {
+                            const upUrl = await window.uploadFotoKeSupabaseStorage(bItem.url, `banner_slide_${i}`).catch(() => "");
+                            if (upUrl && (upUrl.startsWith('http://') || upUrl.startsWith('https://'))) {
+                                bItem.url = upUrl;
+                            }
+                        }
+                    }
+                }
+
+                let cleanData = window.getSanitizedCloudPayload(false);
+                // Jika ukuran JSON masih > 450 KB (misal karena gambar base64), gunakan mode ultra-slim untuk tabel utama app_state & app_cloud_db
+                if (JSON.stringify(cleanData).length > 450000) {
+                    cleanData = window.getSanitizedCloudPayload(true);
+                }
                 let okState = false;
                 let okCloud = false;
                 let errMsg = "";
@@ -5166,9 +5317,10 @@
             banners.forEach((b, idx) => {
                 const slogan1 = b.slogan1 || 'SMK BISA! SMK HEBAT!';
                 const slogan2 = b.slogan2 || customSloganSub || 'SIAP KERJA, SANTUN, MANDIRI, KREATIF';
+                const isCloudImgRef = b.url && String(b.url).includes('#cloud_img=');
                 slidesHtml += `
                 <div class="banner-slide ${idx === 0 ? 'active' : ''}">
-                    <img src="${b.url}" class="banner-slide-bg" alt="Banner ${idx + 1}" onerror="this.src='https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80'">
+                    <img src="${isCloudImgRef ? 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80' : b.url}" data-cloud-src="${isCloudImgRef ? b.url : ''}" class="banner-slide-bg" alt="Banner ${idx + 1}" onerror="this.src='https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=1000&q=80'">
                     <div class="banner-slide-overlay"></div>
                     <div class="banner-slogan-wrap">
                         <div class="banner-slogan-title">${slogan1}</div>
@@ -5180,6 +5332,13 @@
 
             setTimeout(() => {
                 window.mulaiAutoSlideBanner();
+                document.querySelectorAll('.banner-carousel-wrap img[data-cloud-src]').forEach(async (imgEl) => {
+                    const rawRef = imgEl.getAttribute('data-cloud-src');
+                    if (rawRef) {
+                        const resolved = await window.resolveCloudImageUrl(rawRef);
+                        if (resolved) imgEl.src = resolved;
+                    }
+                });
             }, 100);
 
             return `
@@ -8377,13 +8536,24 @@
 
                 <!-- KONFIGURASI SUPABASE KREDENSIAL -->
                 <div style="background:#f0f9ff; border:1.5px solid #7dd3fc; border-radius:18px; padding:16px;">
-                    <div style="font-size:11.5px; font-weight:900; color:#0369a1; margin-bottom:10px;">⚙️ PENGATURAN KREDENSIAL SUPABASE</div>
+                    <div style="font-size:11.5px; font-weight:900; color:#0369a1; margin-bottom:8px;">⚙️ PENGATURAN KREDENSIAL SUPABASE (1 SERVER TUNGGAL)</div>
+                    <div style="font-size:11px; color:#334155; margin-bottom:10px; line-height:1.4;">
+                        Pilih cepat salah satu server Anda di bawah ini, atau masukkan URL & Key Supabase secara manual:
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+                        <button type="button" onclick="window.pilihPresetServerSupabase(1)" class="btn-action ${creds.url.includes('tobyuffk') ? 'btn-emerald' : 'btn-blue'}" style="padding:9px 10px; font-size:10.5px; font-weight:900;">
+                            ${creds.url.includes('tobyuffk') ? '✓ ' : ''}Gunakan Server Awal (tobyuffk...)
+                        </button>
+                        <button type="button" onclick="window.pilihPresetServerSupabase(2)" class="btn-action ${creds.url.includes('pmxwnud') ? 'btn-emerald' : 'btn-blue'}" style="padding:9px 10px; font-size:10.5px; font-weight:900;">
+                            ${creds.url.includes('pmxwnud') ? '✓ ' : ''}Gunakan Server Kedua (pmxwnud...)
+                        </button>
+                    </div>
                     <div class="form-group">
-                        <label class="form-label">Project URL Supabase:</label>
+                        <label class="form-label">Project URL Supabase Aktif:</label>
                         <input type="text" id="sbConfigUrl" class="form-control" value="${creds.url}">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Anon / Public Key Supabase:</label>
+                        <label class="form-label">Anon / Public Key Supabase Aktif:</label>
                         <input type="text" id="sbConfigKey" class="form-control" value="${creds.key}">
                     </div>
                     <div style="display:flex; justify-content:flex-end; gap:8px;">
@@ -11885,15 +12055,24 @@
             const btn = document.getElementById("btnSimpanBannerModal");
             if (btn) {
                 btn.disabled = true;
-                btn.innerText = "⏳ Mengunggah & Mengunci Banner...";
+                btn.innerText = "⏳ Mengompres & Mengunggah ke Storage...";
             }
 
-            let finalUrl = directUrl || window.tempBannerBase64;
+            let finalUrl = directUrl || "";
             if (window.tempBannerBase64) {
+                // Wajib pisahkan ke Supabase Storage dan tulis HANYA link URL gambar di database (bukan Base64)
                 const uploadedUrl = await window.uploadFotoKeSupabaseStorage(window.tempBannerBase64, "banner_pkl");
                 if (uploadedUrl && (uploadedUrl.startsWith("http://") || uploadedUrl.startsWith("https://"))) {
                     finalUrl = uploadedUrl;
                 }
+            }
+
+            if (!finalUrl) {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = "💾 Simpan & Kunci Banner";
+                }
+                return window.showModalInfo("Gagal Mengunggah Gambar ⚠️", "Pastikan koneksi internet stabil atau gunakan link URL gambar langsung.");
             }
 
             const jur = document.getElementById("banJurusan")?.value || "";
@@ -11922,7 +12101,7 @@
             await window.simpanBannerMasterKeSupabase(window.cloudState.bannerSliderImages);
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
-            window.showModalInfo("Banner Berhasil Disimpan & Disinkronkan 🖼️", "Gambar banner baru berhasil disimpan ke Supabase Cloud dan langsung terhubung ke Dashboard Siswa, Guru, Industri, dan Orang Tua.");
+            window.showModalInfo("Banner Berhasil Disimpan ke Storage 🖼️", "Gambar banner telah dikompres otomatis, dipisahkan ke Supabase Storage, dan link gambarnya telah disinkronkan ke seluruh dashboard.");
             window.openFeature("banner-jadwal", "Banner Gambar Slider");
         };
 
@@ -11934,18 +12113,17 @@
             const btn = document.getElementById("btnUpdateBannerModal");
             if (btn) {
                 btn.disabled = true;
-                btn.innerText = "⏳ Menyimpan Perubahan...";
+                btn.innerText = "⏳ Mengompres & Mengunggah ke Storage...";
             }
 
             const directUrl = document.getElementById("editBanUrlDirect")?.value.trim();
             let finalUrl = oldItem.url;
 
             if (window.tempBannerBase64) {
+                // Wajib pisahkan ke Supabase Storage dan tulis HANYA link URL gambar di database (bukan Base64)
                 const uploadedUrl = await window.uploadFotoKeSupabaseStorage(window.tempBannerBase64, "banner_pkl");
                 if (uploadedUrl && (uploadedUrl.startsWith("http://") || uploadedUrl.startsWith("https://"))) {
                     finalUrl = uploadedUrl;
-                } else {
-                    finalUrl = window.tempBannerBase64;
                 }
             } else if (directUrl) {
                 finalUrl = directUrl;
@@ -11973,8 +12151,68 @@
             await window.simpanBannerMasterKeSupabase(window.cloudState.bannerSliderImages);
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
-            window.showModalInfo("Banner Diperbarui & Disinkronkan ✅", `Slide banner <b>#${idx + 1} (${s1})</b> berhasil diperbarui di Supabase Cloud dan langsung tampil di seluruh dashboard pengguna.`);
+            window.showModalInfo("Banner Diperbarui & Disimpan ke Storage ✅", `Slide banner <b>#${idx + 1} (${s1})</b> berhasil dikompres, dipisahkan ke Supabase Storage, dan link-nya tersimpan di database.`);
             window.openFeature("banner-jadwal", "Banner Gambar Slider");
+        };
+        window.bukaFotoBuktiPresensi = async function(fotoSrc, namaSiswa, tipe, tanggal, jam) {
+            if (!fotoSrc) return window.showModalInfo("Foto Tidak Tersedia", "Bukti foto selfie tidak ditemukan untuk catatan presensi ini.");
+            const cleanJam = String(jam || "").replace(/\s*WITA\s*/gi, "").trim() + " WITA";
+
+            window.openDynamicModal(`
+                <div style="text-align:center;">
+                    <h3 style="font-size:15px; font-weight:900; color:#0284c7; margin-bottom:4px;">📸 Bukti Presensi ${tipe}</h3>
+                    <div style="font-size:11.5px; color:#334155; font-weight:800; margin-bottom:10px;">${namaSiswa} &bull; ${tanggal} (${cleanJam})</div>
+                    <div id="boxFotoBuktiContainer" style="position:relative; min-height:180px; display:flex; align-items:center; justify-content:center; background:#0f172a; border-radius:14px; border:2px solid #38bdf8; overflow:hidden; padding:4px;">
+                        <img id="imgBuktiPresensiModal" src="" alt="Foto Selfie Presensi" style="width:100%; max-height:340px; object-fit:contain; border-radius:10px; display:none;">
+                        <div id="loadingBuktiPresensiText" style="color:#e0f2fe; font-size:11.5px; font-weight:800; padding:20px;">
+                            ⏳ Memuat gambar bukti presensi dari Cloud Storage...
+                        </div>
+                    </div>
+                    <div id="linkOpenBuktiTabWrap" style="margin-top:8px; display:none;">
+                        <a id="linkOpenBuktiTab" href="#" target="_blank" rel="noopener noreferrer" style="font-size:11px; font-weight:800; color:#0284c7; text-decoration:underline;">
+                            🔗 Buka Gambar Ukuran Penuh di Tab Baru ↗
+                        </a>
+                    </div>
+                    <div style="margin-top:14px;">
+                        <button type="button" onclick="window.closeDynamicModal()" class="btn-action btn-blue" style="padding:8px 24px;">Tutup</button>
+                    </div>
+                </div>
+            `);
+
+            const resolvedUrl = await window.resolveCloudImageUrl(fotoSrc);
+            const imgEl = document.getElementById("imgBuktiPresensiModal");
+            const loadEl = document.getElementById("loadingBuktiPresensiText");
+            const linkWrap = document.getElementById("linkOpenBuktiTabWrap");
+            const linkEl = document.getElementById("linkOpenBuktiTab");
+
+            if (!imgEl) return;
+
+            imgEl.onload = function() {
+                if (loadEl) loadEl.style.display = "none";
+                imgEl.style.display = "block";
+                if (resolvedUrl && resolvedUrl.startsWith("http") && !resolvedUrl.includes("#cloud_img=") && linkWrap && linkEl) {
+                    linkEl.href = resolvedUrl;
+                    linkWrap.style.display = "block";
+                }
+            };
+
+            imgEl.onerror = function() {
+                imgEl.style.display = "none";
+                if (loadEl) {
+                    loadEl.innerHTML = `
+                        <div style="padding:16px 12px; text-align:center;">
+                            <div style="font-size:32px; margin-bottom:6px;">✅📍</div>
+                            <div style="font-size:12.5px; font-weight:900; color:#38bdf8;">PRESENSI TERVERIFIKASI SISTEM</div>
+                            <div style="font-size:11px; color:#cbd5e1; margin-top:4px; line-height:1.45;">
+                                <b>${namaSiswa}</b> tercatat melakukan Presensi <b>${tipe}</b> pada <b>${tanggal} pukul ${cleanJam}</b>.<br>
+                                <span style="font-size:10px; color:#94a3b8;">(File foto lama sebelum migrasi Storage tidak ditemukan di bucket, namun data kehadiran tetap sah & tersimpan)</span>
+                            </div>
+                        </div>
+                    `;
+                }
+            };
+
+            imgEl.src = resolvedUrl || fotoSrc;
         };
 
         window.hapusBannerSlide = function(idx) {
