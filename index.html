@@ -3239,6 +3239,8 @@
                         status: "Tepat Waktu",
                         latitude: r.lat_masuk || "",
                         longitude: r.lng_masuk || "",
+                        nama_lokasi_absen: r.nama_lokasi_absen || ind || "-",
+                        status_validasi_lokasi: r.status_validasi_lokasi || "Valid (Di Area Industri)",
                         foto_url: r.foto_masuk || "",
                         foto_selfie: r.foto_masuk || ""
                     });
@@ -3260,6 +3262,8 @@
                         status: "Tepat Waktu",
                         latitude: r.lat_pulang || "",
                         longitude: r.lng_pulang || "",
+                        nama_lokasi_absen: r.nama_lokasi_absen || ind || "-",
+                        status_validasi_lokasi: r.status_validasi_lokasi || "Valid (Di Area Industri)",
                         foto_url: r.foto_pulang || "",
                         foto_selfie: r.foto_pulang || ""
                     });
@@ -3297,249 +3301,42 @@
                 const tglNorm = window.normalizeTanggalStr(itemAbsen.tanggal, itemAbsen.id) || window.getTodayLocalWitaStr();
                 const sKey = window.normalizeTextCompact(itemAbsen.nama);
                 const tipe = itemAbsen.tipe_absen || "Masuk";
-                await window.directRestUpsertRow('app_cloud_db', {
-                    id: `absitem_${tglNorm}_${sKey}_${tipe}`,
-                    payload: itemAbsen
-                }, 'id').catch(() => {});
-                return true;
-            } catch (e) {
-                return false;
-            }
-        };
+                const rpId = `rp_${tglNorm}_${sKey}`;
 
-        // Pemindai 1 Server Tunggal Ringan & Cepat (Mengecualikan baris gambar img_* agar aplikasi sangat ringan & responsif!)
-        window._isOmniScanRunning = false;
-        window._lastOmniScanCompletedAt = 0;
-
-        window.omniScanSeluruhDataPresensiDanJurnalCloud = async function(forceScan = false) {
-            if (window._isOmniScanRunning) {
-                return {
-                    totalAbsensi: (window.cloudState.absensi || []).length,
-                    totalJurnal: (window.cloudState.jurnal || []).length
-                };
-            }
-            if (!forceScan && (Date.now() - (window._lastOmniScanCompletedAt || 0) < 25000)) {
-                return {
-                    totalAbsensi: (window.cloudState.absensi || []).length,
-                    totalJurnal: (window.cloudState.jurnal || []).length
-                };
-            }
-            window._isOmniScanRunning = true;
-            try {
-                if (!window.supabaseClient) window.inisialisasiSupabaseClient();
-                const creds = window.getSupabaseCredentials();
-
-                let allCloudDbRows = [];
-                let appStateRows = [];
-                let allSqlPresensiRows = [];
-                let allSqlJurnalRows = [];
-
-                // PENTING: Filter .not('id', 'like', 'img_%') mencegah ratusan file foto Base64 ikut terunduh saat sinkronisasi rutin!
-                if (window.supabaseClient) {
-                    try {
-                        const [resCloudDb, resState, resSqlAbs, resSqlJur] = await Promise.all([
-                            window.supabaseClient.from('app_cloud_db').select('id, payload, updated_at').not('id', 'like', 'img_%').limit(500),
-                            window.supabaseClient.from('app_state').select('id, payload, updated_at').limit(2),
-                            window.supabaseClient.from('riwayat_presensi').select('*').order('tanggal_siklus', { ascending: false }).limit(600),
-                            window.supabaseClient.from('jurnal_harian').select('*').order('tanggal_kegiatan', { ascending: false }).limit(600)
-                        ]);
-                        if (resCloudDb && Array.isArray(resCloudDb.data)) allCloudDbRows = resCloudDb.data;
-                        if (resState && Array.isArray(resState.data)) appStateRows = resState.data;
-                        if (resSqlAbs && Array.isArray(resSqlAbs.data)) allSqlPresensiRows = resSqlAbs.data;
-                        if (resSqlJur && Array.isArray(resSqlJur.data)) allSqlJurnalRows = resSqlJur.data;
-                    } catch (eSdk) {}
-                }
-
-                if (allCloudDbRows.length === 0 && appStateRows.length === 0) {
-                    const [rCloud, rState, rAbs, rJur] = await Promise.all([
-                        window.directRestGetQuery('app_cloud_db?select=id,payload,updated_at&id=not.like.img_*&limit=500').catch(() => null),
-                        window.directRestGetQuery('app_state?select=id,payload,updated_at&limit=2').catch(() => null),
-                        window.directRestGetQuery('riwayat_presensi?select=*&order=tanggal_siklus.desc&limit=600').catch(() => null),
-                        window.directRestGetQuery('jurnal_harian?select=*&order=tanggal_kegiatan.desc&limit=600').catch(() => null)
-                    ]);
-                    if (Array.isArray(rCloud)) allCloudDbRows = rCloud;
-                    if (Array.isArray(rState)) appStateRows = rState;
-                    if (Array.isArray(rAbs)) allSqlPresensiRows = rAbs;
-                    if (Array.isArray(rJur)) allSqlJurnalRows = rJur;
-                }
-
-            let foundAbsensi = [];
-            let foundJurnal = [];
-
-            const extractFromPayload = (p, rowUpdatedAt = null) => {
-                if (!p || typeof p !== 'object') return;
-                if (Array.isArray(p.registeredUsers) && p.registeredUsers.length > 0) {
-                    window.cloudState.registeredUsers = window.mergeUniqueArrayById(
-                        window.cloudState.registeredUsers || [],
-                        p.registeredUsers,
-                        (u) => `${u.role}_${window.normalizeTextCompact(u.username || u.nama)}`
-                    );
-                }
-                if (Array.isArray(p.siswa) && p.siswa.length > 0) {
-                    window.cloudState.siswa = window.mergeUniqueArrayById(
-                        window.cloudState.siswa || [],
-                        p.siswa,
-                        (s) => window.normalizeTextCompact(s.nama) || window.normalizeTextCompact(s.nis)
-                    );
-                }
-                if (Array.isArray(p.absensi)) {
-                    p.absensi.forEach(item => {
-                        if (item && typeof item === 'object') {
-                            if (!item.tanggal && rowUpdatedAt) {
-                                const conv = window.timestampToWitaDateAndTime(rowUpdatedAt);
-                                if (conv && conv.tanggal) item.tanggal = conv.tanggal;
-                            }
-                            foundAbsensi.push(item);
-                        }
-                    });
-                }
-                if (Array.isArray(p.riwayat_presensi)) {
-                    foundAbsensi.push(...window.konversiBarisRiwayatPresensiKeAbsensi(p.riwayat_presensi));
-                }
-                if (Array.isArray(p.jurnal)) {
-                    p.jurnal.forEach(item => {
-                        if (item && typeof item === 'object') {
-                            if (!item.tanggal && rowUpdatedAt) {
-                                const conv = window.timestampToWitaDateAndTime(rowUpdatedAt);
-                                if (conv && conv.tanggal) item.tanggal = conv.tanggal;
-                            }
-                            foundJurnal.push(item);
-                        }
-                    });
-                }
-                if (Array.isArray(p.jurnal_harian)) {
-                    foundJurnal.push(...window.konversiBarisJurnalHarianKeJurnal(p.jurnal_harian));
-                }
-
-                if (p.nama && (p.tipe_absen || p.jam) && !Array.isArray(p.siswa)) {
-                    foundAbsensi.push(p);
-                } else if (p.nama_siswa && (p.waktu_masuk || p.tanggal_siklus)) {
-                    foundAbsensi.push(...window.konversiBarisRiwayatPresensiKeAbsensi([p]));
-                }
-
-                if (p.siswa && p.kegiatan && !Array.isArray(p.siswa)) {
-                    foundJurnal.push(p);
-                } else if (p.nama_siswa && p.uraian_kegiatan) {
-                    foundJurnal.push(...window.konversiBarisJurnalHarianKeJurnal([p]));
-                }
-            };
-
-            appStateRows.forEach(row => {
-                if (row && row.payload) extractFromPayload(row.payload, row.updated_at);
-            });
-            allCloudDbRows.forEach(row => {
-                if (row && row.payload) extractFromPayload(row.payload, row.updated_at);
-            });
-            if (allSqlPresensiRows.length > 0) {
-                foundAbsensi.push(...window.konversiBarisRiwayatPresensiKeAbsensi(allSqlPresensiRows));
-            }
-            if (allSqlJurnalRows.length > 0) {
-                foundJurnal.push(...window.konversiBarisJurnalHarianKeJurnal(allSqlJurnalRows));
-            }
-
-            const prevAbsLen = (window.cloudState.absensi || []).length;
-            const prevJurLen = (window.cloudState.jurnal || []).length;
-
-            const cleanAbsensiList = foundAbsensi.filter(a => a && a.nama).map(a => {
-                const copy = Object.assign({}, a);
-                copy.tanggal = window.normalizeTanggalStr(copy.tanggal, copy.id) || window.getTodayLocalWitaStr();
-                const rawImg = copy.foto_url || copy.foto_selfie || "";
-                if (rawImg && rawImg.startsWith('data:image')) {
-                    const hint = `${window.normalizeTextCompact(copy.nama)}_${copy.tanggal}_${copy.tipe_absen || 'Masuk'}`;
-                    const safeRef = window.amankanFotoDataUrlKeBarisImg(rawImg, hint);
-                    copy.foto_url = safeRef;
-                    copy.foto_selfie = safeRef;
-                }
-                return copy;
-            });
-
-            const cleanJurnalList = foundJurnal.filter(j => j && j.siswa && j.kegiatan).map(j => {
-                const copy = Object.assign({}, j);
-                copy.tanggal = window.normalizeTanggalStr(copy.tanggal, copy.id) || window.getTodayLocalWitaStr();
-                return copy;
-            });
-
-            if (cleanAbsensiList.length > 0) {
-                window.cloudState.absensi = window.mergeUniqueArrayById(
-                    window.cloudState.absensi || [],
-                    cleanAbsensiList,
-                    (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen || 'Masuk'}`
-                );
-            }
-
-            if (cleanJurnalList.length > 0) {
-                window.cloudState.jurnal = window.mergeUniqueArrayById(
-                    window.cloudState.jurnal || [],
-                    cleanJurnalList,
-                    (j) => `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
-                );
-            }
-
-            try {
-                const cleanSnap = window.getSanitizedCloudPayload();
-                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cleanSnap));
-            } catch (e) {}
-
-            const newAbsLen = (window.cloudState.absensi || []).length;
-            const newJurLen = (window.cloudState.jurnal || []).length;
-
-            window.lastClusterDiagnosticInfo = {
-                activeUrl: creds.url,
-                totalAbsensi: newAbsLen,
-                cloudDbRows: allCloudDbRows.length,
-                sqlPresensiRows: allSqlPresensiRows.length,
-                sqlJurnalRows: allSqlJurnalRows.length,
-                lastScanTime: new Date().toLocaleTimeString('it-IT', { timeZone: 'Asia/Makassar' }) + " WITA"
-            };
-
-            if (newAbsLen > prevAbsLen || newJurLen > prevJurLen) {
-                window.directRestUpsertRow('app_cloud_db', {
-                    id: 'absensi_master_log',
-                    payload: { updatedAt: Date.now(), absensi: window.cloudState.absensi }
-                }, 'id').catch(() => {});
-                window.directRestUpsertRow('app_cloud_db', {
-                    id: 'jurnal_master_log',
-                    payload: { updatedAt: Date.now(), jurnal: window.cloudState.jurnal }
-                }, 'id').catch(() => {});
-            }
-
-            window._lastOmniScanCompletedAt = Date.now();
-            return {
-                totalAbsensi: newAbsLen,
-                totalJurnal: newJurLen
-            };
-            } finally {
-                window._isOmniScanRunning = false;
-            }
-        };
-
-        // Simpan satu item jurnal langsung ke tabel SQL `jurnal_harian` & baris atomik `app_cloud_db`
-        window.upsertItemJurnalKeTabelSql = async function(itemJurnal) {
-            if (!itemJurnal || !itemJurnal.siswa) return false;
-            try {
-                const tglNorm = window.normalizeTanggalStr(itemJurnal.tanggal, itemJurnal.id) || window.getTodayLocalWitaStr();
-                const sKey = window.normalizeTextCompact(itemJurnal.siswa);
-                const rowId = itemJurnal.id || `jh_${tglNorm}_${sKey}`;
                 const sqlRow = {
-                    id: rowId,
-                    siswa_id: String(itemJurnal.user_id || itemJurnal.nis || itemJurnal.siswa),
-                    nama_siswa: itemJurnal.siswa,
-                    kelas: itemJurnal.kelas || "-",
-                    industri_id: itemJurnal.industri || "Belum Ditentukan",
-                    pembimbing_id: itemJurnal.guru || "-",
-                    tanggal_kegiatan: tglNorm,
-                    uraian_kegiatan: itemJurnal.kegiatan || "-",
-                    kendala: itemJurnal.kendala || "-",
-                    foto_dokumentasi: itemJurnal.foto_dokumentasi || "",
-                    status_validasi: itemJurnal.status || "Menunggu Verifikasi",
-                    catatan_pembimbing: itemJurnal.catatan_pembimbing || ""
+                    id: rpId,
+                    siswa_id: String(itemAbsen.user_id || itemAbsen.nis || itemAbsen.nama),
+                    nama_siswa: itemAbsen.nama,
+                    kelas: itemAbsen.kelas || "-",
+                    industri_id: itemAbsen.industri || "-",
+                    pembimbing_id: itemAbsen.guru || "-",
+                    tanggal_siklus: tglNorm,
+                    status_kehadiran: itemAbsen.kategori_hadir || "Hadir di Lokasi Industri",
+                    nama_lokasi_absen: itemAbsen.nama_lokasi_absen || itemAbsen.industri || "-",
+                    status_validasi_lokasi: itemAbsen.status_validasi_lokasi || "Valid (Di Area Industri)",
+                    updated_at: new Date().toISOString()
                 };
+
+                if (tipe === "Pulang") {
+                    sqlRow.waktu_pulang = new Date().toISOString();
+                    sqlRow.jam_pulang = itemAbsen.jam || "16:00";
+                    sqlRow.lat_pulang = String(itemAbsen.latitude || "");
+                    sqlRow.lng_pulang = String(itemAbsen.longitude || "");
+                    sqlRow.foto_pulang = itemAbsen.foto_url || itemAbsen.foto_selfie || "";
+                } else {
+                    sqlRow.waktu_masuk = new Date().toISOString();
+                    sqlRow.jam_masuk = itemAbsen.jam || "08:00";
+                    sqlRow.lat_masuk = String(itemAbsen.latitude || "");
+                    sqlRow.lng_masuk = String(itemAbsen.longitude || "");
+                    sqlRow.foto_masuk = itemAbsen.foto_url || itemAbsen.foto_selfie || "";
+                }
+
                 await Promise.all([
-                    window.directRestUpsertRow('jurnal_harian', sqlRow, 'id').catch(() => {}),
                     window.directRestUpsertRow('app_cloud_db', {
-                        id: `juritem_${tglNorm}_${sKey}`,
-                        payload: itemJurnal
-                    }, 'id').catch(() => {})
+                        id: `absitem_${tglNorm}_${sKey}_${tipe}`,
+                        payload: itemAbsen
+                    }, 'id').catch(() => {}),
+                    window.directRestUpsertRow('riwayat_presensi', sqlRow, 'id').catch(() => {})
                 ]);
                 return true;
             } catch (e) {
@@ -7651,15 +7448,11 @@
                     </div>
                 </div>
 
-                <!-- FITUR ALTERNATIF: PINDAH / GANTI TITIK KOORDINAT CABANG INDUSTRI (DENGAN KODE AKSES 12 JAM) -->
+                <!-- CATATAN KEAMANAN LOKASI GPS (SISWA TIDAK MEMILIKI HAK AKSES UBAH TITIK) -->
                 <div style="margin-top: 12px; padding-top: 10px; border-top: 1.5px dashed #bae6fd; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                    <div style="font-size: 10.5px; color: #334155; font-weight: 750; flex: 1; min-width: 180px;">
-                        🏢 Dipindahkan ke <b>Cabang Industri</b> atau titik GPS meleset?
-                        ${placementInfo.siswaObj && placementInfo.siswaObj.cabangIndustri ? `<div style="font-size:10px; color:#15803d; font-weight:850; margin-top:2px;">📍 Lokasi Aktif: ${placementInfo.siswaObj.cabangIndustri}</div>` : ''}
+                    <div style="font-size: 10.5px; color: #334155; font-weight: 750; flex: 1;">
+                        🔒 <b>Keamanan Geofence Aktif:</b> Titik lokasi industri dikunci oleh sistem & dilengkapi deteksi nama jalan otomatis (<i>Reverse Geocoding</i>). Perubahan titik lokasi instansi hanya dapat dilakukan oleh <b>Admin / Panitia PKL</b> atau <b>Guru Pembimbing</b>.
                     </div>
-                    <button type="button" onclick="window.bukaModalAlternatifGantiTitikCabang('Masuk')" class="btn-action btn-amber" style="font-size: 10.5px; font-weight: 900; padding: 7px 12px; border-radius: 10px; box-shadow: 0 3px 8px rgba(245, 158, 11, 0.25);">
-                        🔄 Pindah / Ganti Titik Cabang Industri
-                    </button>
                 </div>
             </div>
 
@@ -7732,6 +7525,117 @@
                 Math.sin(dLon/2) * Math.sin(dLon/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             return Math.round(R * c);
+        };
+
+        // =========================================================================
+        // FITUR REVERSE GEOCODING OTOMATIS (NOMINATIM OPENSTREETMAP API) & VALIDASI RADIUS
+        // Menerjemahkan koordinat GPS siswa menjadi nama jalan/area nyata & memvalidasi area industri
+        // =========================================================================
+        window._reverseGeocodeCache = new Map();
+
+        window.reverseGeocodeKoordinat = async function(lat, lng) {
+            const nLat = parseFloat(lat);
+            const nLng = parseFloat(lng);
+            if (isNaN(nLat) || isNaN(nLng)) return "Koordinat Tidak Terbaca";
+
+            const cacheKey = `${nLat.toFixed(4)}_${nLng.toFixed(4)}`;
+            if (window._reverseGeocodeCache.has(cacheKey)) {
+                return window._reverseGeocodeCache.get(cacheKey);
+            }
+
+            try {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 4500);
+                const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(nLat)}&lon=${encodeURIComponent(nLng)}&zoom=18&addressdetails=1&accept-language=id`;
+                const resp = await fetch(url, {
+                    method: "GET",
+                    headers: { "Accept": "application/json" },
+                    signal: controller.signal
+                });
+                clearTimeout(timer);
+
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data) {
+                        const addr = data.address || {};
+                        const parts = [
+                            addr.building || addr.office || addr.shop || addr.amenity || "",
+                            addr.road || addr.pedestrian || addr.residential || addr.hamlet || "",
+                            addr.village || addr.suburb || addr.neighbourhood || "",
+                            addr.city_district || addr.town || addr.city || addr.county || ""
+                        ].filter(Boolean);
+
+                        const cleanAddress = parts.length > 0
+                            ? parts.slice(0, 3).join(", ")
+                            : (data.display_name ? String(data.display_name).split(",").slice(0, 3).join(",").trim() : `Lat ${nLat.toFixed(5)}, Lng ${nLng.toFixed(5)}`);
+                        window._reverseGeocodeCache.set(cacheKey, cleanAddress);
+                        return cleanAddress;
+                    }
+                }
+            } catch (e) {}
+
+            return `Titik GPS (${nLat.toFixed(5)}, ${nLng.toFixed(5)})`;
+        };
+
+        window.tentukanValidasiLokasiPresensi = async function(curLat, curLng, distanceMeter, radiusIzin, namaInd, kategoriHadir = "hadir_lokasi") {
+            const batasRadius = parseInt(radiusIzin, 10) || 100;
+            const jarak = (typeof distanceMeter === 'number' && !isNaN(distanceMeter)) ? Math.round(distanceMeter) : 9999;
+            const alamatTerdeteksi = await window.reverseGeocodeKoordinat(curLat, curLng);
+
+            if (jarak <= batasRadius) {
+                const indObj = (window.cloudState.industri || []).find(i => i && window.isIndustriMatch(i.nama, namaInd));
+                const alamatInd = (indObj && indObj.alamat && indObj.alamat !== '-') ? indObj.alamat : alamatTerdeteksi;
+                return {
+                    isValidArea: true,
+                    status_validasi_lokasi: "Valid (Di Area Industri)",
+                    nama_lokasi_absen: `${namaInd}${alamatInd ? ' — ' + alamatInd : ''} (${jarak}m)`
+                };
+            }
+
+            if (kategoriHadir === 'tugas_luar') {
+                return {
+                    isValidArea: false,
+                    status_validasi_lokasi: "Peringatan: Di Luar Area Industri! (Dinas Luar)",
+                    nama_lokasi_absen: `${alamatTerdeteksi} (Jarak ${jarak}m dari ${namaInd})`
+                };
+            }
+
+            if (kategoriHadir === 'izin_sakit') {
+                return {
+                    isValidArea: false,
+                    status_validasi_lokasi: "Di Tempat Kos/Rumah (Izin/Sakit)",
+                    nama_lokasi_absen: `${alamatTerdeteksi} (Jarak ${jarak}m dari ${namaInd})`
+                };
+            }
+
+            return {
+                isValidArea: false,
+                status_validasi_lokasi: "Peringatan: Di Luar Area Industri!",
+                nama_lokasi_absen: `${alamatTerdeteksi} (Jarak ${jarak}m dari ${namaInd})`
+            };
+        };
+
+        window.renderBadgeValidasiLokasiPresensi = function(statusValidasi, namaLokasi, jarakMeter) {
+            const st = String(statusValidasi || "").trim();
+            const loc = String(namaLokasi || "").trim();
+            const isOutside = st.toLowerCase().includes("luar area") || st.toLowerCase().includes("peringatan") || st.toLowerCase().includes("kos/rumah");
+
+            if (!isOutside) {
+                return `
+                <div style="margin-top:4px;">
+                    <span class="badge-status badge-green" style="font-size:9.5px; padding:2px 7px; display:inline-block;">
+                        ✅ Di Area Industri
+                    </span>
+                    ${loc && loc !== '-' ? `<div style="font-size:9.5px; color:#15803d; font-weight:750; margin-top:2px; white-space:normal; line-height:1.3;">📍 ${loc}</div>` : ''}
+                </div>`;
+            }
+
+            return `
+            <div style="margin-top:4px;">
+                <span class="badge-status badge-red" style="font-size:9.5px; padding:2px 7px; display:inline-block; white-space:normal; text-align:left; line-height:1.3;">
+                    ⚠️ Di Luar Area (Lokasi: ${loc || 'Alamat Tidak Dikenal'})
+                </span>
+            </div>`;
         };
 
         window.hentikanStreamKamera = function() {
@@ -7998,20 +7902,15 @@
                         <div>🌐 <b>Koordinat Terdaftar:</b> <span id="txtIndRegisteredCoord">Lat ${indLat.toFixed(5)}, Lng ${indLng.toFixed(5)}</span></div>
                         <div>🎯 <b>Radius Izin:</b> ${indRadius} Meter</div>
                         <div>📏 <b>Jarak Terdeteksi:</b> <span id="txtDetectedDistance" style="color:#dc2626; font-weight:900;">Menghitung...</span></div>
+                        <div>🗺️ <b>Lokasi Anda Saat Ini:</b> <span id="txtDetectedAddressName" style="color:#b91c1c; font-weight:850;">Mendeteksi nama jalan/area...</span></div>
                     </div>
 
                     <div style="background:#fffbeb; border:1.5px dashed #f59e0b; border-radius:14px; padding:12px; text-align:left;">
                         <div style="font-size:11px; font-weight:900; color:#b45309; margin-bottom:4px;">
-                            🔑 SUDAH BERADA DI LOKASI INDUSTRI TETAPI TITIK GPS MELESET?
+                            🔒 PENGUNCIAN TITIK LOKASI INDUSTRI RESMI
                         </div>
-                        <div style="font-size:10.5px; color:#475569; margin-bottom:8px; line-height:1.4;">
-                            Jika sebelumnya Anda sempat melakukan presensi awal di rumah/kos sehingga titik koordinat terkunci di sana, masukkan <b>Kode Akses dari Admin Utama</b> di bawah ini saat Anda benar-benar berada di lokasi industri <b>${dataInd.nama}</b> untuk menyimpan ulang titik koordinat industri yang benar:
-                        </div>
-                        <div style="display:flex; flex-direction:column; gap:8px;">
-                            <input type="text" id="inputKodeResetGps" class="form-control" placeholder="Masukkan Kode Akses Admin (Contoh: GPS-XXXXXX)" style="font-size:12px; padding:10px; text-align:center; font-weight:900; letter-spacing:1px; text-transform:uppercase; background:#ffffff; border:1.5px solid #f59e0b;">
-                            <button type="button" id="btnActionKunciLokasiKode" onclick="window.verifikasiKodeResetGpsSiswa('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${dataInd.nama.replace(/'/g, "\\'")}', false)" class="btn-action btn-blue" style="padding:11px 14px; font-size:12px; font-weight:900; border-radius:12px; box-shadow:0 4px 12px rgba(2,132,199,0.25);">
-                                🔄 Simpan Ulang & Kunci Titik Lokasi Industri Sekarang
-                            </button>
+                        <div style="font-size:10.5px; color:#475569; line-height:1.45;">
+                            Siswa <b>tidak memiliki hak akses</b> untuk mengubah atau menggeser titik koordinat industri sendiri. Jika terjadi perpindahan lokasi instansi PKL secara resmi, silakan hubungi <b>Guru Pembimbing</b> atau <b>Admin / Panitia PKL</b> untuk mereset titik lokasi industri Anda.
                         </div>
                     </div>
                 </div>
@@ -8025,6 +7924,11 @@
                     </div>
                 </div>
 
+                <!-- Info Nama Jalan / Lokasi Terdeteksi Real-Time -->
+                <div id="boxDetectedLocationLive" style="margin-bottom:10px; padding:8px 10px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; font-size:10.5px; color:#0369a1; font-weight:800;">
+                    🗺️ Lokasi GPS Terdeteksi: <span id="txtLiveReverseGeocode" style="color:#0f172a;">Menunggu koordinat GPS...</span>
+                </div>
+
                 <!-- Tombol Kamera (Jepret/Unggah) -->
                 <div id="cameraActionButtonsWrap" style="display:none; gap:8px; margin-bottom:12px;">
                     <button type="button" onclick="window.jepretFotoSelfie()" id="btnJepretSelfie" class="btn-action btn-blue" style="flex:1; padding:10px;">
@@ -8034,16 +7938,6 @@
                         📁 Unggah
                         <input type="file" accept="image/*" capture="user" style="display:none;" onchange="window.handleUploadSelfieFallback(this)">
                     </label>
-                </div>
-
-                <!-- Pintasan Alternatif: Kunci Ulang dengan Kode Akses atau Pindah Cabang Industri Ke-2 -->
-                <div style="margin-bottom:10px; text-align:center; display:flex; justify-content:center; gap:12px; flex-wrap:wrap;">
-                    <button type="button" onclick="window.bukaModalKunciTitikUtamaDenganKode('${tipeAbsen}')" style="background:none; border:none; color:#0369a1; font-size:10.5px; font-weight:800; cursor:pointer; text-decoration:underline;">
-                        🔑 Cek Ulang / Ganti Titik GPS (Kode Akses)
-                    </button>
-                    <button type="button" onclick="window.bukaModalAlternatifGantiTitikCabang('${tipeAbsen}')" style="background:none; border:none; color:#b45309; font-size:10.5px; font-weight:800; cursor:pointer; text-decoration:underline;">
-                        🏢 Pindah Cabang Industri Ke-2
-                    </button>
                 </div>
 
                 <div style="display:flex; justify-content:flex-end; gap:8px;">
@@ -8100,22 +7994,28 @@
                 if ("geolocation" in navigator) {
                     navigator.geolocation.getCurrentPosition(
                         pos => {
+                            const dMeter = window.hitungJarakMeterHaversine(pos.coords.latitude, pos.coords.longitude, activeTargetLat, activeTargetLng);
                             window.currentSelfieLocation = {
                                 lat: pos.coords.latitude,
                                 lng: pos.coords.longitude,
-                                targetLat: pos.coords.latitude,
-                                targetLng: pos.coords.longitude,
-                                distance: 0,
-                                inRadius: true
+                                targetLat: activeTargetLat,
+                                targetLng: activeTargetLng,
+                                distance: dMeter,
+                                inRadius: dMeter <= activeRadius
                             };
+                            window.reverseGeocodeKoordinat(pos.coords.latitude, pos.coords.longitude).then(addr => {
+                                if (window.currentSelfieLocation) window.currentSelfieLocation.detectedAddress = addr;
+                                const liveEl = document.getElementById("txtLiveReverseGeocode");
+                                if (liveEl) liveEl.innerText = `${addr} (Jarak ${dMeter}m dari ${targetNamaInd})`;
+                            });
                         },
                         () => {
-                            window.currentSelfieLocation = { lat: activeTargetLat, lng: activeTargetLng, targetLat: activeTargetLat, targetLng: activeTargetLng, distance: 0, inRadius: true };
+                            window.currentSelfieLocation = { lat: activeTargetLat, lng: activeTargetLng, targetLat: activeTargetLat, targetLng: activeTargetLng, distance: 9999, inRadius: false };
                         },
                         { enableHighAccuracy: true, timeout: 8000 }
                     );
                 } else {
-                    window.currentSelfieLocation = { lat: activeTargetLat, lng: activeTargetLng, targetLat: activeTargetLat, targetLng: activeTargetLng, distance: 0, inRadius: true };
+                    window.currentSelfieLocation = { lat: activeTargetLat, lng: activeTargetLng, targetLat: activeTargetLat, targetLng: activeTargetLng, distance: 9999, inRadius: false };
                 }
 
                 window.mulaiStreamKameraSelfie();
@@ -8162,6 +8062,23 @@
                             distance: hasilCek.distance,
                             inRadius: hasilCek.inRadius
                         };
+
+                        // Panggil Reverse Geocoding Otomatis untuk menerjemahkan titik berdiri siswa saat ini
+                        window.reverseGeocodeKoordinat(curLat, curLng).then(alamatNyata => {
+                            if (window.currentSelfieLocation) {
+                                window.currentSelfieLocation.detectedAddress = alamatNyata;
+                            }
+                            const liveEl = document.getElementById("txtLiveReverseGeocode");
+                            if (liveEl) {
+                                liveEl.innerText = hasilCek.inRadius
+                                    ? `✅ Di Area Industri: ${targetNamaInd} (${alamatNyata})`
+                                    : `⚠️ Di Luar Area: ${alamatNyata} (${hasilCek.distance}m dari DUDI)`;
+                            }
+                            const outAddrEl = document.getElementById("txtDetectedAddressName");
+                            if (outAddrEl) {
+                                outAddrEl.innerText = alamatNyata;
+                            }
+                        });
 
                         if (hasilCek.isCalibrated && hasilCek.inRadius) {
                             // POSISI SISWA SUDAH BENAR DI LOKASI INDUSTRI (<= 100 METER):
@@ -8371,6 +8288,20 @@
             if (kat === 'tugas_luar') katText = "Dinas Luar / Lapangan";
             else if (kat === 'izin_sakit') katText = "Izin / Sakit";
 
+            const curLatVal = window.currentSelfieLocation ? window.currentSelfieLocation.lat : indLat;
+            const curLngVal = window.currentSelfieLocation ? window.currentSelfieLocation.lng : indLng;
+            const curDistVal = window.currentSelfieLocation ? window.currentSelfieLocation.distance : 0;
+
+            // Hitung dan terjemahkan Nama Lokasi Otomatis (Reverse Geocoding) & Status Validasi Radius
+            const infoValidasiLokasi = await window.tentukanValidasiLokasiPresensi(
+                curLatVal,
+                curLngVal,
+                curDistVal,
+                indRadius || 100,
+                industriNama,
+                kat
+            );
+
             // 1. Kompres otomatis & unggah file foto ke Supabase Storage Bucket (foto_presensi / berkas_pkl)
             // atau baris khusus img_* dan simpan referensinya agar foto bukti presensi SELALU MUNCUL saat dibuka!
             const uploadedFotoUrl = await window.uploadFotoKeSupabaseStorage(window.tempSelfieBase64, `selfie_${tipeAbsen.toLowerCase()}`);
@@ -8392,9 +8323,11 @@
                 tanggal: tglStr,
                 jam: jamStr,
                 status: "Tepat Waktu",
-                jarak_meter: window.currentSelfieLocation ? window.currentSelfieLocation.distance : 0,
-                latitude: window.currentSelfieLocation ? window.currentSelfieLocation.lat : indLat,
-                longitude: window.currentSelfieLocation ? window.currentSelfieLocation.lng : indLng,
+                jarak_meter: curDistVal,
+                latitude: curLatVal,
+                longitude: curLngVal,
+                nama_lokasi_absen: infoValidasiLokasi.nama_lokasi_absen,
+                status_validasi_lokasi: infoValidasiLokasi.status_validasi_lokasi,
                 foto_url: cleanStorageLink,
                 foto_selfie: cleanStorageLink
             };
@@ -12166,19 +12099,31 @@
                         masukJam: '-',
                         masukStatus: 'Belum Presensi Masuk',
                         masukFoto: '',
+                        masukLokasi: '-',
+                        masukValidasi: '',
+                        masukJarak: 0,
                         pulangJam: '-',
                         pulangStatus: 'Belum Presensi Pulang',
-                        pulangFoto: ''
+                        pulangFoto: '',
+                        pulangLokasi: '-',
+                        pulangValidasi: '',
+                        pulangJarak: 0
                     });
                 }
                 const entry = pairMap.get(key);
                 if (ab.tipe_absen === 'Pulang') {
                     entry.pulangJam = ab.jam ? `${ab.jam} WITA` : '-';
                     entry.pulangStatus = ab.kategori_hadir || ab.status || 'Sudah Presensi Pulang';
+                    entry.pulangLokasi = ab.nama_lokasi_absen || indName || '-';
+                    entry.pulangValidasi = ab.status_validasi_lokasi || ((ab.jarak_meter && ab.jarak_meter > 100) ? 'Peringatan: Di Luar Area Industri!' : 'Valid (Di Area Industri)');
+                    entry.pulangJarak = ab.jarak_meter || 0;
                     if (ab.foto_url || ab.foto_selfie) entry.pulangFoto = ab.foto_url || ab.foto_selfie;
                 } else {
                     entry.masukJam = ab.jam ? `${ab.jam} WITA` : '-';
                     entry.masukStatus = ab.kategori_hadir || ab.status || 'Sudah Presensi Masuk';
+                    entry.masukLokasi = ab.nama_lokasi_absen || indName || '-';
+                    entry.masukValidasi = ab.status_validasi_lokasi || ((ab.jarak_meter && ab.jarak_meter > 100) ? 'Peringatan: Di Luar Area Industri!' : 'Valid (Di Area Industri)');
+                    entry.masukJarak = ab.jarak_meter || 0;
                     if (ab.foto_url || ab.foto_selfie) entry.masukFoto = ab.foto_url || ab.foto_selfie;
                 }
             });
@@ -12231,17 +12176,21 @@
                     const safePulangFoto = (item.pulangFoto || '').replace(/'/g, "\\'");
                     const btnFotoMasuk = item.masukJam !== '-' ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${safeMasukFoto}', '${safeNama}', 'Masuk', '${item.tanggal}', '${item.masukJam}')" class="btn-action btn-blue" style="padding:2px 6px; font-size:9.5px; margin-left:4px;" title="Lihat Bukti Presensi Masuk">📷</button>` : '';
                     const btnFotoPulang = item.pulangJam !== '-' ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${safePulangFoto}', '${safeNama}', 'Pulang', '${item.tanggal}', '${item.pulangJam}')" class="btn-action btn-emerald" style="padding:2px 6px; font-size:9.5px; margin-left:4px;" title="Lihat Bukti Presensi Pulang">📷</button>` : '';
+                    const badgeValidasiMasuk = item.masukJam !== '-' ? window.renderBadgeValidasiLokasiPresensi(item.masukValidasi, item.masukLokasi, item.masukJarak) : '';
+                    const badgeValidasiPulang = item.pulangJam !== '-' ? window.renderBadgeValidasiLokasiPresensi(item.pulangValidasi, item.pulangLokasi, item.pulangJarak) : '';
 
                     rows += `<tr>
                         <td>${counter++}</td>
                         <td><b>${item.nama}</b>${kelasBadge}</td>
                         <td>${item.industri}</td>
                         <td><b>${item.tanggal}</b></td>
-                        <td>
-                            <span class="badge-status ${item.masukJam !== '-' ? 'badge-green' : 'badge-amber'}">${item.masukJam !== '-' ? '✅ ' + item.masukJam : 'Belum Absen'}</span>${btnFotoMasuk}
+                        <td style="white-space:normal; min-width:190px;">
+                            <div><span class="badge-status ${item.masukJam !== '-' ? 'badge-green' : 'badge-amber'}">${item.masukJam !== '-' ? '✅ ' + item.masukJam : 'Belum Absen'}</span>${btnFotoMasuk}</div>
+                            ${badgeValidasiMasuk}
                         </td>
-                        <td>
-                            <span class="badge-status ${item.pulangJam !== '-' ? 'badge-green' : 'badge-amber'}">${item.pulangJam !== '-' ? '✅ ' + item.pulangJam : 'Belum Absen'}</span>${btnFotoPulang}
+                        <td style="white-space:normal; min-width:190px;">
+                            <div><span class="badge-status ${item.pulangJam !== '-' ? 'badge-green' : 'badge-amber'}">${item.pulangJam !== '-' ? '✅ ' + item.pulangJam : 'Belum Absen'}</span>${btnFotoPulang}</div>
+                            ${badgeValidasiPulang}
                         </td>
                     </tr>`;
                 });
@@ -12464,6 +12413,8 @@
                         masukJam: '-',
                         pulangJam: '-',
                         kategori: ab.kategori_hadir || ab.status || 'Hadir',
+                        statusValidasiLokasi: ab.status_validasi_lokasi || 'Valid (Di Area Industri)',
+                        namaLokasiAbsen: ab.nama_lokasi_absen || indName,
                         fotoMasuk: '',
                         fotoPulang: ''
                     });
@@ -12472,14 +12423,18 @@
                 if (ab.tipe_absen === 'Masuk') {
                     entry.masukJam = ab.jam ? `${ab.jam} WITA` : '-';
                     entry.fotoMasuk = ab.foto_url || ab.foto_selfie || '-';
+                    if (ab.status_validasi_lokasi) entry.statusValidasiLokasi = ab.status_validasi_lokasi;
+                    if (ab.nama_lokasi_absen) entry.namaLokasiAbsen = ab.nama_lokasi_absen;
                 } else if (ab.tipe_absen === 'Pulang') {
                     entry.pulangJam = ab.jam ? `${ab.jam} WITA` : '-';
                     entry.fotoPulang = ab.foto_url || ab.foto_selfie || '-';
+                    if (ab.status_validasi_lokasi && ab.status_validasi_lokasi.includes('Luar')) entry.statusValidasiLokasi = ab.status_validasi_lokasi;
+                    if (ab.nama_lokasi_absen && (!entry.namaLokasiAbsen || entry.namaLokasiAbsen === '-')) entry.namaLokasiAbsen = ab.nama_lokasi_absen;
                 }
             });
 
             const data = [
-                ["No", "Tanggal", "Nama Siswa", "NIS", "Kelas / Jurusan", "Tempat PKL (Industri)", "Guru Pembimbing", "Jam Masuk", "Jam Pulang", "Keterangan", "Link Foto Masuk", "Link Foto Pulang"]
+                ["No", "Tanggal", "Nama Siswa", "NIS", "Kelas / Jurusan", "Tempat PKL (Industri)", "Guru Pembimbing", "Jam Masuk", "Jam Pulang", "Status Validasi Radius", "Nama Lokasi / Alamat Terdeteksi (GPS)", "Keterangan", "Link Foto Masuk", "Link Foto Pulang"]
             ];
 
             Array.from(pairMap.values()).sort((a, b) => (a.tanggal || '').localeCompare(b.tanggal || '') || (a.nama || '').localeCompare(b.nama || '')).forEach((item, idx) => {
@@ -12493,6 +12448,8 @@
                     item.guru,
                     item.masukJam,
                     item.pulangJam,
+                    item.statusValidasiLokasi || 'Valid (Di Area Industri)',
+                    item.namaLokasiAbsen || item.industri || '-',
                     item.kategori,
                     item.fotoMasuk,
                     item.fotoPulang
@@ -13178,12 +13135,16 @@
                 const fotoSrc = (ab.foto_url || ab.foto_selfie || '').replace(/'/g, "\\'");
                 const safeNama = (namaResmi || '').replace(/'/g, "\\'");
                 const btnFoto = `<button type="button" onclick="window.bukaFotoBuktiPresensi('${fotoSrc}', '${safeNama}', '${ab.tipe_absen}', '${ab.tanggal}', '${ab.jam}')" class="btn-action btn-blue" style="padding:3px 8px; font-size:10px; margin-left:6px;">📷 Bukti</button>`;
+                const badgeLokasi = window.renderBadgeValidasiLokasiPresensi(ab.status_validasi_lokasi, ab.nama_lokasi_absen || ab.industri, ab.jarak_meter);
                 rows += `<tr>
                     <td>${idx + 1}</td>
                     <td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td>
                     <td>${ab.tanggal}</td>
                     <td><b>${ab.jam} WITA</b></td>
-                    <td><span class="badge-status badge-green">${ab.kategori_hadir || ab.status || 'Hadir'}</span>${btnFoto}</td>
+                    <td style="white-space:normal; min-width:190px;">
+                        <div><span class="badge-status badge-green">${ab.kategori_hadir || ab.status || 'Hadir'}</span>${btnFoto}</div>
+                        ${badgeLokasi}
+                    </td>
                 </tr>`;
             });
 
@@ -13197,7 +13158,6 @@
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Masuk')" class="btn-action btn-blue">📸 Absen Masuk</button>
                         <button onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang')" class="btn-action btn-emerald">🚪 Absen Pulang</button>
-                        <button onclick="window.bukaModalAlternatifGantiTitikCabang('Masuk')" class="btn-action btn-amber" title="Gunakan jika dipindahkan ke Cabang Industri">🔄 Pindah Titik Cabang</button>
                     </div>
                 </div>
 
@@ -13323,13 +13283,23 @@
                     ? window.getCanonicalIndustriName(sData.industri)
                     : ((placementInfo.industri && placementInfo.industri !== 'Belum Ditentukan') ? placementInfo.industri : (item.mappedInd || 'Belum Ditentukan'));
 
+                const safeNamaSiswa = (namaResmi || '').replace(/'/g, "\\'");
+                const safeIndResmi = (indResmi || '').replace(/'/g, "\\'");
+
                 rows += `<tr>
                     <td>${counter++}</td>
                     <td><b>👨‍🎓 ${namaResmi}</b></td>
                     <td>${kelasResmi}</td>
                     <td><code>${nisResmi}</code></td>
                     <td>${hpResmi}</td>
-                    <td><span class="badge-status badge-blue">🏢 ${indResmi}</span></td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                            <span class="badge-status badge-blue">🏢 ${indResmi}</span>
+                            <button type="button" onclick="window.bukaModalResetTitikGpsOlehPembimbing('${safeNamaSiswa}', '${safeIndResmi}')" class="btn-action btn-amber" style="padding:3px 8px; font-size:10px;" title="Reset / Kunci Ulang Titik Koordinat Industri Siswa Ini">
+                                🛰️ Reset Titik GPS
+                            </button>
+                        </div>
+                    </td>
                 </tr>`;
             });
 
@@ -13337,9 +13307,8 @@
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
-                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">BIMBINGAN AKADEMIK PKL</div>
-                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">👥 Daftar Siswa Bimbingan</h3>
-                        <p style="font-size:11px; color:#64748b; margin-top:2px;">Data Nama Siswa, Kelas/Jurusan, dan Industri Magang terdeteksi langsung secara presisi dari Data Master Siswa.</p>
+                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">DAFTAR PESERTA BIMBINGAN AKADEMIK</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">👥 Siswa Bimbingan (${profile.nama})</h3>
                     </div>
                     <span class="badge-status badge-green" style="font-size:11px; font-weight:900;">${counter - 1} Siswa Dibimbing</span>
                 </div>
@@ -13352,11 +13321,11 @@
                                 <th>Kelas / Jurusan</th>
                                 <th>NIS</th>
                                 <th>No. HP</th>
-                                <th>Industri Magang</th>
+                                <th>Tempat PKL (Industri) & Reset GPS</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada siswa bimbingan yang terdaftar untuk Anda</td></tr>'}
+                            ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada siswa bimbingan yang dialokasikan untuk Anda</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -13364,27 +13333,15 @@
         };
 
         window.renderValidasiJurnalList = function() {
-            const role = window.cloudState.activeRole;
-            const profile = window.cloudState.userProfile || { nama: "User" };
-            let list = window.cloudState.jurnal || [];
+            const profile = window.cloudState.userProfile || { nama: "Pembimbing" };
+            const role = window.cloudState.activeRole || "guru";
+            let list = Array.isArray(window.cloudState.jurnal) ? window.cloudState.jurnal : [];
 
-            if (role === 'industri') {
-                const sMap = window.getMyIndustriStudents(profile.nama);
-                const indSiswaNames = Array.from(sMap.values()).map(s => s.nama);
-                list = list.filter(j => {
-                    if (!j || !j.siswa) return false;
-                    if (j.industri && window.isIndustriMatch(j.industri, profile.nama)) return true;
-                    if (sMap.has(j.siswa.trim().toLowerCase())) return true;
-                    if (indSiswaNames.some(sn => window.isNameMatch(sn, j.siswa))) return true;
-                    const inf = window.getStudentPlacementInfo(j.siswa, j.user_id);
-                    return inf && inf.industri && window.isIndustriMatch(inf.industri, profile.nama);
-                });
-            } else if (role === 'guru') {
+            if (role === 'guru') {
                 if (typeof window.konsolidasiSatuBarisPerGuru === 'function') window.konsolidasiSatuBarisPerGuru();
                 const isMatchGuru = (guruName) => window.isNameMatch(guruName, profile.nama);
-                const myPlacements = (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru));
                 const mySiswaNames = [];
-                myPlacements.forEach(p => {
+                (window.cloudState.penempatan || []).filter(p => isMatchGuru(p.guru)).forEach(p => {
                     window.extractStudentList(p.siswa).forEach(s => mySiswaNames.push(s));
                 });
                 (window.cloudState.siswa || []).forEach(s => {
@@ -13397,22 +13354,30 @@
                     const inf = window.getStudentPlacementInfo(j.siswa, j.user_id);
                     return inf && inf.guru && isMatchGuru(inf.guru);
                 });
+            } else if (role === 'industri') {
+                const sMap = window.getMyIndustriStudents(profile.nama);
+                const indSiswaNames = Array.from(sMap.values()).map(s => s.nama);
+                list = list.filter(j => {
+                    if (!j || !j.siswa) return false;
+                    if (j.industri && window.isIndustriMatch(j.industri, profile.nama)) return true;
+                    if (indSiswaNames.some(sn => window.isNameMatch(sn, j.siswa))) return true;
+                    const inf = window.getStudentPlacementInfo(j.siswa, j.user_id);
+                    return inf && inf.industri && window.isIndustriMatch(inf.industri, profile.nama);
+                });
             }
-
-            // Urutkan dari tanggal terbaru ke terlama (tanpa direset harian untuk Guru & Industri)
-            list = [...list].sort((a, b) => (window.normalizeTanggalStr(b.tanggal) || '').localeCompare(window.normalizeTanggalStr(a.tanggal) || ''));
 
             let rows = "";
             list.forEach((j, idx) => {
-                const originalIdx = (window.cloudState.jurnal || []).indexOf(j);
+                const origIdx = (window.cloudState.jurnal || []).indexOf(j);
+                const isApproved = (j.status === 'Disetujui');
                 rows += `<tr>
                     <td>${idx + 1}</td>
-                    <td><b>${j.siswa}</b></td>
-                    <td><b>${window.normalizeTanggalStr(j.tanggal) || j.tanggal}</b></td>
-                    <td style="white-space:normal; min-width:160px;">${j.kegiatan}</td>
-                    <td><span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span></td>
+                    <td><b>${j.siswa}</b><div style="font-size:10px; color:#0284c7;">🏢 ${j.industri || '-'}</div></td>
+                    <td><b>${window.normalizeTanggalStr(j.tanggal, j.id) || j.tanggal}</b></td>
+                    <td style="white-space:normal; min-width:190px;">${j.kegiatan || '-'}</td>
+                    <td><span class="badge-status ${isApproved ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span></td>
                     <td>
-                        ${j.status !== 'Disetujui' ? `<button onclick="window.sahkanJurnalSiswa(${originalIdx})" class="btn-action btn-emerald" style="padding:4px 8px;">✓ Sahkan</button>` : '<span style="color:#15803d; font-weight:800;">Tervalidasi</span>'}
+                        ${!isApproved ? `<button onclick="window.sahkanJurnalSiswa(${origIdx})" class="btn-action btn-emerald" style="padding:5px 10px; font-size:11px; font-weight:900;">✓ Sahkan</button>` : '<span style="font-size:11px; color:#15803d; font-weight:800;">✓ Disahkan</span>'}
                     </td>
                 </tr>`;
             });
@@ -13622,41 +13587,30 @@
                 const fotoSrc = (ab.foto_url || ab.foto_selfie || '').replace(/'/g, "\\'");
                 const safeNama = (namaAnanda || '').replace(/'/g, "\\'");
                 const btnFoto = `<button type="button" onclick="window.bukaFotoBuktiPresensi('${fotoSrc}', '${safeNama}', '${ab.tipe_absen}', '${ab.tanggal}', '${ab.jam}')" class="btn-action btn-blue" style="padding:3px 8px; font-size:10px; margin-left:6px;">📷 Bukti</button>`;
+                const badgeLokasi = window.renderBadgeValidasiLokasiPresensi(ab.status_validasi_lokasi, ab.nama_lokasi_absen || ab.industri, ab.jarak_meter);
                 rows += `<tr>
                     <td>${idx + 1}</td>
                     <td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td>
                     <td>${ab.tanggal}</td>
                     <td><b>${ab.jam} WITA</b></td>
-                    <td><span class="badge-status badge-green">${ab.kategori_hadir || ab.status || 'Hadir'}</span>${btnFoto}</td>
+                    <td style="white-space:normal; min-width:190px;">
+                        <div><span class="badge-status badge-green">${ab.kategori_hadir || ab.status || 'Hadir'}</span>${btnFoto}</div>
+                        ${badgeLokasi}
+                    </td>
                 </tr>`;
             });
 
             return `
             <div class="card">
-                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
                     <div>
-                        <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">MONITORING KEHADIRAN ANANDA</div>
-                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📍 Presensi Ananda: ${namaAnanda}${klsAnanda}</h3>
-                    </div>
-                    <span class="badge-status badge-green" style="font-size:10px;">🟢 SINKRON REALTIME</span>
-                </div>
-
-                <!-- Status Kehadiran Ananda Hari Ini -->
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
-                    <div style="background:${sudahMasukHariIni ? '#f0fdf4' : '#fef2f2'}; border:1.5px solid ${sudahMasukHariIni ? '#86efac' : '#fecaca'}; border-radius:12px; padding:10px;">
-                        <div style="font-size:10px; font-weight:850; color:#475569;">PRESENSI MASUK HARI INI</div>
-                        <div style="font-size:12px; font-weight:900; color:${sudahMasukHariIni ? '#15803d' : '#dc2626'}; margin-top:3px;">
-                            ${sudahMasukHariIni ? `✅ Sudah Absen (${sudahMasukHariIni.jam} WITA)` : '⚠️ Belum Presensi Masuk'}
-                        </div>
-                    </div>
-                    <div style="background:${sudahPulangHariIni ? '#f0fdf4' : '#fef2f2'}; border:1.5px solid ${sudahPulangHariIni ? '#86efac' : '#fecaca'}; border-radius:12px; padding:10px;">
-                        <div style="font-size:10px; font-weight:850; color:#475569;">PRESENSI PULANG HARI INI</div>
-                        <div style="font-size:12px; font-weight:900; color:${sudahPulangHariIni ? '#15803d' : '#dc2626'}; margin-top:3px;">
-                            ${sudahPulangHariIni ? `✅ Sudah Absen (${sudahPulangHariIni.jam} WITA)` : '⚠️ Belum Presensi Pulang'}
-                        </div>
+                        <div style="font-size:11px; font-weight:900; color:#7e22ce; letter-spacing:0.5px;">MONITORING KEHADIRAN ANANDA &bull; ${namaAnanda}${klsAnanda}</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📍 Riwayat Presensi Harian Ananda (${list.length} Catatan)</h3>
+                        <p style="font-size:11px; color:#475569; margin-top:2px;">
+                            Status Hari Ini (${todayStr}): <b>Masuk: ${sudahMasukHariIni ? sudahMasukHariIni.jam + ' WITA ✅' : 'Belum Absen'}</b> &bull; <b>Pulang: ${sudahPulangHariIni ? sudahPulangHariIni.jam + ' WITA ✅' : 'Belum Absen'}</b>
+                        </p>
                     </div>
                 </div>
-
                 <div class="table-wrap">
                     <table>
                         <thead>
@@ -13664,12 +13618,12 @@
                                 <th>No</th>
                                 <th>Tipe</th>
                                 <th>Tanggal</th>
-                                <th>Waktu</th>
-                                <th>Keterangan & Bukti</th>
+                                <th>Jam</th>
+                                <th>Validasi Lokasi & Bukti</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada riwayat presensi ananda</td></tr>'}
+                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada catatan presensi ananda</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -13679,36 +13633,45 @@
         window.renderJurnalAnandaOnly = function() {
             const profile = window.cloudState.userProfile || { nama: "Orang Tua Siswa" };
             const rawAnanda = profile.namaAnanda || profile.nama.replace(/^Wali dari\s*/i, "").trim();
-            const matchInSiswa = (window.cloudState.siswa || []).find(s => window.isNameMatch(s.nama, rawAnanda));
-            const namaAnanda = matchInSiswa ? matchInSiswa.nama : rawAnanda;
-
-            const list = (window.cloudState.jurnal || []).filter(j => window.isNameMatch(j.siswa, namaAnanda) || window.isNameMatch(j.siswa, rawAnanda));
+            const placementInfo = window.getStudentPlacementInfo(rawAnanda);
+            const namaAnanda = placementInfo.namaSiswa || rawAnanda;
+            const list = (window.cloudState.jurnal || []).filter(j =>
+                j && (window.isNameMatch(j.siswa, namaAnanda) || window.isNameMatch(j.siswa, rawAnanda))
+            );
 
             let rows = "";
             list.forEach((j, idx) => {
                 rows += `<tr>
                     <td>${idx + 1}</td>
-                    <td>${j.tanggal}</td>
-                    <td style="white-space:normal;">${j.kegiatan}</td>
+                    <td><b>${window.normalizeTanggalStr(j.tanggal, j.id) || j.tanggal}</b></td>
+                    <td style="white-space:normal; min-width:190px;">${j.kegiatan || '-'}</td>
+                    <td>${j.kendala || '-'}</td>
                     <td><span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span></td>
                 </tr>`;
             });
 
             return `
             <div class="card">
-                <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-bottom:12px;">📖 Jurnal Kegiatan Ananda: ${namaAnanda}</h3>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:#7e22ce; letter-spacing:0.5px;">LOG KEGIATAN HARIAN ANANDA</div>
+                        <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📖 Jurnal Kegiatan PKL: ${namaAnanda}</h3>
+                    </div>
+                    <span class="badge-status badge-blue">${list.length} Catatan</span>
+                </div>
                 <div class="table-wrap">
                     <table>
                         <thead>
                             <tr>
                                 <th>No</th>
                                 <th>Tanggal</th>
-                                <th>Kegiatan</th>
-                                <th>Status</th>
+                                <th>Uraian Kegiatan</th>
+                                <th>Kendala</th>
+                                <th>Status Validasi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="4" class="empty-placeholder">Belum ada log jurnal ananda</td></tr>'}
+                            ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada catatan jurnal harian ananda</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -13716,74 +13679,47 @@
         };
 
         window.renderManajemenDokumen = function() {
-            const docs = window.cloudState.dokumen || [];
             const role = window.cloudState.activeRole || "siswa";
-            const canManage = (role === 'panitia' || role === 'admin');
-            const videos = Array.isArray(window.cloudState.videoPanduanYoutube) ? window.cloudState.videoPanduanYoutube : [];
+            const canManage = (role === 'admin' || role === 'panitia');
+            const docs = window.cloudState.dokumen || [];
+            const ytList = window.cloudState.videoPanduanYoutube || [];
 
             let videoBannersHtml = "";
-            if (videos.length > 0) {
-                videos.forEach((v, vIdx) => {
-                    const vidId = window.extractYoutubeId(v.url) || v.videoId || "";
+            if (ytList.length > 0) {
+                ytList.forEach((v, idx) => {
+                    const vidId = v.videoId || window.extractYoutubeId(v.url);
                     const thumbUrl = vidId
                         ? `https://img.youtube.com/vi/${vidId}/hqdefault.jpg`
-                        : "https://images.unsplash.com/photo-1611162616475-46b635cb6868?auto=format&fit=crop&w=900&q=80";
-                    const safeUrl = (v.url || "https://www.youtube.com").replace(/'/g, "\\'");
-
+                        : "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80";
                     videoBannersHtml += `
-                    <div style="position:relative; border-radius:20px; overflow:hidden; border:2px solid #ef4444; box-shadow:0 8px 22px rgba(239,68,68,0.18); margin-bottom:12px; background:#0f172a;">
-                        <a href="${v.url || '#'}" target="_blank" rel="noopener noreferrer" style="display:block; position:relative; width:100%; height:200px; text-decoration:none; cursor:pointer;">
-                            <img src="${thumbUrl}" alt="${v.judul || 'Video YouTube'}" style="width:100%; height:100%; object-fit:cover; opacity:0.85;" onerror="this.src='https://images.unsplash.com/photo-1611162616475-46b635cb6868?auto=format&fit=crop&w=900&q=80'">
-                            <div style="position:absolute; inset:0; background:linear-gradient(180deg, rgba(15,23,42,0.15) 0%, rgba(15,23,42,0.88) 100%); display:flex; flex-direction:column; justify-content:space-between; padding:14px;">
-                                <div style="display:flex; justify-content:space-between; align-items:center;">
-                                    <span style="background:#ef4444; color:#ffffff; font-size:10px; font-weight:900; padding:4px 10px; border-radius:8px; letter-spacing:0.5px;">
-                                        ▶ KANAL YOUTUBE RESMI PKL
-                                    </span>
-                                    <span style="background:rgba(255,255,255,0.2); color:#ffffff; font-size:10px; font-weight:800; padding:3px 8px; border-radius:6px;">
-                                        Klik untuk Menonton ↗
-                                    </span>
-                                </div>
-
-                                <div style="align-self:center; width:58px; height:58px; border-radius:50%; background:rgba(239,68,68,0.95); border:3px solid #ffffff; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 20px rgba(0,0,0,0.45);">
-                                    <span style="color:#ffffff; font-size:24px; margin-left:3px;">▶</span>
-                                </div>
-
-                                <div>
-                                    <div style="font-size:14.5px; font-weight:950; color:#ffffff; line-height:1.25; text-shadow:0 2px 4px rgba(0,0,0,0.8);">
-                                        🎬 ${v.judul || 'Video Panduan Pelaksanaan PKL'}
-                                    </div>
-                                    <div style="font-size:10.5px; color:#fde047; font-weight:800; margin-top:3px;">
-                                        Diupload oleh: ${v.oleh || 'Panitia PKL / Admin Utama'} &bull; Klik banner untuk membuka di YouTube
-                                    </div>
-                                </div>
-                            </div>
+                    <div style="background:#ffffff; border:1.5px solid #fecaca; border-radius:16px; padding:12px; margin-bottom:10px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                        <a href="${v.url}" target="_blank" rel="noopener noreferrer" style="position:relative; width:130px; height:78px; border-radius:12px; overflow:hidden; flex-shrink:0; display:block; border:2px solid #ef4444;">
+                            <img src="${thumbUrl}" alt="${v.judul}" style="width:100%; height:100%; object-fit:cover;">
+                            <div style="position:absolute; inset:0; background:rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; color:#ffffff; font-size:22px;">▶️</div>
                         </a>
-                        ${canManage ? `
-                        <div style="background:#1e293b; padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-size:10.5px; color:#cbd5e1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70%;">🔗 ${v.url}</span>
-                            <button type="button" onclick="window.hapusVideoPanduanYoutube(${vIdx})" class="btn-action btn-red" style="padding:4px 10px; font-size:10.5px;">
-                                🗑️ Hapus Video
-                            </button>
+                        <div style="flex:1; min-width:160px;">
+                            <div style="font-size:13px; font-weight:900; color:#0f172a;">🎬 ${v.judul || 'Video Panduan PKL'}</div>
+                            <div style="font-size:10.5px; color:#64748b; margin-top:2px;">Oleh: ${v.oleh || 'Panitia PKL'} &bull; 📅 ${v.tanggal || '-'}</div>
+                            <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
+                                <a href="${v.url}" target="_blank" rel="noopener noreferrer" class="btn-action btn-red" style="text-decoration:none; font-size:10.5px; padding:5px 10px;">▶️ Tonton di YouTube ↗</a>
+                                ${canManage ? `<button type="button" onclick="window.hapusVideoPanduanYoutube(${idx})" class="btn-action" style="background:#fee2e2; color:#b91c1c; font-size:10.5px; padding:5px 10px;">🗑️ Hapus</button>` : ''}
+                            </div>
                         </div>
-                        ` : ''}
                     </div>`;
                 });
             } else {
-                videoBannersHtml = `
-                <div style="background:#f8fafc; border:1.5px dashed #cbd5e1; border-radius:16px; padding:18px; text-align:center; color:#64748b; font-size:11.5px;">
-                    🎬 Belum ada video panduan YouTube yang diunggah oleh Panitia PKL / Admin Utama.
-                </div>`;
+                videoBannersHtml = `<div class="empty-placeholder" style="padding:14px;">Belum ada video panduan YouTube yang diunggah</div>`;
             }
 
             let rows = "";
             docs.forEach((d, idx) => {
                 rows += `<tr>
                     <td>${idx + 1}</td>
-                    <td><b>${d.judul}</b></td>
-                    <td>${d.peruntukan || 'Semua'}</td>
+                    <td><b>📄 ${d.judul}</b><div style="font-size:10px; color:#64748b;">📅 ${d.tgl || '-'}</div></td>
+                    <td><span class="badge-status badge-blue">${d.peruntukan || 'Semua'}</span></td>
                     <td style="display:flex; gap:6px;">
-                        <a href="${d.link}" target="_blank" class="btn-action btn-blue" style="text-decoration:none;">Buka ↗</a>
-                        ${canManage ? `<button onclick="window.hapusDokumenPanduan(${idx})" class="btn-action btn-red" style="padding:4px 8px; font-size:10.5px;">Hapus</button>` : ''}
+                        <a href="${d.link}" target="_blank" rel="noopener noreferrer" class="btn-action btn-blue" style="text-decoration:none;">Unduh / Buka ↗</a>
+                        ${canManage ? `<button type="button" onclick="window.hapusDokumenPanduan(${idx})" class="btn-action btn-red">Hapus</button>` : ''}
                     </td>
                 </tr>`;
             });
@@ -14956,69 +14892,115 @@
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
                     <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
-                    <button type="button" onclick="window.simpanLaporanAkhirBaru()" class="btn-action btn-blue" style="font-weight:900;">💾 Kirim Laporan</button>
+                    <button type="button" onclick="window.simpanLaporanAkhirBaru()" class="btn-action btn-blue" style="font-weight:900;">💾 Kirim Laporan Akhir</button>
                 </div>
             `);
         };
 
         window.simpanLaporanAkhirBaru = function() {
             const profile = window.cloudState.userProfile || { nama: "Siswa PKL" };
-            const info = window.getStudentPlacementInfo(profile.nama, profile.identitas);
             const judul = document.getElementById("lapInputJudul")?.value.trim();
             const link = document.getElementById("lapInputLink")?.value.trim();
-            if (!judul || !link) return window.showModalInfo("Lengkapi Data", "Judul laporan dan link Google Drive wajib diisi!");
+            if (!judul || !link) return window.showModalInfo("Lengkapi Data", "Judul laporan dan Link Google Drive wajib diisi!");
 
             if (!Array.isArray(window.cloudState.laporanAkhir)) window.cloudState.laporanAkhir = [];
             window.cloudState.laporanAkhir.unshift({
                 id: "lap_" + Date.now(),
-                siswa: info.namaSiswa || profile.nama,
+                siswa: profile.nama,
                 judul: judul,
                 link_gdrive: link,
-                status: "Menunggu Validasi",
-                tanggal: new Date().toISOString().split('T')[0]
+                status: "Menunggu Verifikasi",
+                tanggal: window.getTodayLocalWitaStr()
             });
             window.simpanDatabasePersisten(true);
             window.closeDynamicModal();
             window.showModalInfo("Laporan Terkirim 📄", "Berkas Laporan Akhir PKL Anda berhasil dikirim.");
-            window.openFeature("laporan", "Laporan Akhir PKL");
+            window.openFeature("laporan", "Pantau Laporan Akhir");
         };
 
-        window.bukaModalLupaPassword = function() {
-            const cfg = window.cloudState.hotlineConfig || DEFAULT_HOTLINE_CONFIG;
-            const kp = cfg.ketuaPanitia || { nama: "Panitia PKL", noHp: "08111222333" };
-            const waLink = window.formatNoWaLink(kp.noHp, "Halo Panitia PKL SMKN 1 Marisa, saya lupa kata sandi akun SIP-PKL saya. Mohon bantuannya...");
-            window.showModalInfo(
-                "Bantuan Lupa Kata Sandi 🔑",
-                `Silakan hubungi <b>Panitia PKL (${kp.nama})</b> atau <b>Guru Pembimbing</b> Anda untuk melihat atau mereset kata sandi akun Anda.<br><br>` +
-                (waLink ? `<a href="${waLink}" target="_blank" class="btn-action btn-emerald" style="text-decoration:none; display:inline-block; padding:8px 16px; font-weight:900;">💬 Hubungi Panitia via WhatsApp</a>` : '')
-            );
-        };
-
-        window.generateKodeResetGpsAdmin = async function() {
-            const charSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-            let newCode = "GPS-";
-            for(let i=0; i<6; i++) {
-                newCode += charSet.charAt(Math.floor(Math.random() * charSet.length));
-            }
+        window.generateKodeResetGpsAdmin = function() {
+            const randomDigits = Math.floor(100000 + Math.random() * 900000);
+            const newCode = `GPS-${randomDigits}`;
             const now = Date.now();
+            const exp = now + (2 * 60 * 60 * 1000);
             window.cloudState.gpsResetAccess = {
                 code: newCode,
                 createdAt: now,
-                expiresAt: now + (12 * 60 * 60 * 1000), // Masa aktif 12 Jam
+                expiresAt: exp,
                 createdBy: "Admin Utama"
             };
             window.simpanDatabasePersisten(true);
             window.showModalInfo(
-                "Kode Akses Titik GPS (12 Jam) Berhasil Dibuat 🛰️",
-                `Kode Akses: <b style="font-size:18px; color:#0284c7;">${newCode}</b><br><br>` +
-                `Masa Aktif: <b>12 Jam</b> (Berlaku hingga <b>${new Date(window.cloudState.gpsResetAccess.expiresAt).toLocaleString('id-ID')} WITA</b>).<br><br>` +
-                `<i>Catatan: Kode akses ini dapat digunakan untuk mengunci titik lokasi industri utama maupun pindah ke cabang industri ke-2.</i>`
+                "Kode Akses GPS Berhasil Dibuat! 🛰️",
+                `Kode Akses Kalibrasi / Reset Titik GPS:<br><div style="font-size:22px; font-weight:950; color:#0284c7; background:#f0f9ff; border:2px dashed #38bdf8; border-radius:12px; padding:10px; margin:10px 0; letter-spacing:2px;">${newCode}</div>Masa berlaku: <b>2 Jam</b>.`
             );
         };
 
-        // FORMULIR 1: Pengambilan Titik GPS Industri Pertama/Utama dengan Kode Akses
-        // (Hanya berisi Kolom Memasukkan Kode Akses dan Tombol Kunci Titik Lokasi)
+        // FORMULIR KHUSUS ADMIN / PANITIA / GURU PEMBIMBING UNTUK MERESET TITIK LOKASI INDUSTRI SISWA
+        window.bukaModalResetTitikGpsOlehPembimbing = function(namaSiswa, namaInd) {
+            const role = window.cloudState.activeRole || "";
+            if (role !== 'admin' && role !== 'panitia' && role !== 'guru') {
+                return window.showModalInfo("Akses Ditolak 🔒", "Siswa tidak memiliki hak akses untuk mengubah titik koordinat industri. Hanya Admin, Panitia PKL, atau Guru Pembimbing yang berwenang.");
+            }
+            const info = window.getStudentPlacementInfo(namaSiswa);
+            const indObj = info.industriObj || { nama: namaInd, lat: "0.45612", lng: "121.94210", radius: 100 };
+            const locked = window.ambilKoordinatTerkunciIndustri(namaInd, indObj, namaSiswa);
+
+            window.openDynamicModal(`
+                <h3 style="font-size:16px; font-weight:900; color:#0284c7; margin-bottom:4px;">🛰️ Reset / Perbarui Titik GPS Industri</h3>
+                <p style="font-size:11px; color:#475569; margin-bottom:12px; line-height:1.45;">
+                    Otorisasi khusus <b>Guru Pembimbing & Admin</b> untuk mereset atau memperbarui titik koordinat instansi PKL bagi siswa <b>${namaSiswa}</b> (<b>${namaInd}</b>).
+                </p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div class="form-group">
+                        <label class="form-label">Latitude Baru:</label>
+                        <input type="text" id="resetGpsLatInput" class="form-control" value="${locked.lat || '0.45612'}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Longitude Baru:</label>
+                        <input type="text" id="resetGpsLngInput" class="form-control" value="${locked.lng || '121.94210'}">
+                    </div>
+                </div>
+                <button type="button" onclick="window.ambilTitikGpsOtomatis('resetGpsLatInput', 'resetGpsLngInput')" class="btn-action btn-amber" style="width:100%; padding:9px; font-size:11.5px; font-weight:850; margin-bottom:12px;">
+                    🎯 Ambil Titik Lokasi GPS Saat Ini (Jika Sedang Monitoring di Lokasi DUDI)
+                </button>
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button type="button" onclick="window.closeDynamicModal()" class="btn-action" style="background:#94a3b8; color:#fff;">Batal</button>
+                    <button type="button" onclick="window.simpanResetTitikGpsOlehPembimbing('${namaSiswa.replace(/'/g, "\\'")}', '${namaInd.replace(/'/g, "\\'")}')" class="btn-action btn-emerald" style="font-weight:900; padding:10px 18px;">
+                        💾 Kunci Titik Baru
+                    </button>
+                </div>
+            `);
+        };
+
+        window.simpanResetTitikGpsOlehPembimbing = function(namaSiswa, namaInd) {
+            const role = window.cloudState.activeRole || "";
+            if (role !== 'admin' && role !== 'panitia' && role !== 'guru') {
+                return window.showModalInfo("Akses Ditolak 🔒", "Hanya Admin, Panitia PKL, atau Guru Pembimbing yang dapat mengubah titik koordinat industri.");
+            }
+            const newLat = parseFloat(document.getElementById("resetGpsLatInput")?.value);
+            const newLng = parseFloat(document.getElementById("resetGpsLngInput")?.value);
+            if (isNaN(newLat) || isNaN(newLng)) {
+                return window.showModalInfo("Koordinat Tidak Valid", "Masukkan nilai Latitude dan Longitude yang benar.");
+            }
+            window.kunciKoordinatGpsIndustriPermanen(namaInd, newLat, newLng, namaSiswa, false, "");
+            window.simpanDatabasePersisten(true);
+            window.closeDynamicModal();
+            window.showModalInfo("Titik Koordinat Diperbarui ✅", `Titik koordinat lokasi industri <b>${namaInd}</b> untuk siswa <b>${namaSiswa}</b> telah berhasil dikunci ke <b>Lat ${newLat.toFixed(5)}, Lng ${newLng.toFixed(5)}</b>.`);
+            if (window.cloudState.currentFeature) {
+                window.openFeature(window.cloudState.currentFeature, undefined, true);
+            }
+        };
+
+        // FORMULIR 1: Pengambilan Titik GPS Industri Pertama/Utama (Hanya untuk Admin / Panitia / Guru Pembimbing)
         window.bukaModalKunciTitikUtamaDenganKode = function(tipeAbsen = 'Masuk') {
+            const role = window.cloudState.activeRole || "siswa";
+            if (role === 'siswa') {
+                return window.showModalInfo(
+                    "Akses Ditolak 🔒",
+                    "Siswa <b>tidak memiliki hak akses</b> untuk mengubah atau menggeser titik koordinat industri yang sudah dikunci oleh sistem.<br><br>Silakan hubungi <b>Guru Pembimbing</b> atau <b>Admin / Panitia PKL</b> jika ada perpindahan lokasi instansi PKL secara resmi."
+                );
+            }
             window.hentikanStreamKamera();
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
             const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
@@ -15046,8 +15028,15 @@
             `);
         };
 
-        // FORMULIR 2: Pindah / Ganti Titik Koordinat Cabang Industri (Lokasi Ke-2) dengan Kode Akses
+        // FORMULIR 2: Pindah / Ganti Titik Koordinat Cabang Industri (Hanya untuk Admin / Panitia / Guru Pembimbing)
         window.bukaModalAlternatifGantiTitikCabang = function(tipeAbsen = 'Masuk') {
+            const role = window.cloudState.activeRole || "siswa";
+            if (role === 'siswa') {
+                return window.showModalInfo(
+                    "Akses Ditolak 🔒",
+                    "Siswa <b>tidak memiliki hak akses</b> untuk memindahkan atau menggeser titik koordinat industri.<br><br>Hanya <b>Admin / Panitia PKL</b> atau <b>Guru Pembimbing</b> yang berwenang mereset titik lokasi industri."
+                );
+            }
             window.hentikanStreamKamera();
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
             const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
