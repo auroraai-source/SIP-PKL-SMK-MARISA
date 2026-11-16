@@ -1957,6 +1957,7 @@
             return {
                 lastUpdated: window.cloudState.lastUpdated || Date.now(),
                 masterDataUpdatedAt: window.cloudState.masterDataUpdatedAt || window.cloudState.lastUpdated || Date.now(),
+                masterRevision: Number(window.cloudState.masterRevision || 1),
                 customBannerUpdatedAt: window.cloudState.customBannerUpdatedAt || 0,
                 placementUpdatedAt: window.cloudState.placementUpdatedAt || 0,
                 registeredUsers: window.cloudState.registeredUsers || [],
@@ -1993,13 +1994,28 @@
         window.lastLocalWriteTimestamp = 0;
         window._saveLocalStorageTimer = null;
 
+        // Helper untuk mendapatkan Timestamp Otoritatif yang selalu lebih tinggi dari timestamp masa depan (1794...) di server
+        window.getNextAuthoritativeTimestamp = function(currentMaxTs = 0) {
+            const now = Date.now();
+            const localLast = Number(window.cloudState.lastUpdated || 0);
+            const localMaster = Number(window.cloudState.masterDataUpdatedAt || 0);
+            const localPlace = Number(window.cloudState.placementUpdatedAt || 0);
+            const highestKnown = Math.max(now, localLast, localMaster, localPlace, Number(currentMaxTs || 0));
+            return (highestKnown > now) ? (highestKnown + 1000) : now;
+        };
+
         window.simpanDatabasePersisten = function(pushToCloud = true, isMasterOrAllocationEdit = false) {
-            const nowTs = Date.now();
-            window.cloudState.lastUpdated = nowTs;
-            window.lastLocalWriteTimestamp = nowTs;
-            if (isMasterOrAllocationEdit || window.cloudState.activeRole === 'admin' || window.cloudState.activeRole === 'panitia') {
-                window.cloudState.masterDataUpdatedAt = nowTs;
-                window.cloudState.placementUpdatedAt = nowTs;
+            const role = window.cloudState.activeRole || "siswa";
+            const isAdminOrPanitia = (role === 'admin' || role === 'panitia');
+            const nextTs = window.getNextAuthoritativeTimestamp();
+
+            window.cloudState.lastUpdated = nextTs;
+            window.lastLocalWriteTimestamp = Date.now();
+
+            if (isMasterOrAllocationEdit || isAdminOrPanitia) {
+                window.cloudState.masterDataUpdatedAt = nextTs;
+                window.cloudState.placementUpdatedAt = nextTs;
+                window.cloudState.masterRevision = Number(window.cloudState.masterRevision || 0) + 1;
             }
             window._studentPlacementCache = new Map();
             window._lastConsolidateHash = "";
@@ -3648,6 +3664,42 @@
             }
         };
 
+        window.upsertItemJurnalKeTabelSql = async function(itemJurnal) {
+            if (!itemJurnal || !(itemJurnal.siswa || itemJurnal.nama_siswa)) return false;
+            try {
+                const namaSiswa = itemJurnal.siswa || itemJurnal.nama_siswa;
+                const tglNorm = window.normalizeTanggalStr(itemJurnal.tanggal, itemJurnal.id) || window.getTodayLocalWitaStr();
+                const sKey = window.normalizeTextCompact(namaSiswa);
+                const jurId = itemJurnal.id || `jur_${Date.now()}_${sKey}`;
+
+                const sqlRow = {
+                    id: jurId,
+                    siswa_id: String(itemJurnal.user_id || itemJurnal.nis || sKey),
+                    nama_siswa: namaSiswa,
+                    kelas: itemJurnal.kelas || "-",
+                    industri_id: itemJurnal.industri || "-",
+                    pembimbing_id: itemJurnal.guru || "-",
+                    tanggal_kegiatan: tglNorm,
+                    uraian_kegiatan: itemJurnal.kegiatan || "-",
+                    kendala: itemJurnal.kendala || "-",
+                    foto_dokumentasi: itemJurnal.foto_dokumentasi || "",
+                    status_validasi: itemJurnal.status || "Menunggu Verifikasi",
+                    updated_at: new Date().toISOString()
+                };
+
+                await Promise.all([
+                    window.directRestUpsertRow('app_cloud_db', {
+                        id: `juritem_${tglNorm}_${sKey}`,
+                        payload: itemJurnal
+                    }, 'id').catch(() => {}),
+                    window.directRestUpsertRow('jurnal_harian', sqlRow, 'id').catch(() => {})
+                ]);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        };
+
         // Saluran Khusus Log Presensi Terpusat di Supabase (app_cloud_db + Kantong Harian + riwayat_presensi + baris atomik)
         // Menjamin presensi dari puluhan HP siswa tidak pernah hilang/tertimpa dan langsung muncul di Admin, Guru, Industri & Orang Tua
         window.simpanLogPresensiKhususKeSupabase = async function(newAbsenItem = null) {
@@ -3863,21 +3915,72 @@
                 const activeRole = window.cloudState.activeRole || "siswa";
                 const isAdminOrPanitia = (activeRole === 'admin' || activeRole === 'panitia');
 
-                // 1. SINKRONISASI PINTAR (PRE-FETCH MERGE):
-                // PENTING: Jika yang menyimpan adalah Admin / Panitia PKL, JANGAN biarkan data Master Siswa, Guru, Industri, atau Alokasi Penempatan lama di Cloud
-                // menimpa kembali hasil editan terbaru yang baru saja dilakukan oleh Admin / Panitia!
-                // Hanya gabungkan log Presensi & Jurnal dari siswa agar tidak ada absensi yang hilang.
+                // PROTEKSI MUTLAK DATABASE MASTER:
+                // Jika yang sedang login adalah SISWA, ORANG TUA, GURU, atau INDUSTRI (dan bukan klik tombol manual di Admin),
+                // JANGAN PERNAH menimpa tabel `app_state` atau `app_cloud_db` (id='master' / 'master_alokasi_otoritatif') dengan Master Siswa/Alokasi dari HP siswa!
+                // Karena HP siswa bisa berisi cache alokasi lama atau timestamp masa depan (1794...) yang merusak editan Admin!
+                if (!isAdminOrPanitia && silent) {
+                    const cleanNonAdmin = window.getSanitizedCloudPayload(true);
+                    if (Array.isArray(cleanNonAdmin.absensi) && cleanNonAdmin.absensi.length > 0) {
+                        await window.directRestUpsertRow('app_cloud_db', {
+                            id: 'absensi_master_log',
+                            payload: { updatedAt: Date.now(), absensi: cleanNonAdmin.absensi }
+                        }, 'id').catch(() => {});
+                    }
+                    if (Array.isArray(cleanNonAdmin.jurnal) && cleanNonAdmin.jurnal.length > 0) {
+                        await window.directRestUpsertRow('app_cloud_db', {
+                            id: 'jurnal_master_log',
+                            payload: { updatedAt: Date.now(), jurnal: cleanNonAdmin.jurnal }
+                        }, 'id').catch(() => {});
+                    }
+                    // Jika Guru/Kepsek mengunggah nilai, disposisi, atau dokumentasi, simpan ke baris khusus aktivitas
+                    await window.directRestUpsertRow('app_cloud_db', {
+                        id: 'aktivitas_ekosistem_log',
+                        payload: {
+                            updatedAt: Date.now(),
+                            nilai: cleanNonAdmin.nilai || [],
+                            laporanAkhir: cleanNonAdmin.laporanAkhir || [],
+                            pengaduan: cleanNonAdmin.pengaduan || [],
+                            disposisiKepsek: cleanNonAdmin.disposisiKepsek || [],
+                            dokumentasiKegiatan: cleanNonAdmin.dokumentasiKegiatan || [],
+                            industriCoords: (cleanNonAdmin.industri || []).filter(i => i && i.gpsLocked).map(i => ({
+                                nama: i.nama, lat: i.lat, lng: i.lng, radius: i.radius, gpsLocked: true, gpsLockedAt: i.gpsLockedAt, cabangCoords: i.cabangCoords || []
+                            }))
+                        }
+                    }, 'id').catch(() => {});
+                    return true;
+                }
+
+                // 1. SINKRONISASI PINTAR KHUSUS ADMIN / PANITIA PKL:
                 let latestRemote = null;
+                let maxRemoteTimestamp = 0;
+                let maxRemoteRevision = 0;
                 try {
-                    const [rowState, rowCloud, rowBanner, rowAbsLog, rowJurLog] = await Promise.all([
+                    const [rowState, rowCloud, rowOto, rowAbsLog, rowJurLog] = await Promise.all([
                         window.directRestFetchRow('app_state', 'id', 1).catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', 'master').catch(() => null),
-                        window.directRestFetchRow('app_cloud_db', 'id', 'banners_master').catch(() => null),
+                        window.directRestFetchRow('app_cloud_db', 'id', 'master_alokasi_otoritatif').catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', 'absensi_master_log').catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', 'jurnal_master_log').catch(() => null)
                     ]);
                     const p1 = rowState?.payload;
                     const p2 = rowCloud?.payload;
+                    const pOto = rowOto?.payload;
+
+                    // Cek timestamp tertinggi di server (termasuk jika ada timestamp masa depan 1794... dari kalender bulan November)
+                    maxRemoteTimestamp = Math.max(
+                        Number(p1?.lastUpdated || 0),
+                        Number(p1?.masterDataUpdatedAt || 0),
+                        Number(p2?.lastUpdated || 0),
+                        Number(p2?.masterDataUpdatedAt || 0),
+                        Number(pOto?.updatedAt || 0)
+                    );
+                    maxRemoteRevision = Math.max(
+                        Number(p1?.masterRevision || 0),
+                        Number(p2?.masterRevision || 0),
+                        Number(pOto?.masterRevision || 0)
+                    );
+
                     latestRemote = (p1 && p2) ? ((Number(p1.lastUpdated || 0) >= Number(p2.lastUpdated || 0)) ? p1 : p2) : (p1 || p2);
 
                     if (rowAbsLog && rowAbsLog.payload && Array.isArray(rowAbsLog.payload.absensi)) {
@@ -3896,45 +3999,34 @@
                         );
                     }
 
-                    if (!isAdminOrPanitia && rowBanner && rowBanner.payload && Array.isArray(rowBanner.payload.bannerSliderImages) && rowBanner.payload.bannerSliderImages.length > 0) {
-                        window.cloudState.bannerSliderImages = JSON.parse(JSON.stringify(rowBanner.payload.bannerSliderImages));
-                        window.cloudState.customBannerUpdatedAt = Number(rowBanner.payload.updatedAt || Date.now());
-                    }
-
                     if (latestRemote && typeof latestRemote === 'object') {
-                        if (!isAdminOrPanitia && Array.isArray(latestRemote.bannerSliderImages) && latestRemote.bannerSliderImages.length > 0 && (!rowBanner || !rowBanner.payload)) {
-                            window.cloudState.bannerSliderImages = JSON.parse(JSON.stringify(latestRemote.bannerSliderImages));
-                            window.cloudState.customBannerUpdatedAt = Number(latestRemote.customBannerUpdatedAt || Date.now());
+                        if (Array.isArray(latestRemote.absensi)) {
+                            window.cloudState.absensi = window.mergeUniqueArrayById(
+                                window.cloudState.absensi || [],
+                                latestRemote.absensi,
+                                (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen}`
+                            );
                         }
-                        if (latestRemote.gpsResetAccess && latestRemote.gpsResetAccess.code && (!window.cloudState.gpsResetAccess || !window.cloudState.gpsResetAccess.code || Number(latestRemote.gpsResetAccess.createdAt || 0) >= Number(window.cloudState.gpsResetAccess.createdAt || 0))) {
-                            window.cloudState.gpsResetAccess = latestRemote.gpsResetAccess;
-                        }
-                        if (isAdminOrPanitia) {
-                            // Jika Admin/Panitia yang menyimpan: PERTAHANKAN 100% hasil editan lokal untuk siswa, guru, industri, penempatan, penugasanMonitoring, dan registeredUsers!
-                            // Hanya ambil tambahan log absensi, jurnal, dokumentasi, laporan, dan pengaduan dari Cloud.
-                            if (Array.isArray(latestRemote.absensi)) {
-                                window.cloudState.absensi = window.mergeUniqueArrayById(
-                                    window.cloudState.absensi || [],
-                                    latestRemote.absensi,
-                                    (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen}`
-                                );
-                            }
-                            if (Array.isArray(latestRemote.jurnal)) {
-                                window.cloudState.jurnal = window.mergeUniqueArrayById(
-                                    window.cloudState.jurnal || [],
-                                    latestRemote.jurnal,
-                                    (j) => j.id || `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
-                                );
-                            }
-                        } else {
-                            // Jika Siswa/Guru/Industri yang menyimpan: adopsi penuh Master Data & Alokasi terbaru dari Admin di Cloud!
-                            window.gabungkanDataCloudTanpaKehilangan(latestRemote);
+                        if (Array.isArray(latestRemote.jurnal)) {
+                            window.cloudState.jurnal = window.mergeUniqueArrayById(
+                                window.cloudState.jurnal || [],
+                                latestRemote.jurnal,
+                                (j) => j.id || `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
+                            );
                         }
                     }
                 } catch(e) {}
 
-                // Penting: Jika di dalam bannerSliderImages terdapat gambar Base64 raksasa yang belum terunggah ke Storage,
-                // unggah dulu ke Storage agar menjadi URL pendek (menghindari TypeError: Failed to fetch karena ukuran JSON > 2MB)
+                // KUNCI UTAMA PENYELAMAT DATA EDITAN BARU:
+                // Karena di server sebelumnya ada data ber-timestamp masa depan (1794... = Nov 2026),
+                // kita pastikan setiap simpanan dari Admin/Panitia mendapatkan timestamp & masterRevision yang LEBIH BESAR dari angka di server!
+                const authoritativeTs = window.getNextAuthoritativeTimestamp(maxRemoteTimestamp);
+                const authoritativeRev = Math.max(Number(window.cloudState.masterRevision || 0), maxRemoteRevision) + 1;
+                window.cloudState.lastUpdated = authoritativeTs;
+                window.cloudState.masterDataUpdatedAt = authoritativeTs;
+                window.cloudState.placementUpdatedAt = authoritativeTs;
+                window.cloudState.masterRevision = authoritativeRev;
+
                 if (Array.isArray(window.cloudState.bannerSliderImages)) {
                     for (let i = 0; i < window.cloudState.bannerSliderImages.length; i++) {
                         const bItem = window.cloudState.bannerSliderImages[i];
@@ -3948,15 +4040,23 @@
                 }
 
                 let cleanData = window.getSanitizedCloudPayload(false);
-                // Jika ukuran JSON masih > 450 KB (misal karena gambar base64), gunakan mode ultra-slim untuk tabel utama app_state & app_cloud_db
                 if (JSON.stringify(cleanData).length > 450000) {
                     cleanData = window.getSanitizedCloudPayload(true);
                 }
+                cleanData.lastUpdated = authoritativeTs;
+                cleanData.masterDataUpdatedAt = authoritativeTs;
+                cleanData.placementUpdatedAt = authoritativeTs;
+                cleanData.masterRevision = authoritativeRev;
+
+                // Simpan kembali ke localStorage agar angka authoritativeTs & masterRevision juga tersimpan di perangkat ini
+                try {
+                    localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cleanData));
+                } catch (eLoc) {}
+
                 let okState = false;
                 let okCloud = false;
                 let errMsg = "";
 
-                // Simpan juga seluruh daftar absensi & jurnal ke saluran khusus agar tidak ada yang tercecer
                 if (Array.isArray(cleanData.absensi) && cleanData.absensi.length > 0) {
                     await window.directRestUpsertRow('app_cloud_db', {
                         id: 'absensi_master_log',
@@ -3970,24 +4070,21 @@
                     }, 'id').catch(() => {});
                 }
 
-                // Jika Admin atau Panitia yang menyimpan, kunci juga Master Data & Alokasi ke saluran otoritatif `master_alokasi_otoritatif`
-                // agar seluruh dashboard Guru, Siswa, Industri, Kepsek, dan Orang Tua langsung membaca perubahan terbaru!
-                if (isAdminOrPanitia) {
-                    await window.directRestUpsertRow('app_cloud_db', {
-                        id: 'master_alokasi_otoritatif',
-                        payload: {
-                            updatedAt: cleanData.masterDataUpdatedAt || Date.now(),
-                            siswa: cleanData.siswa || [],
-                            guru: cleanData.guru || [],
-                            industri: cleanData.industri || [],
-                            penempatan: cleanData.penempatan || [],
-                            penugasanMonitoring: cleanData.penugasanMonitoring || [],
-                            registeredUsers: cleanData.registeredUsers || []
-                        }
-                    }, 'id').catch(() => {});
-                }
+                // Tulis ke saluran otoritatif `master_alokasi_otoritatif`
+                await window.directRestUpsertRow('app_cloud_db', {
+                    id: 'master_alokasi_otoritatif',
+                    payload: {
+                        updatedAt: authoritativeTs,
+                        masterRevision: authoritativeRev,
+                        siswa: cleanData.siswa || [],
+                        guru: cleanData.guru || [],
+                        industri: cleanData.industri || [],
+                        penempatan: cleanData.penempatan || [],
+                        penugasanMonitoring: cleanData.penugasanMonitoring || [],
+                        registeredUsers: cleanData.registeredUsers || []
+                    }
+                }, 'id').catch(() => {});
 
-                // Jika Admin atau Panitia yang menyimpan, kunci juga ke baris khusus banners_master
                 if (isAdminOrPanitia && Array.isArray(cleanData.bannerSliderImages) && cleanData.bannerSliderImages.length > 0) {
                     await window.simpanBannerMasterKeSupabase(cleanData.bannerSliderImages).catch(() => {});
                 }
@@ -4074,15 +4171,17 @@
                 let todayAbsBucketPayload = null;
                 let todayJurBucketPayload = null;
                 let masterOtoritatifPayload = null;
+                let aktivitasEkosistemPayload = null;
 
                 const todayWitaStr = window.getTodayLocalWitaStr();
 
-                // 1. Tarik serentak & RAMPING dari Supabase (Termasuk baris otoritatif master_alokasi_otoritatif)
+                // 1. Tarik serentak & RAMPING dari Supabase (Termasuk baris otoritatif master_alokasi_otoritatif & aktivitas_ekosistem_log)
                 try {
-                    const [rowState, rowCloud, rowMasterOto, rowBanner, rowDayAbs, rowDayJur, rowAbsLog, rowJurLog, rowsSqlAbs, rowsSqlJur] = await Promise.all([
+                    const [rowState, rowCloud, rowMasterOto, rowAktivitas, rowBanner, rowDayAbs, rowDayJur, rowAbsLog, rowJurLog, rowsSqlAbs, rowsSqlJur] = await Promise.all([
                         window.directRestFetchRow('app_state', 'id', 1).catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', 'master').catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', 'master_alokasi_otoritatif').catch(() => null),
+                        window.directRestFetchRow('app_cloud_db', 'id', 'aktivitas_ekosistem_log').catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', 'banners_master').catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', `absensi_day_${todayWitaStr}`).catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', `jurnal_day_${todayWitaStr}`).catch(() => null),
@@ -4094,6 +4193,7 @@
                     if (rowState && rowState.payload) statePayload = rowState.payload;
                     if (rowCloud && rowCloud.payload) cloudDbPayload = rowCloud.payload;
                     if (rowMasterOto && rowMasterOto.payload) masterOtoritatifPayload = rowMasterOto.payload;
+                    if (rowAktivitas && rowAktivitas.payload) aktivitasEkosistemPayload = rowAktivitas.payload;
                     if (rowBanner && rowBanner.payload) bannerMasterPayload = rowBanner.payload;
                     if (rowDayAbs && rowDayAbs.payload) todayAbsBucketPayload = rowDayAbs.payload;
                     if (rowDayJur && rowDayJur.payload) todayJurBucketPayload = rowDayJur.payload;
@@ -4185,8 +4285,10 @@
                 // gunakan data siswa, guru, industri, dan alokasi penempatan dari baris otoritatif tersebut!
                 if (masterOtoritatifPayload && typeof masterOtoritatifPayload === 'object') {
                     const otoTs = Number(masterOtoritatifPayload.updatedAt || 0);
+                    const otoRev = Number(masterOtoritatifPayload.masterRevision || 0);
                     const curCloudMasterTs = Number(cloudPayload.masterDataUpdatedAt || cloudPayload.placementUpdatedAt || 0);
-                    if (otoTs >= curCloudMasterTs) {
+                    const curCloudRev = Number(cloudPayload.masterRevision || 0);
+                    if (otoRev >= curCloudRev || otoTs >= curCloudMasterTs) {
                         if (Array.isArray(masterOtoritatifPayload.siswa) && masterOtoritatifPayload.siswa.length > 0) {
                             cloudPayload.siswa = masterOtoritatifPayload.siswa;
                         }
@@ -4207,6 +4309,44 @@
                         }
                         cloudPayload.masterDataUpdatedAt = otoTs;
                         cloudPayload.placementUpdatedAt = otoTs;
+                        cloudPayload.masterRevision = otoRev;
+                    }
+                }
+
+                // Gabungkan aktivitas ekosistem (nilai, disposisi kepsek, dokumentasi kegiatan, koordinat GPS terkunci)
+                if (aktivitasEkosistemPayload && typeof aktivitasEkosistemPayload === 'object') {
+                    if (Array.isArray(aktivitasEkosistemPayload.disposisiKepsek)) {
+                        cloudPayload.disposisiKepsek = window.mergeUniqueArrayById(
+                            cloudPayload.disposisiKepsek || [],
+                            aktivitasEkosistemPayload.disposisiKepsek,
+                            (d) => d.id || `${window.normalizeTextCompact(d.siswa)}_${d.tanggal}`
+                        );
+                    }
+                    if (Array.isArray(aktivitasEkosistemPayload.dokumentasiKegiatan)) {
+                        cloudPayload.dokumentasiKegiatan = window.mergeUniqueArrayById(
+                            cloudPayload.dokumentasiKegiatan || [],
+                            aktivitasEkosistemPayload.dokumentasiKegiatan,
+                            (d) => d.id || `${window.normalizeTextCompact(d.siswa)}_${d.tanggal}_${window.normalizeTextCompact(d.judul)}`
+                        );
+                    }
+                    if (Array.isArray(aktivitasEkosistemPayload.nilai)) {
+                        cloudPayload.nilai = window.mergeUniqueArrayById(
+                            cloudPayload.nilai || [],
+                            aktivitasEkosistemPayload.nilai,
+                            (n) => n.id || `${window.normalizeTextCompact(n.siswa)}`
+                        );
+                    }
+                    if (Array.isArray(aktivitasEkosistemPayload.industriCoords) && Array.isArray(cloudPayload.industri)) {
+                        aktivitasEkosistemPayload.industriCoords.forEach(ic => {
+                            const matchInd = cloudPayload.industri.find(i => i && window.isIndustriMatch(i.nama, ic.nama));
+                            if (matchInd && ic.gpsLocked) {
+                                matchInd.lat = ic.lat;
+                                matchInd.lng = ic.lng;
+                                matchInd.radius = ic.radius || 100;
+                                matchInd.gpsLocked = true;
+                                matchInd.gpsLockedAt = ic.gpsLockedAt || Date.now();
+                            }
+                        });
                     }
                 }
 
@@ -4600,15 +4740,16 @@
             const isAdminOrPanitia = (activeRole === 'admin' || activeRole === 'panitia');
             const localMasterTs = Number(window.cloudState.masterDataUpdatedAt || window.cloudState.placementUpdatedAt || 0);
             const cloudMasterTs = Number(cloudData.masterDataUpdatedAt || cloudData.placementUpdatedAt || cloudData.lastUpdated || 0);
-            const isRecentlyEditedLocally = (Date.now() - (window.lastLocalWriteTimestamp || 0) < 25000);
+            const localRev = Number(window.cloudState.masterRevision || 0);
+            const cloudRev = Number(cloudData.masterRevision || 0);
+            const isRecentlyEditedLocally = (Date.now() - (window.lastLocalWriteTimestamp || 0) < 45000);
 
             // ATURAN SINKRONISASI MASTER DATA & ALOKASI PENEMPATAN:
             // 1. Jika yang sedang aktif adalah Siswa, Guru Pembimbing, Industri, Kepsek, atau Orang Tua:
-            //    SELALU utamakan Master Siswa, Guru, Industri, dan Alokasi Penempatan dari Cloud (hasil editan Admin/Panitia),
-            //    supaya perubahan alokasi/edit data langsung berubah di dashboard Guru & Siswa (tidak tertahan cache lokal lama)!
-            // 2. Jika yang sedang aktif adalah Admin / Panitia dan baru saja mengedit secara lokal:
-            //    Pertahankan 100% hasil editan lokal Admin/Panitia agar tidak kembali ke setingan awal!
-            const shouldUseCloudAsMasterAuthority = !isAdminOrPanitia || (!isRecentlyEditedLocally && cloudMasterTs > localMasterTs);
+            //    SELALU adopsi 100% Master Siswa, Guru, Industri, dan Alokasi Penempatan dari Cloud (hasil editan Admin/Panitia)!
+            // 2. Jika yang sedang aktif adalah Admin / Panitia:
+            //    Hanya adopsi dari Cloud apabila Cloud memiliki masterRevision yang lebih tinggi DAN Admin tidak sedang mengedit secara lokal.
+            const shouldUseCloudAsMasterAuthority = !isAdminOrPanitia || (!isRecentlyEditedLocally && (cloudRev > localRev || (cloudRev === localRev && cloudMasterTs > localMasterTs)));
 
             if (shouldUseCloudAsMasterAuthority) {
                 if (Array.isArray(cloudData.siswa) && cloudData.siswa.length > 0) {
@@ -4645,6 +4786,9 @@
                 if (cloudMasterTs > localMasterTs) {
                     window.cloudState.masterDataUpdatedAt = cloudMasterTs;
                     window.cloudState.placementUpdatedAt = cloudMasterTs;
+                }
+                if (cloudRev > localRev) {
+                    window.cloudState.masterRevision = cloudRev;
                 }
             }
 
