@@ -1992,7 +1992,17 @@
         };
 
         window.lastLocalWriteTimestamp = 0;
+        window.isSavingToCloud = false;
+        window.cloudSyncPausedUntil = 0;
+        window._activeSavePromise = null;
         window._saveLocalStorageTimer = null;
+
+        // Helper untuk menjeda semua auto-sync / polling latar belakang saat ada aksi INSERT / UPDATE / DELETE
+        window.jedaSinkronisasiLatarBelakang = function(durasiMs = 60000) {
+            const now = Date.now();
+            window.lastLocalWriteTimestamp = now;
+            window.cloudSyncPausedUntil = Math.max(window.cloudSyncPausedUntil || 0, now + durasiMs);
+        };
 
         // Helper untuk mendapatkan Timestamp Otoritatif yang selalu lebih tinggi dari timestamp masa depan (1794...) di server
         window.getNextAuthoritativeTimestamp = function(currentMaxTs = 0) {
@@ -2009,56 +2019,40 @@
             const isAdminOrPanitia = (role === 'admin' || role === 'panitia');
             const nextTs = window.getNextAuthoritativeTimestamp();
 
-            window.cloudState.lastUpdated = nextTs;
-            window.lastLocalWriteTimestamp = Date.now();
+            // 1. Kunci & Jeda seluruh proses auto-fetch/polling latar belakang selama 60 detik
+            window.jedaSinkronisasiLatarBelakang(60000);
 
-            if (isMasterOrAllocationEdit || isAdminOrPanitia) {
-                window.cloudState.masterDataUpdatedAt = nextTs;
-                window.cloudState.placementUpdatedAt = nextTs;
-                window.cloudState.masterRevision = Number(window.cloudState.masterRevision || 0) + 1;
-            }
+            window.cloudState.lastUpdated = nextTs;
+            window.cloudState.masterDataUpdatedAt = nextTs;
+            window.cloudState.placementUpdatedAt = nextTs;
+            window.cloudState.masterRevision = Number(window.cloudState.masterRevision || 0) + 1;
+
+            try {
+                localStorage.setItem("SIP_PKL_LAST_LOCAL_MUTATION_TS", String(Date.now()));
+                localStorage.setItem("SIP_PKL_LOCAL_MASTER_REV", String(window.cloudState.masterRevision));
+            } catch (e) {}
+
             window._studentPlacementCache = new Map();
             window._lastConsolidateHash = "";
 
-            // Simpan ke localStorage SECARA LANGSUNG (Synchronous) untuk data utama agar saat pindah menu/refresh tidak pernah kembali ke data lama!
+            // 2. Simpan ke localStorage SECARA LANGSUNG (Synchronous) agar tidak ada jeda yang mengembalikan data lama
+            let immediatePayload = null;
             try {
-                const immediatePayload = window.getSanitizedCloudPayload();
+                immediatePayload = window.getSanitizedCloudPayload();
                 localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(immediatePayload));
                 if (Array.isArray(immediatePayload.penempatan)) {
                     localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(immediatePayload.penempatan));
                 }
+                if (Array.isArray(immediatePayload.bannerSliderImages) && immediatePayload.bannerSliderImages.length > 0) {
+                    localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(immediatePayload.bannerSliderImages));
+                }
             } catch (eSync) {}
 
-            if (window._saveLocalStorageTimer) clearTimeout(window._saveLocalStorageTimer);
-            window._saveLocalStorageTimer = setTimeout(() => {
-                const payload = window.getSanitizedCloudPayload();
-                try {
-                    localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(payload));
-                } catch(eQuota) {
-                    try {
-                        localStorage.removeItem(STORAGE_KEY_VAULT);
-                        if (Array.isArray(payload.absensi)) {
-                            payload.absensi.forEach(a => {
-                                if (a && a.foto_selfie && a.foto_selfie.startsWith('data:')) a.foto_selfie = "";
-                                if (a && a.foto_url && a.foto_url && a.foto_url.startsWith('data:')) a.foto_url = "";
-                            });
-                        }
-                        localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(payload));
-                    } catch(e2) {}
-                }
-                try {
-                    if (Array.isArray(payload.penempatan)) {
-                        localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(payload.penempatan));
-                    }
-                    if (Array.isArray(payload.bannerSliderImages) && payload.bannerSliderImages.length > 0) {
-                        localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(payload.bannerSliderImages));
-                    }
-                } catch(e) {}
-
-                if (pushToCloud && typeof window.kirimSnapshotKeSupabase === 'function') {
-                    window.kirimSnapshotKeSupabase(payload, true);
-                }
-            }, 60);
+            // 3. Langsung simpan secara konsisten ke tabel utama Supabase tanpa jeda debounce yang berisiko tertimpa polling
+            if (pushToCloud && typeof window.kirimSnapshotKeSupabase === 'function') {
+                const snapToPush = immediatePayload || window.getSanitizedCloudPayload();
+                window._activeSavePromise = window.kirimSnapshotKeSupabase(snapToPush, true);
+            }
         };
 
         // =========================================================================
@@ -3911,14 +3905,16 @@
                 return false;
             }
 
+            // Kunci mutex penyimpanan agar tidak ada proses tarikDataDariCloud (polling) yang menimpa state lokal
+            window.isSavingToCloud = true;
+            window.jedaSinkronisasiLatarBelakang(60000);
+
             try {
                 const activeRole = window.cloudState.activeRole || "siswa";
                 const isAdminOrPanitia = (activeRole === 'admin' || activeRole === 'panitia');
 
-                // PROTEKSI MUTLAK DATABASE MASTER:
-                // Jika yang sedang login adalah SISWA, ORANG TUA, GURU, atau INDUSTRI (dan bukan klik tombol manual di Admin),
-                // JANGAN PERNAH menimpa tabel `app_state` atau `app_cloud_db` (id='master' / 'master_alokasi_otoritatif') dengan Master Siswa/Alokasi dari HP siswa!
-                // Karena HP siswa bisa berisi cache alokasi lama atau timestamp masa depan (1794...) yang merusak editan Admin!
+                // Jika bukan Admin/Panitia (misal Siswa/Guru/Industri/Ortu) dan otomatis di latar belakang:
+                // Hanya simpan ke tabel log aktivitas/presensi/jurnal tanpa menyentuh data Master Siswa/Alokasi
                 if (!isAdminOrPanitia && silent) {
                     const cleanNonAdmin = window.getSanitizedCloudPayload(true);
                     if (Array.isArray(cleanNonAdmin.absensi) && cleanNonAdmin.absensi.length > 0) {
@@ -3933,7 +3929,6 @@
                             payload: { updatedAt: Date.now(), jurnal: cleanNonAdmin.jurnal }
                         }, 'id').catch(() => {});
                     }
-                    // Jika Guru/Kepsek mengunggah nilai, disposisi, atau dokumentasi, simpan ke baris khusus aktivitas
                     await window.directRestUpsertRow('app_cloud_db', {
                         id: 'aktivitas_ekosistem_log',
                         payload: {
@@ -3951,77 +3946,11 @@
                     return true;
                 }
 
-                // 1. SINKRONISASI PINTAR KHUSUS ADMIN / PANITIA PKL:
-                let latestRemote = null;
-                let maxRemoteTimestamp = 0;
-                let maxRemoteRevision = 0;
-                try {
-                    const [rowState, rowCloud, rowOto, rowAbsLog, rowJurLog] = await Promise.all([
-                        window.directRestFetchRow('app_state', 'id', 1).catch(() => null),
-                        window.directRestFetchRow('app_cloud_db', 'id', 'master').catch(() => null),
-                        window.directRestFetchRow('app_cloud_db', 'id', 'master_alokasi_otoritatif').catch(() => null),
-                        window.directRestFetchRow('app_cloud_db', 'id', 'absensi_master_log').catch(() => null),
-                        window.directRestFetchRow('app_cloud_db', 'id', 'jurnal_master_log').catch(() => null)
-                    ]);
-                    const p1 = rowState?.payload;
-                    const p2 = rowCloud?.payload;
-                    const pOto = rowOto?.payload;
+                // Tentukan Timestamp & Revision Otoritatif yang dijamin mengalahkan timestamp masa depan (1794... = Nov 2026) di database
+                const FLOOR_FUTURE_TS = 1800000000000;
+                const authoritativeTs = Math.max(window.getNextAuthoritativeTimestamp(), FLOOR_FUTURE_TS + (Date.now() % 100000000));
+                const authoritativeRev = Math.max(Number(window.cloudState.masterRevision || 0), 100) + 1;
 
-                    // Cek timestamp tertinggi di server (termasuk jika ada timestamp masa depan 1794... dari kalender bulan November)
-                    maxRemoteTimestamp = Math.max(
-                        Number(p1?.lastUpdated || 0),
-                        Number(p1?.masterDataUpdatedAt || 0),
-                        Number(p2?.lastUpdated || 0),
-                        Number(p2?.masterDataUpdatedAt || 0),
-                        Number(pOto?.updatedAt || 0)
-                    );
-                    maxRemoteRevision = Math.max(
-                        Number(p1?.masterRevision || 0),
-                        Number(p2?.masterRevision || 0),
-                        Number(pOto?.masterRevision || 0)
-                    );
-
-                    latestRemote = (p1 && p2) ? ((Number(p1.lastUpdated || 0) >= Number(p2.lastUpdated || 0)) ? p1 : p2) : (p1 || p2);
-
-                    if (rowAbsLog && rowAbsLog.payload && Array.isArray(rowAbsLog.payload.absensi)) {
-                        window.cloudState.absensi = window.mergeUniqueArrayById(
-                            window.cloudState.absensi || [],
-                            rowAbsLog.payload.absensi,
-                            (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal)}_${a.tipe_absen}`
-                        );
-                    }
-
-                    if (rowJurLog && rowJurLog.payload && Array.isArray(rowJurLog.payload.jurnal)) {
-                        window.cloudState.jurnal = window.mergeUniqueArrayById(
-                            window.cloudState.jurnal || [],
-                            rowJurLog.payload.jurnal,
-                            (j) => j.id || `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal)}_${window.normalizeTextCompact(j.kegiatan)}`
-                        );
-                    }
-
-                    if (latestRemote && typeof latestRemote === 'object') {
-                        if (Array.isArray(latestRemote.absensi)) {
-                            window.cloudState.absensi = window.mergeUniqueArrayById(
-                                window.cloudState.absensi || [],
-                                latestRemote.absensi,
-                                (a) => a.id || `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen}`
-                            );
-                        }
-                        if (Array.isArray(latestRemote.jurnal)) {
-                            window.cloudState.jurnal = window.mergeUniqueArrayById(
-                                window.cloudState.jurnal || [],
-                                latestRemote.jurnal,
-                                (j) => j.id || `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
-                            );
-                        }
-                    }
-                } catch(e) {}
-
-                // KUNCI UTAMA PENYELAMAT DATA EDITAN BARU:
-                // Karena di server sebelumnya ada data ber-timestamp masa depan (1794... = Nov 2026),
-                // kita pastikan setiap simpanan dari Admin/Panitia mendapatkan timestamp & masterRevision yang LEBIH BESAR dari angka di server!
-                const authoritativeTs = window.getNextAuthoritativeTimestamp(maxRemoteTimestamp);
-                const authoritativeRev = Math.max(Number(window.cloudState.masterRevision || 0), maxRemoteRevision) + 1;
                 window.cloudState.lastUpdated = authoritativeTs;
                 window.cloudState.masterDataUpdatedAt = authoritativeTs;
                 window.cloudState.placementUpdatedAt = authoritativeTs;
@@ -4039,6 +3968,7 @@
                     }
                 }
 
+                // PENTING: JANGAN melakukan pre-fetch & merge dari server di sini karena pre-fetch itulah yang menarik kembali data lama sebelum ditimpa!
                 let cleanData = window.getSanitizedCloudPayload(false);
                 if (JSON.stringify(cleanData).length > 450000) {
                     cleanData = window.getSanitizedCloudPayload(true);
@@ -4048,29 +3978,17 @@
                 cleanData.placementUpdatedAt = authoritativeTs;
                 cleanData.masterRevision = authoritativeRev;
 
-                // Simpan kembali ke localStorage agar angka authoritativeTs & masterRevision juga tersimpan di perangkat ini
                 try {
                     localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cleanData));
+                    localStorage.setItem("SIP_PKL_LAST_LOCAL_MUTATION_TS", String(Date.now()));
+                    localStorage.setItem("SIP_PKL_LOCAL_MASTER_REV", String(authoritativeRev));
                 } catch (eLoc) {}
 
                 let okState = false;
                 let okCloud = false;
                 let errMsg = "";
 
-                if (Array.isArray(cleanData.absensi) && cleanData.absensi.length > 0) {
-                    await window.directRestUpsertRow('app_cloud_db', {
-                        id: 'absensi_master_log',
-                        payload: { updatedAt: Date.now(), absensi: cleanData.absensi }
-                    }, 'id').catch(() => {});
-                }
-                if (Array.isArray(cleanData.jurnal) && cleanData.jurnal.length > 0) {
-                    await window.directRestUpsertRow('app_cloud_db', {
-                        id: 'jurnal_master_log',
-                        payload: { updatedAt: Date.now(), jurnal: cleanData.jurnal }
-                    }, 'id').catch(() => {});
-                }
-
-                // Tulis ke saluran otoritatif `master_alokasi_otoritatif`
+                // 1. Tulis ke baris otoritatif `master_alokasi_otoritatif` di `app_cloud_db`
                 await window.directRestUpsertRow('app_cloud_db', {
                     id: 'master_alokasi_otoritatif',
                     payload: {
@@ -4085,11 +4003,7 @@
                     }
                 }, 'id').catch(() => {});
 
-                if (isAdminOrPanitia && Array.isArray(cleanData.bannerSliderImages) && cleanData.bannerSliderImages.length > 0) {
-                    await window.simpanBannerMasterKeSupabase(cleanData.bannerSliderImages).catch(() => {});
-                }
-
-                // 2. Unggah ke app_state (Gunakan Direct REST Upsert + Fallback SDK)
+                // 2. Tulis ke `app_state` (id = 1)
                 try {
                     await window.directRestUpsertRow('app_state', { id: 1, payload: cleanData }, 'id');
                     okState = true;
@@ -4107,7 +4021,7 @@
                     }
                 }
 
-                // 3. Unggah ke app_cloud_db (Gunakan Direct REST Upsert + Fallback SDK)
+                // 3. Tulis ke `app_cloud_db` (id = 'master')
                 try {
                     await window.directRestUpsertRow('app_cloud_db', { id: 'master', payload: cleanData }, 'id');
                     okCloud = true;
@@ -4125,15 +4039,33 @@
                     }
                 }
 
+                // 4. Sinkronkan log presensi & jurnal di latar belakang
+                if (Array.isArray(cleanData.absensi) && cleanData.absensi.length > 0) {
+                    window.directRestUpsertRow('app_cloud_db', {
+                        id: 'absensi_master_log',
+                        payload: { updatedAt: Date.now(), absensi: cleanData.absensi }
+                    }, 'id').catch(() => {});
+                }
+                if (Array.isArray(cleanData.jurnal) && cleanData.jurnal.length > 0) {
+                    window.directRestUpsertRow('app_cloud_db', {
+                        id: 'jurnal_master_log',
+                        payload: { updatedAt: Date.now(), jurnal: cleanData.jurnal }
+                    }, 'id').catch(() => {});
+                }
+                if (isAdminOrPanitia && Array.isArray(cleanData.bannerSliderImages) && cleanData.bannerSliderImages.length > 0) {
+                    window.simpanBannerMasterKeSupabase(cleanData.bannerSliderImages).catch(() => {});
+                }
+
                 if (okState || okCloud) {
                     window.isCloudConnected = true;
+                    window.jedaSinkronisasiLatarBelakang(60000);
                     if (!silent) {
                         const now = new Date();
                         const timeStr = now.toLocaleDateString('id-ID') + " " + now.toLocaleTimeString('it-IT') + " WITA";
                         window.showModalInfo(
                             "Database Cloud Berhasil Disimpan! ☁️✅",
                             `Seluruh perubahan data telah berhasil diunggah dan dikunci ke server Supabase pada <b>${timeStr}</b>.<br><br>` +
-                            `<span style="color:#16a34a; font-weight:800;">✓ Seluruh perangkat (HP & PC) kini terhubung dengan data terbaru.</span>`
+                            `<span style="color:#16a34a; font-weight:800;">✓ Seluruh perangkat (HP & PC) kini terhubung dengan data terbaru tanpa tertimpa data lama.</span>`
                         );
                     }
                     return true;
@@ -4148,6 +4080,8 @@
                     window.showModalInfo("Galat Pengunggahan ❌", err.message || "Terjadi gangguan jaringan saat menghubungi server.");
                 }
                 return false;
+            } finally {
+                window.isSavingToCloud = false;
             }
         };
 
@@ -4159,6 +4093,19 @@
                 }
                 return false;
             }
+
+            // PROTEKSI ANTI-REVERT (7-10 DETIK):
+            // Jika proses penyimpanan sedang berlangsung ATAU pengguna baru saja melakukan simpan/edit dalam 60 detik terakhir,
+            // HENTIKAN auto-sync latar belakang agar data lama dari server tidak menimpa data baru di layar!
+            const nowMs = Date.now();
+            if (window.isSavingToCloud) {
+                return false;
+            }
+            if (silent && (nowMs < (window.cloudSyncPausedUntil || 0) || (nowMs - (window.lastLocalWriteTimestamp || 0) < 60000))) {
+                return false;
+            }
+            const writeStampBeforeFetch = window.lastLocalWriteTimestamp || 0;
+
             try {
                 let statePayload = null;
                 let cloudDbPayload = null;
@@ -4441,6 +4388,13 @@
                         cloudPayload.bannerSliderImages = bannerMasterPayload.bannerSliderImages;
                         cloudPayload.customBannerUpdatedAt = masterBanTs;
                     }
+                }
+
+                // CEK ULANG SETELAH FETCH SELESAI:
+                // Jika selama proses fetch berjalan pengguna baru saja menekan tombol Simpan/Edit/Hapus,
+                // BATALKAN penerapan hasil fetch ini agar tidak menimpa editan baru pengguna!
+                if (window.isSavingToCloud || (window.lastLocalWriteTimestamp || 0) !== writeStampBeforeFetch || (silent && Date.now() < (window.cloudSyncPausedUntil || 0))) {
+                    return false;
                 }
 
                 if (cloudPayload && Object.keys(cloudPayload).length > 0) {
@@ -4740,20 +4694,18 @@
             const isAdminOrPanitia = (activeRole === 'admin' || activeRole === 'panitia');
             const localMasterTs = Number(window.cloudState.masterDataUpdatedAt || window.cloudState.placementUpdatedAt || 0);
             const cloudMasterTs = Number(cloudData.masterDataUpdatedAt || cloudData.placementUpdatedAt || cloudData.lastUpdated || 0);
-            const localRev = Number(window.cloudState.masterRevision || 0);
+            const localRev = Number(window.cloudState.masterRevision || localStorage.getItem("SIP_PKL_LOCAL_MASTER_REV") || 0);
             const cloudRev = Number(cloudData.masterRevision || 0);
-            const isRecentlyEditedLocally = (Date.now() - (window.lastLocalWriteTimestamp || 0) < 45000);
+            const lastMutTs = Number(window.lastLocalWriteTimestamp || localStorage.getItem("SIP_PKL_LAST_LOCAL_MUTATION_TS") || 0);
+            const isRecentlyEditedLocally = (Date.now() - lastMutTs < 90000) || window.isSavingToCloud;
 
-            // ATURAN SINKRONISASI MASTER DATA & ALOKASI PENEMPATAN:
-            // 1. Jika yang sedang aktif adalah Siswa, Guru Pembimbing, Industri, Kepsek, atau Orang Tua:
-            //    SELALU adopsi 100% Master Siswa, Guru, Industri, dan Alokasi Penempatan dari Cloud (hasil editan Admin/Panitia)!
-            // 2. Jika yang sedang aktif adalah Admin / Panitia:
-            //    Hanya adopsi dari Cloud apabila Cloud memiliki masterRevision yang lebih tinggi DAN Admin tidak sedang mengedit secara lokal.
-            const shouldUseCloudAsMasterAuthority = !isAdminOrPanitia || (!isRecentlyEditedLocally && (cloudRev > localRev || (cloudRev === localRev && cloudMasterTs > localMasterTs)));
+            // ATURAN SINKRONISASI MASTER DATA & ALOKASI PENEMPATAN (ANTI-TIMPA DATA BARU):
+            // 1. Jika baru saja ada aksi Simpan/Edit di perangkat ini (< 90 detik), JANGAN PERNAH menimpa Master Siswa, Guru, Industri, Akun, atau Alokasi dengan data dari server!
+            // 2. Jika perangkat sedang menjadi Admin/Panitia, hanya terima data Master dari Cloud apabila revisi Cloud lebih tinggi DAN perangkat ini tidak baru saja melakukan perubahan.
+            const shouldUseCloudAsMasterAuthority = !isRecentlyEditedLocally && (!isAdminOrPanitia || (cloudRev > localRev));
 
             if (shouldUseCloudAsMasterAuthority) {
                 if (Array.isArray(cloudData.siswa) && cloudData.siswa.length > 0) {
-                    // Pertahankan status gpsLocked lokal siswa jika sudah terkunci
                     cloudData.siswa.forEach(cSiswa => {
                         const lSiswa = (window.cloudState.siswa || []).find(l => l && window.isStudentNameEqual(l.nama, cSiswa.nama));
                         if (lSiswa && lSiswa.gpsLocked && !cSiswa.gpsLocked) {
@@ -4777,9 +4729,10 @@
                     window.cloudState.penugasanMonitoring = JSON.parse(JSON.stringify(cloudData.penugasanMonitoring));
                 }
                 if (Array.isArray(cloudData.registeredUsers) && cloudData.registeredUsers.length > 0) {
+                    // PERBAIKAN ARGUMEN: Argumen ke-1 adalah localArr (menang), argumen ke-2 adalah cloudArr
                     window.cloudState.registeredUsers = window.mergeUniqueArrayById(
-                        cloudData.registeredUsers,
                         window.cloudState.registeredUsers || [],
+                        cloudData.registeredUsers,
                         (u) => `${u.role}_${window.normalizeTextCompact(u.username || u.nama)}`
                     );
                 }
@@ -4869,7 +4822,7 @@
             const cloudTs = Number(cloudData.lastUpdated || 0);
             const isLocalEmpty = (window.cloudState.siswa || []).length === 0 && (window.cloudState.guru || []).length === 0;
 
-            if (!forceApply && !isLocalEmpty && (Date.now() - (window.lastLocalWriteTimestamp || 0) < 12000)) {
+            if (!forceApply && !isLocalEmpty && (window.isSavingToCloud || Date.now() < (window.cloudSyncPausedUntil || 0) || (Date.now() - (window.lastLocalWriteTimestamp || 0) < 60000))) {
                 return;
             }
 
@@ -15956,14 +15909,15 @@
                     if (typeof window.perbaruiDomBannerCarouselLangsung === 'function') {
                         window.perbaruiDomBannerCarouselLangsung();
                     }
-                });
+                }).catch(() => {});
 
-                // Sinkronisasi Realtime Halus di Belakang Layar (Setiap 35 Detik & Hanya 1 Panggilan Ringan Tanpa Mengunduh Gambar)
+                // Sinkronisasi Realtime Halus di Belakang Layar (Setiap 60 Detik & Dijeda Penuh Saat Ada Aksi Simpan/Edit)
                 setInterval(async () => {
                     const now = Date.now();
-                    const isRecentlyTypingOrTouching = (now - (window.lastUserActivityAt || 0) < 12000);
-                    const isRecentlyScrolling = (now - (window.lastUserScrollAt || 0) < 8000);
-                    const isRecentlyWriting = (now - (window.lastLocalWriteTimestamp || 0) < 15000);
+                    if (window.isSavingToCloud || now < (window.cloudSyncPausedUntil || 0)) return;
+                    const isRecentlyTypingOrTouching = (now - (window.lastUserActivityAt || 0) < 15000);
+                    const isRecentlyScrolling = (now - (window.lastUserScrollAt || 0) < 10000);
+                    const isRecentlyWriting = (now - (window.lastLocalWriteTimestamp || 0) < 60000);
 
                     const activeEl = document.activeElement;
                     const isInteracting = activeEl && (
@@ -15981,13 +15935,14 @@
                     if (!isInteracting && !isRecentlyTypingOrTouching && !isRecentlyScrolling && !isRecentlyWriting && !isModalOpen && !isDrawerOpen && !document.hidden) {
                         await window.tarikDataDariCloud(true);
                     }
-                }, 35000);
+                }, 60000);
                 let lastFocusSync = 0;
                 const triggerGentleSync = () => {
                     const now = Date.now();
-                    if (now - lastFocusSync < 35000) return;
-                    if (now - (window.lastUserActivityAt || 0) < 10000) return;
-                    if (now - (window.lastLocalWriteTimestamp || 0) < 15000) return;
+                    if (window.isSavingToCloud || now < (window.cloudSyncPausedUntil || 0)) return;
+                    if (now - lastFocusSync < 60000) return;
+                    if (now - (window.lastUserActivityAt || 0) < 15000) return;
+                    if (now - (window.lastLocalWriteTimestamp || 0) < 60000) return;
                     const isModalOpen = (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex');
                     if (!isModalOpen && !document.hidden) {
                         lastFocusSync = now;
