@@ -16181,6 +16181,295 @@
                 });
             }
         });
+
+        // =========================================================================
+        // MODUL ADITIF: OTORISASI AKTIFKAN PRESENSI PULANG LEBIH AWAL OLEH GURU PEMBIMBING
+        // =========================================================================
+        (function() {
+            window.cloudState = window.cloudState || {};
+            window.cloudState.izinPulangAwal = window.cloudState.izinPulangAwal || {};
+
+            try {
+                const rawIzin = localStorage.getItem("SIP_PKL_IZIN_PULANG_AWAL_MAP");
+                if (rawIzin) {
+                    window.cloudState.izinPulangAwal = Object.assign({}, JSON.parse(rawIzin), window.cloudState.izinPulangAwal || {});
+                }
+            } catch (e) {}
+
+            // Helper untuk mengecek apakah seorang siswa sudah diaktifkan Presensi Pulang oleh Guru Pembimbingnya hari ini
+            window.cekApakahSiswaDiizinkanPulangAwal = function(namaAtauIdentitas, nisOpsional = "") {
+                if (!namaAtauIdentitas) return false;
+                const tgl = typeof window.getTodayLocalWitaStr === 'function' ? window.getTodayLocalWitaStr() : new Date().toISOString().split('T')[0];
+                const mapIzin = (window.cloudState && window.cloudState.izinPulangAwal) || {};
+
+                let canonicalNama = String(namaAtauIdentitas).trim();
+                if (typeof window.getStudentPlacementInfo === 'function') {
+                    const pInfo = window.getStudentPlacementInfo(namaAtauIdentitas, nisOpsional);
+                    if (pInfo && pInfo.namaSiswa) canonicalNama = pInfo.namaSiswa;
+                }
+
+                const keyCanonical = window.normalizeTextCompact(canonicalNama);
+                const keyRaw = window.normalizeTextCompact(namaAtauIdentitas);
+
+                const rec1 = mapIzin[`${tgl}_${keyCanonical}`];
+                if (rec1 && rec1.aktif === true && rec1.tanggal === tgl) return true;
+
+                const rec2 = mapIzin[`${tgl}_${keyRaw}`];
+                if (rec2 && rec2.aktif === true && rec2.tanggal === tgl) return true;
+
+                for (const k in mapIzin) {
+                    const item = mapIzin[k];
+                    if (item && item.aktif === true && item.tanggal === tgl && item.namaSiswa) {
+                        if ((typeof window.isStudentNameEqual === 'function' && window.isStudentNameEqual(item.namaSiswa, canonicalNama)) ||
+                            (typeof window.isNameMatch === 'function' && window.isNameMatch(item.namaSiswa, canonicalNama))) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+
+            // Simpan & sinkronkan daftar izin pulang awal ke localStorage & Cloud Supabase (tabel app_cloud_db baris 'izin_pulang_awal_harian')
+            window.simpanIzinPulangAwalKeCloud = async function() {
+                try {
+                    localStorage.setItem("SIP_PKL_IZIN_PULANG_AWAL_MAP", JSON.stringify(window.cloudState.izinPulangAwal || {}));
+                } catch (e) {}
+                if (typeof window.simpanDatabasePersisten === 'function') {
+                    window.simpanDatabasePersisten(true);
+                }
+                if (typeof window.directRestUpsertRow === 'function') {
+                    await window.directRestUpsertRow('app_cloud_db', {
+                        id: 'izin_pulang_awal_harian',
+                        payload: {
+                            updatedAt: Date.now(),
+                            izinPulangAwal: window.cloudState.izinPulangAwal || {}
+                        }
+                    }, 'id').catch(() => {});
+                }
+            };
+
+            // Tarik status izin pulang awal dari Supabase agar langsung terbaca di HP Siswa
+            window.tarikIzinPulangAwalDariCloud = async function() {
+                if (typeof window.directRestFetchRow !== 'function') return;
+                try {
+                    const row = await window.directRestFetchRow('app_cloud_db', 'id', 'izin_pulang_awal_harian');
+                    if (row && row.payload && row.payload.izinPulangAwal && typeof row.payload.izinPulangAwal === 'object') {
+                        const prevCount = Object.keys(window.cloudState.izinPulangAwal || {}).length;
+                        window.cloudState.izinPulangAwal = row.payload.izinPulangAwal;
+                        try {
+                            localStorage.setItem("SIP_PKL_IZIN_PULANG_AWAL_MAP", JSON.stringify(window.cloudState.izinPulangAwal));
+                        } catch (e) {}
+                        const newCount = Object.keys(window.cloudState.izinPulangAwal || {}).length;
+                        if (prevCount !== newCount && window.cloudState.userProfile && window.cloudState.currentFeature === 'dashboard') {
+                            window.openFeature('dashboard', 'Beranda', true);
+                        }
+                    }
+                } catch (e) {}
+            };
+
+            // Fungsi Guru Pembimbing mengaktifkan atau mengunci kembali Presensi Pulang siswa bimbingannya
+            window.toggleIzinPulangAwalSiswa = async function(namaSiswa, statusAktif = true) {
+                if (!namaSiswa) return;
+                const tgl = typeof window.getTodayLocalWitaStr === 'function' ? window.getTodayLocalWitaStr() : new Date().toISOString().split('T')[0];
+                const keySiswa = window.normalizeTextCompact(namaSiswa);
+                const profile = window.cloudState.userProfile || { nama: "Guru Pembimbing" };
+
+                window.cloudState.izinPulangAwal = window.cloudState.izinPulangAwal || {};
+                const recordKey = `${tgl}_${keySiswa}`;
+
+                if (statusAktif) {
+                    window.cloudState.izinPulangAwal[recordKey] = {
+                        namaSiswa: namaSiswa,
+                        keySiswa: keySiswa,
+                        tanggal: tgl,
+                        aktif: true,
+                        approvedBy: profile.nama || "Guru Pembimbing",
+                        approvedAt: Date.now()
+                    };
+                } else {
+                    delete window.cloudState.izinPulangAwal[recordKey];
+                }
+
+                await window.simpanIzinPulangAwalKeCloud();
+
+                if (typeof window.showModalInfo === 'function') {
+                    window.showModalInfo(
+                        statusAktif ? "🔓 Presensi Pulang Diaktifkan!" : "🔒 Kembali ke Jadwal 16:00 WITA",
+                        statusAktif
+                            ? `Fitur <b>Presensi Pulang</b> untuk siswa bimbingan Anda <b>${namaSiswa}</b> telah berhasil diaktifkan hari ini (${tgl}).<br><br><span style="color:#15803d; font-weight:800;">✓ Siswa tersebut kini dapat langsung melakukan Presensi Pulang lebih awal dari jadwal pukul 16:00 WITA.</span>`
+                            : `Fitur <b>Presensi Pulang</b> untuk <b>${namaSiswa}</b> dikembalikan ke penguncian standar pukul <b>16:00 WITA</b>.`
+                    );
+                }
+
+                if (typeof window.openFeature === 'function' && window.cloudState.currentFeature) {
+                    window.openFeature(window.cloudState.currentFeature, undefined, true);
+                }
+            };
+
+            // Fungsi Guru Pembimbing mengaktifkan seluruh siswa bimbingannya sekaligus hari ini
+            window.aktifkanSemuaSiswaBimbinganPulangAwal = async function() {
+                const profile = window.cloudState.userProfile || { nama: "Guru Pembimbing" };
+                const myMap = typeof window.getMyGuruStudentsMap === 'function'
+                    ? window.getMyGuruStudentsMap(profile.nama, profile.identitas)
+                    : new Map();
+                const daftarSiswa = Array.from(myMap.values());
+                if (daftarSiswa.length === 0) {
+                    return window.showModalInfo("Belum Ada Siswa", "Belum ada siswa bimbingan yang terdaftar pada akun Anda.");
+                }
+
+                const tgl = typeof window.getTodayLocalWitaStr === 'function' ? window.getTodayLocalWitaStr() : new Date().toISOString().split('T')[0];
+                window.cloudState.izinPulangAwal = window.cloudState.izinPulangAwal || {};
+
+                daftarSiswa.forEach(s => {
+                    if (!s || !s.nama) return;
+                    const keySiswa = window.normalizeTextCompact(s.nama);
+                    window.cloudState.izinPulangAwal[`${tgl}_${keySiswa}`] = {
+                        namaSiswa: s.nama,
+                        keySiswa: keySiswa,
+                        tanggal: tgl,
+                        aktif: true,
+                        approvedBy: profile.nama || "Guru Pembimbing",
+                        approvedAt: Date.now()
+                    };
+                });
+
+                await window.simpanIzinPulangAwalKeCloud();
+
+                if (typeof window.showModalInfo === 'function') {
+                    window.showModalInfo(
+                        "🔓 Semua Siswa Bimbingan Diaktifkan!",
+                        `Fitur <b>Presensi Pulang</b> untuk seluruh <b>${daftarSiswa.length} siswa bimbingan Anda</b> berhasil dibuka hari ini (${tgl}). Siswa bimbingan guru lain tetap terkunci pada pukul 16:00 WITA.`
+                    );
+                }
+
+                if (typeof window.openFeature === 'function' && window.cloudState.currentFeature) {
+                    window.openFeature(window.cloudState.currentFeature, undefined, true);
+                }
+            };
+
+            // 1. Intercept cekStatusWaktuPresensiWita (Digunakan pada indikator kartu Beranda Siswa)
+            const origCekStatusWaktu = window.cekStatusWaktuPresensiWita;
+            if (typeof origCekStatusWaktu === 'function') {
+                window.cekStatusWaktuPresensiWita = function(tipeAbsen) {
+                    if (tipeAbsen === 'Pulang') {
+                        const prof = window.cloudState.userProfile || {};
+                        if (window.cekApakahSiswaDiizinkanPulangAwal(prof.nama, prof.identitas)) {
+                            const nowWita = typeof window.getCurrentWitaTimeObj === 'function' ? window.getCurrentWitaTimeObj() : { hmStr: "12:00" };
+                            return {
+                                allowed: true,
+                                earlyApprovedByGuru: true,
+                                nowStr: nowWita.hmStr
+                            };
+                        }
+                    }
+                    return origCekStatusWaktu.apply(this, arguments);
+                };
+            }
+
+            // 2. Intercept cekIzinWaktuPresensiWita (Digunakan saat membuka kamera & menyimpan Presensi Pulang)
+            const origCekIzinWaktu = window.cekIzinWaktuPresensiWita;
+            if (typeof origCekIzinWaktu === 'function') {
+                window.cekIzinWaktuPresensiWita = function(tipeAbsen) {
+                    if (tipeAbsen === 'Pulang') {
+                        const prof = window.cloudState.userProfile || {};
+                        if (window.cekApakahSiswaDiizinkanPulangAwal(prof.nama, prof.identitas)) {
+                            const wita = typeof window.getWaktuWitaSekarang === 'function' ? window.getWaktuWitaSekarang() : { jamStr: "12:00" };
+                            return {
+                                diizinkan: true,
+                                earlyApprovedByGuru: true,
+                                jamStr: wita.jamStr
+                            };
+                        }
+                    }
+                    return origCekIzinWaktu.apply(this, arguments);
+                };
+            }
+
+            // Helper Pembuat Kartu Kontrol "🔓 Aktifkan Presensi Pulang" untuk Guru Pembimbing
+            window.renderPanelKontrolPulangAwalGuru = function() {
+                if (window.cloudState.activeRole !== 'guru') return "";
+                const profile = window.cloudState.userProfile || { nama: "Guru Pembimbing" };
+                const myMap = typeof window.getMyGuruStudentsMap === 'function'
+                    ? window.getMyGuruStudentsMap(profile.nama, profile.identitas)
+                    : new Map();
+                const students = Array.from(myMap.values());
+                if (students.length === 0) return "";
+
+                const tgl = typeof window.getTodayLocalWitaStr === 'function' ? window.getTodayLocalWitaStr() : "";
+                const rowsHtml = students.map(s => {
+                    const isUnlocked = window.cekApakahSiswaDiizinkanPulangAwal(s.nama, s.nis);
+                    const safeName = String(s.nama || "").replace(/'/g, "\\'");
+                    return `
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:${isUnlocked ? '#ecfdf5' : '#f8fafc'}; border:1.5px solid ${isUnlocked ? '#6ee7b7' : '#cbd5e1'}; border-radius:12px; margin-bottom:8px; flex-wrap:wrap;">
+                        <div>
+                            <div style="font-size:12.5px; font-weight:900; color:#0f172a;">👨‍🎓 ${s.nama} <span style="font-size:10.5px; color:#0284c7;">(${s.kelas || '-'})</span></div>
+                            <div style="font-size:10.5px; color:#475569; margin-top:2px;">
+                                🏢 ${s.industri || '-'} &bull; Status:
+                                <b style="color:${isUnlocked ? '#059669' : '#b45309'};">
+                                    ${isUnlocked ? '🔓 Aktif (Dapat Presensi Pulang Sekarang)' : '🔒 Terkunci s/d 16:00 WITA'}
+                                </b>
+                            </div>
+                        </div>
+                        <div>
+                            ${isUnlocked
+                                ? `<button type="button" onclick="window.toggleIzinPulangAwalSiswa('${safeName}', false)" class="btn-action btn-red" style="padding:7px 12px; font-size:11px; font-weight:900;">🔒 Kunci Kembali (16:00)</button>`
+                                : `<button type="button" onclick="window.toggleIzinPulangAwalSiswa('${safeName}', true)" class="btn-action btn-emerald" style="padding:7px 12px; font-size:11px; font-weight:900; box-shadow:0 3px 10px rgba(16,185,129,0.25);">🔓 Aktifkan Presensi Pulang</button>`
+                            }
+                        </div>
+                    </div>`;
+                }).join("");
+
+                return `
+                <div class="card" style="border: 2px solid #10b981; background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%); margin-bottom: 14px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                        <div>
+                            <div style="font-size:10.5px; font-weight:900; color:#059669; letter-spacing:0.5px;">OTORISASI KEPULANGAN LEBIH AWAL (${tgl})</div>
+                            <h3 style="font-size:15px; font-weight:950; color:#0f172a; margin-top:2px;">🔓 Aktifkan Presensi Pulang Siswa Bimbingan</h3>
+                        </div>
+                        <button type="button" onclick="window.aktifkanSemuaSiswaBimbinganPulangAwal()" class="btn-action btn-blue" style="padding:7px 12px; font-size:11px; font-weight:900;">
+                            🔓 Aktifkan Semua Siswa Bimbingan Saya
+                        </button>
+                    </div>
+                    <p style="font-size:11px; color:#475569; margin-bottom:10px; line-height:1.45;">
+                        Jika industri memulangkan siswa lebih awal (sebelum pukul 16:00 WITA) dan siswa melapor kepada Anda melalui WhatsApp, tekan tombol <b>🔓 Aktifkan Presensi Pulang</b> di bawah agar fitur Presensi Pulang pada akun siswa tersebut langsung terbuka. Siswa lain yang bukan bimbingan Anda tetap terkunci pada pukul 16:00 WITA.
+                    </p>
+                    ${rowsHtml}
+                </div>`;
+            };
+
+            // 3. Tampilkan Kartu "🔓 Aktifkan Presensi Pulang" di Beranda Guru Pembimbing & Menu Siswa Bimbingan
+            const origRenderGuruDash = window.renderGuruOfficialDashboard;
+            if (typeof origRenderGuruDash === 'function') {
+                window.renderGuruOfficialDashboard = function() {
+                    const baseHtml = origRenderGuruDash.apply(this, arguments);
+                    const panelHtml = window.renderPanelKontrolPulangAwalGuru();
+                    const marker = '<!-- Ringkasan Bimbingan PKL -->';
+                    if (baseHtml && baseHtml.includes(marker)) {
+                        return baseHtml.replace(marker, panelHtml + '\n            ' + marker);
+                    }
+                    return panelHtml + baseHtml;
+                };
+            }
+
+            const origRenderSiswaBimbingan = window.renderSiswaBimbinganList;
+            if (typeof origRenderSiswaBimbingan === 'function') {
+                window.renderSiswaBimbinganList = function() {
+                    const baseHtml = origRenderSiswaBimbingan.apply(this, arguments);
+                    if (window.cloudState.activeRole === 'guru') {
+                        return window.renderPanelKontrolPulangAwalGuru() + baseHtml;
+                    }
+                    return baseHtml;
+                };
+            }
+
+            // Sinkronkan status izin pulang awal saat aplikasi dibuka & secara berkala di latar belakang
+            setTimeout(() => { window.tarikIzinPulangAwalDariCloud(); }, 1200);
+            setInterval(() => {
+                if (!document.hidden && !window.isSavingToCloud) {
+                    window.tarikIzinPulangAwalDariCloud();
+                }
+            }, 25000);
+        })();
         
     </script>
 </body>
