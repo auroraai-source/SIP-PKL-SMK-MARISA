@@ -452,6 +452,9 @@
             border-radius: 14px;
             border: 1.5px solid #e2e8f0;
             margin-top: 10px;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-x: contain;
+            touch-action: pan-x pan-y;
         }
         table {
             width: 100%;
@@ -1997,6 +2000,32 @@
         window._activeSavePromise = null;
         window._saveLocalStorageTimer = null;
 
+        // Penyimpanan localStorage Non-Blocking (Idle Callback) agar layar TIDAK PERNAH tersendat saat digeser
+        window.scheduleAsyncLocalSave = function(payloadData = null) {
+            if (window._saveLocalStorageTimer) {
+                clearTimeout(window._saveLocalStorageTimer);
+            }
+            window._saveLocalStorageTimer = setTimeout(() => {
+                const runSave = () => {
+                    try {
+                        const snap = payloadData || window.getSanitizedCloudPayload();
+                        localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(snap));
+                        if (Array.isArray(snap.penempatan)) {
+                            localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(snap.penempatan));
+                        }
+                        if (Array.isArray(snap.bannerSliderImages) && snap.bannerSliderImages.length > 0) {
+                            localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(snap.bannerSliderImages));
+                        }
+                    } catch (e) {}
+                };
+                if (typeof window.requestIdleCallback === 'function') {
+                    window.requestIdleCallback(runSave, { timeout: 2000 });
+                } else {
+                    setTimeout(runSave, 16);
+                }
+            }, 180);
+        };
+
         // Helper untuk menjeda semua auto-sync / polling latar belakang saat ada aksi INSERT / UPDATE / DELETE
         window.jedaSinkronisasiLatarBelakang = function(durasiMs = 60000) {
             const now = Date.now();
@@ -2015,8 +2044,6 @@
         };
 
         window.simpanDatabasePersisten = function(pushToCloud = true, isMasterOrAllocationEdit = false) {
-            const role = window.cloudState.activeRole || "siswa";
-            const isAdminOrPanitia = (role === 'admin' || role === 'panitia');
             const nextTs = window.getNextAuthoritativeTimestamp();
 
             // 1. Kunci & Jeda seluruh proses auto-fetch/polling latar belakang selama 60 detik
@@ -2035,23 +2062,13 @@
             window._studentPlacementCache = new Map();
             window._lastConsolidateHash = "";
 
-            // 2. Simpan ke localStorage SECARA LANGSUNG (Synchronous) agar tidak ada jeda yang mengembalikan data lama
-            let immediatePayload = null;
-            try {
-                immediatePayload = window.getSanitizedCloudPayload();
-                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(immediatePayload));
-                if (Array.isArray(immediatePayload.penempatan)) {
-                    localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(immediatePayload.penempatan));
-                }
-                if (Array.isArray(immediatePayload.bannerSliderImages) && immediatePayload.bannerSliderImages.length > 0) {
-                    localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(immediatePayload.bannerSliderImages));
-                }
-            } catch (eSync) {}
+            // 2. Simpan ke localStorage secara halus di waktu idle (non-blocking UI)
+            const cleanSnap = window.getSanitizedCloudPayload();
+            window.scheduleAsyncLocalSave(cleanSnap);
 
-            // 3. Langsung simpan secara konsisten ke tabel utama Supabase tanpa jeda debounce yang berisiko tertimpa polling
+            // 3. Langsung simpan secara konsisten ke tabel utama Supabase di latar belakang tanpa menahan sentuhan layar
             if (pushToCloud && typeof window.kirimSnapshotKeSupabase === 'function') {
-                const snapToPush = immediatePayload || window.getSanitizedCloudPayload();
-                window._activeSavePromise = window.kirimSnapshotKeSupabase(snapToPush, true);
+                window._activeSavePromise = window.kirimSnapshotKeSupabase(cleanSnap, true);
             }
         };
 
@@ -3550,6 +3567,7 @@
                         jam: convM ? convM.jam : (r.jam_masuk || "08:00"),
                         tipe_absen: "Masuk",
                         kategori_hadir: r.status_kehadiran || "Hadir di Lokasi Industri",
+                        alasan_presensi: r.alasan_presensi || "",
                         status: "Tepat Waktu",
                         latitude: r.lat_masuk || "",
                         longitude: r.lng_masuk || "",
@@ -3569,10 +3587,11 @@
                         kelas: kls,
                         industri: ind,
                         guru: guru,
-                        tanggal: tgl || (convP ? convP.tanggal : window.getTodayLocalWitaStr()),
+                        tanggal: tgl || (convP ? convM.tanggal : window.getTodayLocalWitaStr()),
                         jam: convP ? convP.jam : (r.jam_pulang || "16:00"),
                         tipe_absen: "Pulang",
                         kategori_hadir: r.status_kehadiran || "Hadir di Lokasi Industri",
+                        alasan_presensi: r.alasan_presensi || "",
                         status: "Tepat Waktu",
                         latitude: r.lat_pulang || "",
                         longitude: r.lng_pulang || "",
@@ -3626,6 +3645,7 @@
                     pembimbing_id: itemAbsen.guru || "-",
                     tanggal_siklus: tglNorm,
                     status_kehadiran: itemAbsen.kategori_hadir || "Hadir di Lokasi Industri",
+                    alasan_presensi: itemAbsen.alasan_presensi || "",
                     nama_lokasi_absen: itemAbsen.nama_lokasi_absen || itemAbsen.industri || "-",
                     status_validasi_lokasi: itemAbsen.status_validasi_lokasi || "Valid (Di Area Industri)",
                     updated_at: new Date().toISOString()
@@ -4476,14 +4496,17 @@
         window.lastUserActivityAt = 0;
         window.lastUserScrollAt = 0;
 
-        // Pantau aktivitas ketikan dan sentuhan/scroll pengguna agar sinkronisasi realtime tidak mengganggu
+        // Pantau aktivitas ketikan dan sentuhan/scroll pengguna agar sinkronisasi realtime tidak pernah mengganggu saat menggeser layar
         (function() {
             const markActivity = () => { window.lastUserActivityAt = Date.now(); };
             const markScroll = () => { window.lastUserScrollAt = Date.now(); };
             window.addEventListener('keydown', markActivity, { passive: true });
             window.addEventListener('input', markActivity, { passive: true });
             window.addEventListener('pointerdown', markActivity, { passive: true });
+            window.addEventListener('touchstart', markScroll, { passive: true });
             window.addEventListener('touchmove', markScroll, { passive: true });
+            window.addEventListener('touchend', markScroll, { passive: true });
+            window.addEventListener('wheel', markScroll, { passive: true });
             window.addEventListener('scroll', markScroll, { passive: true });
         })();
 
@@ -4884,13 +4907,7 @@
             const hasRealDataChange = (newSignature !== prevSignature) || forceApply;
             window.lastCloudDataSignature = newSignature;
 
-            try {
-                const cleanSnap = window.getSanitizedCloudPayload();
-                localStorage.setItem(STORAGE_KEY_DB, JSON.stringify(cleanSnap));
-                if (Array.isArray(cleanSnap.penempatan)) {
-                    localStorage.setItem(STORAGE_KEY_BACKUP_PEN, JSON.stringify(cleanSnap.penempatan));
-                }
-            } catch(e) {}
+            window.scheduleAsyncLocalSave();
 
             if (!hasRealDataChange) return;
 
@@ -4903,8 +4920,8 @@
             }
 
             const now = Date.now();
-            const isRecentlyTypingOrTouching = (now - (window.lastUserActivityAt || 0) < 12000);
-            const isRecentlyScrolling = (now - (window.lastUserScrollAt || 0) < 8000);
+            const isRecentlyTypingOrTouching = (now - (window.lastUserActivityAt || 0) < 25000);
+            const isRecentlyScrolling = (now - (window.lastUserScrollAt || 0) < 20000);
 
             const activeEl = document.activeElement;
             const isInteracting = activeEl && (
@@ -8060,59 +8077,117 @@
             const batasRadius = parseInt(radiusIzin, 10) || 100;
             const jarak = (typeof distanceMeter === 'number' && !isNaN(distanceMeter)) ? Math.round(distanceMeter) : 9999;
             const alamatTerdeteksi = await window.reverseGeocodeKoordinat(curLat, curLng);
+            const indObj = (window.cloudState.industri || []).find(i => i && window.isIndustriMatch(i.nama, namaInd));
+            const alamatInd = (indObj && indObj.alamat && indObj.alamat !== '-') ? indObj.alamat : alamatTerdeteksi;
 
-            if (jarak <= batasRadius) {
-                const indObj = (window.cloudState.industri || []).find(i => i && window.isIndustriMatch(i.nama, namaInd));
-                const alamatInd = (indObj && indObj.alamat && indObj.alamat !== '-') ? indObj.alamat : alamatTerdeteksi;
-                return {
-                    isValidArea: true,
-                    status_validasi_lokasi: "Valid (Di Area Industri)",
-                    nama_lokasi_absen: `${namaInd}${alamatInd ? ' — ' + alamatInd : ''} (${jarak}m)`
-                };
-            }
+            const isDalamRadius = (jarak <= batasRadius);
+            const lokasiFormatted = isDalamRadius
+                ? `${namaInd}${alamatInd ? ' — ' + alamatInd : ''} (${jarak}m)`
+                : `${alamatTerdeteksi} (Jarak ${jarak}m dari ${namaInd})`;
 
             if (kategoriHadir === 'tugas_luar') {
                 return {
-                    isValidArea: false,
-                    status_validasi_lokasi: "Peringatan: Di Luar Area Industri! (Dinas Luar)",
-                    nama_lokasi_absen: `${alamatTerdeteksi} (Jarak ${jarak}m dari ${namaInd})`
+                    isValidArea: isDalamRadius,
+                    opsi_label: "Dinas Luar / Tugas Lapangan",
+                    status_validasi_lokasi: isDalamRadius
+                        ? "Dinas Luar / Tugas Lapangan (Di Area Industri)"
+                        : "Dinas Luar / Tugas Lapangan (Di Luar Area Industri)",
+                    nama_lokasi_absen: lokasiFormatted
                 };
             }
 
             if (kategoriHadir === 'izin_sakit') {
                 return {
-                    isValidArea: false,
-                    status_validasi_lokasi: "Di Tempat Kos/Rumah (Izin/Sakit)",
-                    nama_lokasi_absen: `${alamatTerdeteksi} (Jarak ${jarak}m dari ${namaInd})`
+                    isValidArea: isDalamRadius,
+                    opsi_label: "Izin / Sakit Resmi",
+                    status_validasi_lokasi: isDalamRadius
+                        ? "Izin / Sakit Resmi (Di Area Industri)"
+                        : "Izin / Sakit Resmi (Di Luar Area Industri)",
+                    nama_lokasi_absen: lokasiFormatted
+                };
+            }
+
+            if (isDalamRadius) {
+                return {
+                    isValidArea: true,
+                    opsi_label: "Hadir di Lokasi Industri",
+                    status_validasi_lokasi: "Valid (Di Area Industri)",
+                    nama_lokasi_absen: lokasiFormatted
                 };
             }
 
             return {
                 isValidArea: false,
+                opsi_label: "Hadir di Lokasi Industri",
                 status_validasi_lokasi: "Peringatan: Di Luar Area Industri!",
-                nama_lokasi_absen: `${alamatTerdeteksi} (Jarak ${jarak}m dari ${namaInd})`
+                nama_lokasi_absen: lokasiFormatted
             };
         };
 
-        window.renderBadgeValidasiLokasiPresensi = function(statusValidasi, namaLokasi, jarakMeter) {
+        window.normalisasiLabelTigaOpsiPresensi = function(kategoriRaw, statusValidasiRaw = "") {
+            const gabungan = `${kategoriRaw || ""} ${statusValidasiRaw || ""}`.toLowerCase();
+            if (gabungan.includes("dinas luar") || gabungan.includes("tugas lapangan") || gabungan.includes("tugas_luar") || gabungan.includes("lapangan")) {
+                return {
+                    kode: "tugas_luar",
+                    label: "Dinas Luar / Tugas Lapangan",
+                    icon: "🚗",
+                    badgeClass: "badge-blue"
+                };
+            }
+            if (gabungan.includes("izin") || gabungan.includes("sakit") || gabungan.includes("izin_sakit")) {
+                return {
+                    kode: "izin_sakit",
+                    label: "Izin / Sakit Resmi",
+                    icon: "📋",
+                    badgeClass: "badge-amber"
+                };
+            }
+            return {
+                kode: "hadir_lokasi",
+                label: "Hadir di Lokasi Industri",
+                icon: "🏢",
+                badgeClass: "badge-green"
+            };
+        };
+
+        window.renderBadgeValidasiLokasiPresensi = function(statusValidasi, namaLokasi, jarakMeter, kategoriHadir = "", alasanPresensi = "") {
             const st = String(statusValidasi || "").trim();
             const loc = String(namaLokasi || "").trim();
-            const isOutside = st.toLowerCase().includes("luar area") || st.toLowerCase().includes("peringatan") || st.toLowerCase().includes("kos/rumah");
+            const alasan = String(alasanPresensi || "").trim();
+            const opsiInfo = window.normalisasiLabelTigaOpsiPresensi(kategoriHadir, st);
+            const isOutside = st.toLowerCase().includes("luar area") || st.toLowerCase().includes("peringatan") || st.toLowerCase().includes("kos/rumah") || (Number(jarakMeter) > 100);
+
+            const badgeOpsiHtml = `
+                <div style="margin-top:4px;">
+                    <span class="badge-status ${opsiInfo.badgeClass}" style="font-size:9.5px; padding:2px 7px; display:inline-block; font-weight:900;">
+                        ${opsiInfo.icon} Opsi: ${opsiInfo.label}
+                    </span>
+                </div>`;
+
+            const alasanHtml = (alasan && alasan !== '-')
+                ? `<div style="font-size:9.5px; color:#0f172a; background:#fffbeb; border:1px solid #fde68a; border-radius:6px; padding:3px 6px; margin-top:3px; white-space:normal; line-height:1.3;">
+                        📝 <b>Keterangan / Alasan:</b> ${alasan}
+                   </div>`
+                : '';
 
             if (!isOutside) {
                 return `
-                <div style="margin-top:4px;">
-                    <span class="badge-status badge-green" style="font-size:9.5px; padding:2px 7px; display:inline-block;">
+                ${badgeOpsiHtml}
+                ${alasanHtml}
+                <div style="margin-top:3px;">
+                    <span class="badge-status badge-green" style="font-size:9px; padding:1.5px 6px; display:inline-block;">
                         ✅ Di Area Industri
                     </span>
-                    ${loc && loc !== '-' ? `<div style="font-size:9.5px; color:#15803d; font-weight:750; margin-top:2px; white-space:normal; line-height:1.3;">📍 ${loc}</div>` : ''}
+                    ${loc && loc !== '-' ? `<div style="font-size:9.5px; color:#15803d; font-weight:750; margin-top:2px; white-space:normal; line-height:1.3;">📍 Lokasi: ${loc}</div>` : ''}
                 </div>`;
             }
 
             return `
-            <div style="margin-top:4px;">
-                <span class="badge-status badge-red" style="font-size:9.5px; padding:2px 7px; display:inline-block; white-space:normal; text-align:left; line-height:1.3;">
-                    ⚠️ Di Luar Area (Lokasi: ${loc || 'Alamat Tidak Dikenal'})
+            ${badgeOpsiHtml}
+            ${alasanHtml}
+            <div style="margin-top:3px;">
+                <span class="badge-status ${opsiInfo.kode === 'hadir_lokasi' ? 'badge-red' : 'badge-amber'}" style="font-size:9px; padding:2px 6px; display:inline-block; white-space:normal; text-align:left; line-height:1.3;">
+                    ${opsiInfo.kode === 'hadir_lokasi' ? '⚠️ Di Luar Area Industri' : '📍 Lokasi Presensi'}: ${loc || 'Alamat Tidak Dikenal'}
                 </span>
             </div>`;
         };
@@ -8351,12 +8426,23 @@
                 </div>
 
                 <div class="form-group" style="margin-bottom:10px;">
-                    <label class="form-label" style="font-weight:800; color:#0f172a;">Kategori Kehadiran:</label>
-                    <select id="presensiKategoriSelect" class="form-control" style="font-weight:750; color:#0284c7;" onchange="window.evaluasiLokasiDanKamera('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${dataInd.nama.replace(/'/g, "\\'")}')">
+                    <label class="form-label" style="font-weight:800; color:#0f172a;">Pilih Opsi Kategori Kehadiran (3 Opsi Resmi):</label>
+                    <select id="presensiKategoriSelect" class="form-control" style="font-weight:800; color:#0284c7;" onchange="window.evaluasiLokasiDanKamera('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${dataInd.nama.replace(/'/g, "\\'")}')">
                         <option value="hadir_lokasi">🏢 Hadir di Lokasi Industri (Radius ${indRadius}m)</option>
                         <option value="tugas_luar">🚗 Dinas Luar / Tugas Lapangan</option>
                         <option value="izin_sakit">📋 Izin / Sakit Resmi</option>
                     </select>
+                </div>
+
+                <!-- KOLOM WAJIB PENGISIAN KETERANGAN / ALASAN (Khusus Opsi Dinas Luar atau Izin / Sakit Resmi) -->
+                <div id="boxAlasanPresensiKhusus" style="display:none; background:#fffbeb; border:1.5px solid #f59e0b; border-radius:14px; padding:10px 12px; margin-bottom:10px;">
+                    <label id="labelAlasanPresensiKhusus" class="form-label" style="font-weight:900; color:#b45309; margin-bottom:4px;">
+                        📝 Keterangan / Alasan Menggunakan Opsi Ini (Wajib Diisi):
+                    </label>
+                    <textarea id="inputAlasanPresensiKhusus" class="form-control" style="height:64px; font-size:12px; background:#ffffff; border:1.5px solid #fcd34d;" placeholder="Tuliskan alasan lengkap mengapa Anda memilih Dinas Luar / Tugas Lapangan atau Izin / Sakit Resmi..."></textarea>
+                    <div style="font-size:10px; color:#92400e; margin-top:4px; font-weight:750;">
+                        * Keterangan alasan ini serta titik lokasi tempat Anda berdiri akan tercatat di Dashboard Guru Pembimbing, Mitra Industri, Orang Tua, Kepala Sekolah, dan Panitia PKL.
+                    </div>
                 </div>
 
                 <!-- Indikator Status Geofence GPS -->
@@ -8443,6 +8529,23 @@
             const selectEl = document.getElementById("presensiKategoriSelect");
             const kat = selectEl ? selectEl.value : "hadir_lokasi";
             window.selectedKategoriKehadiran = kat;
+
+            const boxAlasan = document.getElementById("boxAlasanPresensiKhusus");
+            const labelAlasan = document.getElementById("labelAlasanPresensiKhusus");
+            const inputAlasan = document.getElementById("inputAlasanPresensiKhusus");
+            if (boxAlasan) {
+                if (kat === 'tugas_luar') {
+                    boxAlasan.style.display = 'block';
+                    if (labelAlasan) labelAlasan.innerHTML = '🚗 Keterangan / Alasan Dinas Luar atau Tugas Lapangan (Wajib Diisi):';
+                    if (inputAlasan) inputAlasan.placeholder = 'Contoh: Mengikuti teknisi memperbaiki jaringan di kantor cabang / instalasi lapangan...';
+                } else if (kat === 'izin_sakit') {
+                    boxAlasan.style.display = 'block';
+                    if (labelAlasan) labelAlasan.innerHTML = '📋 Keterangan / Alasan Izin atau Sakit Resmi (Wajib Diisi):';
+                    if (inputAlasan) inputAlasan.placeholder = 'Contoh: Izin sakit demam (istirahat di rumah/kos) atau izin urusan keluarga mendesak...';
+                } else {
+                    boxAlasan.style.display = 'none';
+                }
+            }
 
             const badgeStatus = document.getElementById("badgeGpsPresensiStatus");
             const badgeLock = document.getElementById("badgeGpsLockState");
@@ -8731,6 +8834,7 @@
 
         window.simpanPresensiSelfieFinal = async function(tipeAbsen, industriNama, indLat, indLng, indRadius) {
             const kat = document.getElementById("presensiKategoriSelect")?.value || "hadir_lokasi";
+            const alasanInput = (document.getElementById("inputAlasanPresensiKhusus")?.value || "").trim();
 
             // Validasi Jam WITA sekali lagi saat menekan tombol Simpan
             if (window.cloudState.activeRole === 'siswa') {
@@ -8738,6 +8842,17 @@
                 if (!cekJam.diizinkan) {
                     return window.showModalInfo(cekJam.judul, cekJam.pesan);
                 }
+            }
+
+            // Validasi Wajib Isi Alasan jika memilih Dinas Luar / Tugas Lapangan atau Izin / Sakit Resmi
+            if ((kat === 'tugas_luar' || kat === 'izin_sakit') && !alasanInput) {
+                const namaOpsi = (kat === 'tugas_luar') ? 'Dinas Luar / Tugas Lapangan' : 'Izin / Sakit Resmi';
+                const elAlasan = document.getElementById("inputAlasanPresensiKhusus");
+                if (elAlasan) elAlasan.focus();
+                return window.showModalInfo(
+                    "Keterangan Alasan Wajib Diisi 📝",
+                    `Karena Anda memilih opsi <b>${namaOpsi}</b>, silakan tuliskan terlebih dahulu <b>keterangan / alasan</b> pada kolom yang tersedia sebelum menyimpan presensi.`
+                );
             }
 
             // Validasi keamanan: Jika Hadir di Lokasi, tolak penyimpanan jika di luar radius 100m
@@ -8772,8 +8887,8 @@
             const tglStr = window.getTodayLocalWitaStr();
 
             let katText = "Hadir di Lokasi Industri";
-            if (kat === 'tugas_luar') katText = "Dinas Luar / Lapangan";
-            else if (kat === 'izin_sakit') katText = "Izin / Sakit";
+            if (kat === 'tugas_luar') katText = "Dinas Luar / Tugas Lapangan";
+            else if (kat === 'izin_sakit') katText = "Izin / Sakit Resmi";
 
             const curLatVal = window.currentSelfieLocation ? window.currentSelfieLocation.lat : indLat;
             const curLngVal = window.currentSelfieLocation ? window.currentSelfieLocation.lng : indLng;
@@ -8806,6 +8921,7 @@
                 guru: placementInfo.guru || "-",
                 tipe_absen: tipeAbsen,
                 kategori_hadir: katText,
+                alasan_presensi: (kat === 'tugas_luar' || kat === 'izin_sakit') ? alasanInput : "",
                 industri: industriNama,
                 tanggal: tglStr,
                 jam: jamStr,
@@ -12590,12 +12706,14 @@
                         industri: indName,
                         masukJam: '-',
                         masukStatus: 'Belum Presensi Masuk',
+                        masukAlasan: '',
                         masukFoto: '',
                         masukLokasi: '-',
                         masukValidasi: '',
                         masukJarak: 0,
                         pulangJam: '-',
                         pulangStatus: 'Belum Presensi Pulang',
+                        pulangAlasan: '',
                         pulangFoto: '',
                         pulangLokasi: '-',
                         pulangValidasi: '',
@@ -12605,14 +12723,16 @@
                 const entry = pairMap.get(key);
                 if (ab.tipe_absen === 'Pulang') {
                     entry.pulangJam = ab.jam ? `${ab.jam} WITA` : '-';
-                    entry.pulangStatus = ab.kategori_hadir || ab.status || 'Sudah Presensi Pulang';
+                    entry.pulangStatus = ab.kategori_hadir || ab.status || 'Hadir di Lokasi Industri';
+                    entry.pulangAlasan = ab.alasan_presensi || '';
                     entry.pulangLokasi = ab.nama_lokasi_absen || indName || '-';
                     entry.pulangValidasi = ab.status_validasi_lokasi || ((ab.jarak_meter && ab.jarak_meter > 100) ? 'Peringatan: Di Luar Area Industri!' : 'Valid (Di Area Industri)');
                     entry.pulangJarak = ab.jarak_meter || 0;
                     if (ab.foto_url || ab.foto_selfie) entry.pulangFoto = ab.foto_url || ab.foto_selfie;
                 } else {
                     entry.masukJam = ab.jam ? `${ab.jam} WITA` : '-';
-                    entry.masukStatus = ab.kategori_hadir || ab.status || 'Sudah Presensi Masuk';
+                    entry.masukStatus = ab.kategori_hadir || ab.status || 'Hadir di Lokasi Industri';
+                    entry.masukAlasan = ab.alasan_presensi || '';
                     entry.masukLokasi = ab.nama_lokasi_absen || indName || '-';
                     entry.masukValidasi = ab.status_validasi_lokasi || ((ab.jarak_meter && ab.jarak_meter > 100) ? 'Peringatan: Di Luar Area Industri!' : 'Valid (Di Area Industri)');
                     entry.masukJarak = ab.jarak_meter || 0;
@@ -12668,19 +12788,19 @@
                     const safePulangFoto = (item.pulangFoto || '').replace(/'/g, "\\'");
                     const btnFotoMasuk = item.masukJam !== '-' ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${safeMasukFoto}', '${safeNama}', 'Masuk', '${item.tanggal}', '${item.masukJam}')" class="btn-action btn-blue" style="padding:2px 6px; font-size:9.5px; margin-left:4px;" title="Lihat Bukti Presensi Masuk">📷</button>` : '';
                     const btnFotoPulang = item.pulangJam !== '-' ? `<button type="button" onclick="window.bukaFotoBuktiPresensi('${safePulangFoto}', '${safeNama}', 'Pulang', '${item.tanggal}', '${item.pulangJam}')" class="btn-action btn-emerald" style="padding:2px 6px; font-size:9.5px; margin-left:4px;" title="Lihat Bukti Presensi Pulang">📷</button>` : '';
-                    const badgeValidasiMasuk = item.masukJam !== '-' ? window.renderBadgeValidasiLokasiPresensi(item.masukValidasi, item.masukLokasi, item.masukJarak) : '';
-                    const badgeValidasiPulang = item.pulangJam !== '-' ? window.renderBadgeValidasiLokasiPresensi(item.pulangValidasi, item.pulangLokasi, item.pulangJarak) : '';
+                    const badgeValidasiMasuk = item.masukJam !== '-' ? window.renderBadgeValidasiLokasiPresensi(item.masukValidasi, item.masukLokasi, item.masukJarak, item.masukStatus, item.masukAlasan) : '';
+                    const badgeValidasiPulang = item.pulangJam !== '-' ? window.renderBadgeValidasiLokasiPresensi(item.pulangValidasi, item.pulangLokasi, item.pulangJarak, item.pulangStatus, item.pulangAlasan) : '';
 
                     rows += `<tr>
                         <td>${counter++}</td>
                         <td><b>${item.nama}</b>${kelasBadge}</td>
                         <td>${item.industri}</td>
                         <td><b>${item.tanggal}</b></td>
-                        <td style="white-space:normal; min-width:190px;">
+                        <td style="white-space:normal; min-width:210px;">
                             <div><span class="badge-status ${item.masukJam !== '-' ? 'badge-green' : 'badge-amber'}">${item.masukJam !== '-' ? '✅ ' + item.masukJam : 'Belum Absen'}</span>${btnFotoMasuk}</div>
                             ${badgeValidasiMasuk}
                         </td>
-                        <td style="white-space:normal; min-width:190px;">
+                        <td style="white-space:normal; min-width:210px;">
                             <div><span class="badge-status ${item.pulangJam !== '-' ? 'badge-green' : 'badge-amber'}">${item.pulangJam !== '-' ? '✅ ' + item.pulangJam : 'Belum Absen'}</span>${btnFotoPulang}</div>
                             ${badgeValidasiPulang}
                         </td>
@@ -12895,6 +13015,7 @@
                     const kls = (ab.kelas && ab.kelas !== '-') ? ab.kelas : ((info && info.kelas && info.kelas !== '-') ? info.kelas : '-');
                     const indName = (ab.industri && ab.industri !== '-' && ab.industri !== 'Belum Ditentukan') ? ab.industri : (info.industri || '-');
                     const guruName = (ab.guru && ab.guru !== '-' && ab.guru !== 'Belum Ditentukan') ? ab.guru : (info.guru || '-');
+                    const opsiInfo = window.normalisasiLabelTigaOpsiPresensi(ab.kategori_hadir, ab.status_validasi_lokasi);
                     pairMap.set(key, {
                         tanggal: tglNorm,
                         nama: canonicalNama,
@@ -12904,7 +13025,8 @@
                         guru: guruName,
                         masukJam: '-',
                         pulangJam: '-',
-                        kategori: ab.kategori_hadir || ab.status || 'Hadir',
+                        kategori: opsiInfo.label,
+                        alasanPresensi: ab.alasan_presensi || '-',
                         statusValidasiLokasi: ab.status_validasi_lokasi || 'Valid (Di Area Industri)',
                         namaLokasiAbsen: ab.nama_lokasi_absen || indName,
                         fotoMasuk: '',
@@ -12912,13 +13034,18 @@
                     });
                 }
                 const entry = pairMap.get(key);
+                const opsiAb = window.normalisasiLabelTigaOpsiPresensi(ab.kategori_hadir, ab.status_validasi_lokasi);
                 if (ab.tipe_absen === 'Masuk') {
                     entry.masukJam = ab.jam ? `${ab.jam} WITA` : '-';
+                    entry.kategori = opsiAb.label;
+                    if (ab.alasan_presensi) entry.alasanPresensi = ab.alasan_presensi;
                     entry.fotoMasuk = ab.foto_url || ab.foto_selfie || '-';
                     if (ab.status_validasi_lokasi) entry.statusValidasiLokasi = ab.status_validasi_lokasi;
                     if (ab.nama_lokasi_absen) entry.namaLokasiAbsen = ab.nama_lokasi_absen;
                 } else if (ab.tipe_absen === 'Pulang') {
                     entry.pulangJam = ab.jam ? `${ab.jam} WITA` : '-';
+                    if (opsiAb.kode !== 'hadir_lokasi') entry.kategori = opsiAb.label;
+                    if (ab.alasan_presensi) entry.alasanPresensi = ab.alasan_presensi;
                     entry.fotoPulang = ab.foto_url || ab.foto_selfie || '-';
                     if (ab.status_validasi_lokasi && ab.status_validasi_lokasi.includes('Luar')) entry.statusValidasiLokasi = ab.status_validasi_lokasi;
                     if (ab.nama_lokasi_absen && (!entry.namaLokasiAbsen || entry.namaLokasiAbsen === '-')) entry.namaLokasiAbsen = ab.nama_lokasi_absen;
@@ -12926,7 +13053,7 @@
             });
 
             const data = [
-                ["No", "Tanggal", "Nama Siswa", "NIS", "Kelas / Jurusan", "Tempat PKL (Industri)", "Guru Pembimbing", "Jam Masuk", "Jam Pulang", "Status Validasi Radius", "Nama Lokasi / Alamat Terdeteksi (GPS)", "Keterangan", "Link Foto Masuk", "Link Foto Pulang"]
+                ["No", "Tanggal", "Nama Siswa", "NIS", "Kelas / Jurusan", "Tempat PKL (Industri)", "Guru Pembimbing", "Jam Masuk", "Jam Pulang", "Opsi Kategori Presensi (3 Opsi)", "Alasan / Keterangan (Dinas Luar / Izin)", "Status Validasi Radius", "Nama Lokasi / Alamat Terdeteksi (GPS)", "Link Foto Masuk", "Link Foto Pulang"]
             ];
 
             Array.from(pairMap.values()).sort((a, b) => (a.tanggal || '').localeCompare(b.tanggal || '') || (a.nama || '').localeCompare(b.nama || '')).forEach((item, idx) => {
@@ -12940,9 +13067,10 @@
                     item.guru,
                     item.masukJam,
                     item.pulangJam,
+                    item.kategori || 'Hadir di Lokasi Industri',
+                    item.alasanPresensi || '-',
                     item.statusValidasiLokasi || 'Valid (Di Area Industri)',
                     item.namaLokasiAbsen || item.industri || '-',
-                    item.kategori,
                     item.fotoMasuk,
                     item.fotoPulang
                 ]);
@@ -12982,14 +13110,32 @@
                 const sKey = window.normalizeTextCompact(canonicalNama);
                 const tglNorm = window.normalizeTanggalStr(ab.tanggal, ab.id) || targetDate;
                 const key = `${tglNorm}_${sKey}`;
+                const opsiInfo = window.normalisasiLabelTigaOpsiPresensi(ab.kategori_hadir, ab.status_validasi_lokasi);
                 if (!pairMap.has(key)) {
                     const kls = (ab.kelas && ab.kelas !== '-') ? ab.kelas : ((info && info.kelas && info.kelas !== '-') ? info.kelas : '-');
                     const indName = (ab.industri && ab.industri !== '-' && ab.industri !== 'Belum Ditentukan') ? ab.industri : (info.industri || '-');
-                    pairMap.set(key, { tanggal: tglNorm, nama: canonicalNama, kelas: kls, industri: indName, masukJam: '-', pulangJam: '-' });
+                    pairMap.set(key, {
+                        tanggal: tglNorm,
+                        nama: canonicalNama,
+                        kelas: kls,
+                        industri: indName,
+                        masukJam: '-',
+                        pulangJam: '-',
+                        opsiLabel: opsiInfo.label,
+                        alasan: ab.alasan_presensi || '-',
+                        lokasi: ab.nama_lokasi_absen || indName || '-'
+                    });
                 }
                 const entry = pairMap.get(key);
-                if (ab.tipe_absen === 'Pulang') entry.pulangJam = ab.jam ? `${ab.jam} WITA` : '-';
-                else entry.masukJam = ab.jam ? `${ab.jam} WITA` : '-';
+                if (ab.tipe_absen === 'Pulang') {
+                    entry.pulangJam = ab.jam ? `${ab.jam} WITA` : '-';
+                    if (opsiInfo.kode !== 'hadir_lokasi') entry.opsiLabel = opsiInfo.label;
+                    if (ab.alasan_presensi) entry.alasan = ab.alasan_presensi;
+                } else {
+                    entry.masukJam = ab.jam ? `${ab.jam} WITA` : '-';
+                    entry.opsiLabel = opsiInfo.label;
+                    if (ab.alasan_presensi) entry.alasan = ab.alasan_presensi;
+                }
             });
 
             const list = Array.from(pairMap.values()).sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || '') || (a.nama || '').localeCompare(b.nama || ''));
@@ -13000,6 +13146,7 @@
                 <td>${it.industri}</td>
                 <td style="text-align:center;">${it.masukJam}</td>
                 <td style="text-align:center;">${it.pulangJam}</td>
+                <td><b>${it.opsiLabel}</b>${it.alasan && it.alasan !== '-' ? `<br><i>Alasan: ${it.alasan}</i>` : ''}<br><span style="font-size:10px; color:#475569;">📍 ${it.lokasi}</span></td>
             </tr>`).join('');
 
             const w = window.open('', '_blank');
@@ -13015,96 +13162,11 @@
                 </style></head><body>
                 <h2>REKAPITULASI PRESENSI DIGITAL SISWA PKL ${mode === 'harian' ? `(${targetDate})` : '(SEMUA TANGGAL)'}</h2>
                 <p>SMK Negeri 1 Marisa &bull; Total Keseluruhan: <b>${list.length} Baris Kehadiran</b> &bull; Dicetak: ${todayStr}</p>
-                <table><thead><tr><th style="width:35px;">No</th><th style="width:85px;">Tanggal</th><th>Nama Siswa & Kelas</th><th>Tempat PKL (Industri)</th><th style="width:95px; text-align:center;">Jam Masuk</th><th style="width:95px; text-align:center;">Jam Pulang</th></tr></thead>
-                <tbody>${rowsHtml || '<tr><td colspan="6" style="text-align:center;">Belum ada data presensi</td></tr>'}</tbody></table>
+                <table><thead><tr><th style="width:30px;">No</th><th style="width:78px;">Tanggal</th><th>Nama Siswa & Kelas</th><th>Tempat PKL (Industri)</th><th style="width:80px; text-align:center;">Jam Masuk</th><th style="width:80px; text-align:center;">Jam Pulang</th><th>Opsi Presensi, Alasan & Lokasi GPS</th></tr></thead>
+                <tbody>${rowsHtml || '<tr><td colspan="7" style="text-align:center;">Belum ada data presensi</td></tr>'}</tbody></table>
                 <script>window.onload = function(){ window.print(); };<\/script>
             </body></html>`);
             w.document.close();
-        };
-
-        window.unduhExcelRekapMasukPulang = function(mode = 'bulanan') {
-            if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
-
-            const role = window.cloudState.activeRole || "panitia";
-            const profile = window.cloudState.userProfile || { nama: "" };
-            const todayStr = window.getTodayLocalWitaStr();
-            const targetDate = document.getElementById("filterTanggalPresensiHarian")?.value || window.selectedRekapPresensiDate || todayStr;
-            const targetMonth = document.getElementById("filterBulanExportPresensi")?.value || window.selectedRekapPresensiMonth || todayStr.substring(0, 7);
-
-            let filteredAbsensi = window.filterAbsensiByRoleAndProfile(window.cloudState.absensi || [], role, profile);
-
-            if (mode === 'harian') {
-                filteredAbsensi = filteredAbsensi.filter(ab => ab && ab.tanggal === targetDate);
-            } else {
-                filteredAbsensi = filteredAbsensi.filter(ab => ab && String(ab.tanggal || '').startsWith(targetMonth));
-            }
-
-            // Gabungkan berpasangan (Masuk & Pulang per Siswa per Tanggal) agar tabel Excel rapi & lengkap
-            const pairMap = new Map();
-            filteredAbsensi.forEach(ab => {
-                if (!ab || !ab.nama) return;
-                const info = window.getStudentPlacementInfo(ab.nama, ab.user_id || ab.nis);
-                const canonicalNama = (info && info.namaSiswa) ? info.namaSiswa : ab.nama;
-                const sKey = window.normalizeTextCompact(canonicalNama);
-                const key = `${ab.tanggal}_${sKey}`;
-
-                if (!pairMap.has(key)) {
-                    const kls = (ab.kelas && ab.kelas !== '-') ? ab.kelas : ((info && info.kelas && info.kelas !== '-') ? info.kelas : '-');
-                    const indName = (ab.industri && ab.industri !== '-' && ab.industri !== 'Belum Ditentukan') ? ab.industri : (info.industri || '-');
-                    const guruName = (ab.guru && ab.guru !== '-' && ab.guru !== 'Belum Ditentukan') ? ab.guru : (info.guru || '-');
-                    pairMap.set(key, {
-                        tanggal: ab.tanggal || '-',
-                        nama: canonicalNama,
-                        nis: info.nis || ab.nis || '-',
-                        kelas: kls,
-                        industri: indName,
-                        guru: guruName,
-                        masukJam: '-',
-                        pulangJam: '-',
-                        kategori: ab.kategori_hadir || ab.status || 'Hadir',
-                        fotoMasuk: '',
-                        fotoPulang: ''
-                    });
-                }
-                const entry = pairMap.get(key);
-                if (ab.tipe_absen === 'Masuk') {
-                    entry.masukJam = ab.jam ? `${ab.jam} WITA` : '-';
-                    entry.fotoMasuk = ab.foto_url || ab.foto_selfie || '-';
-                } else if (ab.tipe_absen === 'Pulang') {
-                    entry.pulangJam = ab.jam ? `${ab.jam} WITA` : '-';
-                    entry.fotoPulang = ab.foto_url || ab.foto_selfie || '-';
-                }
-            });
-
-            const data = [
-                ["No", "Tanggal", "Nama Siswa", "NIS", "Kelas / Jurusan", "Tempat PKL (Industri)", "Guru Pembimbing", "Jam Masuk", "Jam Pulang", "Keterangan", "Link Foto Masuk", "Link Foto Pulang"]
-            ];
-
-            Array.from(pairMap.values()).sort((a, b) => (a.tanggal || '').localeCompare(b.tanggal || '') || (a.nama || '').localeCompare(b.nama || '')).forEach((item, idx) => {
-                data.push([
-                    idx + 1,
-                    item.tanggal,
-                    item.nama,
-                    item.nis,
-                    item.kelas,
-                    item.industri,
-                    item.guru,
-                    item.masukJam,
-                    item.pulangJam,
-                    item.kategori,
-                    item.fotoMasuk,
-                    item.fotoPulang
-                ]);
-            });
-
-            const ws = XLSX.utils.aoa_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            const sheetTitle = mode === 'harian' ? `Presensi_${targetDate}` : `Rekap_Bulan_${targetMonth}`;
-            XLSX.utils.book_append_sheet(wb, ws, sheetTitle.substring(0, 31));
-            const fileName = mode === 'harian'
-                ? `Rekap_Presensi_Harian_${targetDate}.xlsx`
-                : `Rekap_Presensi_Bulanan_${targetMonth}_SMKN1_Marisa.xlsx`;
-            XLSX.writeFile(wb, fileName);
         };
 
         window.renderJamGeofenceGPS = function() {
@@ -13627,14 +13689,14 @@
                 const fotoSrc = (ab.foto_url || ab.foto_selfie || '').replace(/'/g, "\\'");
                 const safeNama = (namaResmi || '').replace(/'/g, "\\'");
                 const btnFoto = `<button type="button" onclick="window.bukaFotoBuktiPresensi('${fotoSrc}', '${safeNama}', '${ab.tipe_absen}', '${ab.tanggal}', '${ab.jam}')" class="btn-action btn-blue" style="padding:3px 8px; font-size:10px; margin-left:6px;">📷 Bukti</button>`;
-                const badgeLokasi = window.renderBadgeValidasiLokasiPresensi(ab.status_validasi_lokasi, ab.nama_lokasi_absen || ab.industri, ab.jarak_meter);
+                const badgeLokasi = window.renderBadgeValidasiLokasiPresensi(ab.status_validasi_lokasi, ab.nama_lokasi_absen || ab.industri, ab.jarak_meter, ab.kategori_hadir, ab.alasan_presensi);
                 rows += `<tr>
                     <td>${idx + 1}</td>
                     <td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td>
                     <td>${ab.tanggal}</td>
                     <td><b>${ab.jam} WITA</b></td>
-                    <td style="white-space:normal; min-width:190px;">
-                        <div><span class="badge-status badge-green">${ab.kategori_hadir || ab.status || 'Hadir'}</span>${btnFoto}</div>
+                    <td style="white-space:normal; min-width:210px;">
+                        <div><span class="badge-status badge-green">✓ Presensi Tercatat</span>${btnFoto}</div>
                         ${badgeLokasi}
                     </td>
                 </tr>`;
@@ -14040,14 +14102,14 @@
                 const fotoSrc = (ab.foto_url || ab.foto_selfie || '').replace(/'/g, "\\'");
                 const safeNama = (namaAnanda || '').replace(/'/g, "\\'");
                 const btnFoto = `<button type="button" onclick="window.bukaFotoBuktiPresensi('${fotoSrc}', '${safeNama}', '${ab.tipe_absen}', '${ab.tanggal}', '${ab.jam}')" class="btn-action btn-blue" style="padding:3px 8px; font-size:10px; margin-left:6px;">📷 Bukti</button>`;
-                const badgeLokasi = window.renderBadgeValidasiLokasiPresensi(ab.status_validasi_lokasi, ab.nama_lokasi_absen || ab.industri, ab.jarak_meter);
+                const badgeLokasi = window.renderBadgeValidasiLokasiPresensi(ab.status_validasi_lokasi, ab.nama_lokasi_absen || ab.industri, ab.jarak_meter, ab.kategori_hadir, ab.alasan_presensi);
                 rows += `<tr>
                     <td>${idx + 1}</td>
                     <td><span class="badge-status ${ab.tipe_absen === 'Masuk' ? 'badge-blue' : 'badge-green'}">${ab.tipe_absen}</span></td>
                     <td>${ab.tanggal}</td>
                     <td><b>${ab.jam} WITA</b></td>
-                    <td style="white-space:normal; min-width:190px;">
-                        <div><span class="badge-status badge-green">${ab.kategori_hadir || ab.status || 'Hadir'}</span>${btnFoto}</div>
+                    <td style="white-space:normal; min-width:210px;">
+                        <div><span class="badge-status badge-green">✓ Presensi Tercatat</span>${btnFoto}</div>
                         ${badgeLokasi}
                     </td>
                 </tr>`;
