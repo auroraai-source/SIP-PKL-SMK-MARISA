@@ -1411,6 +1411,119 @@
                     }
                 });
             }
+
+            // =====================================================================
+            // KOREKSI PERMANEN: PISAHKAN I NYOMAN MASTER, S.ST & NI NYOMAN SUMERTIANI, S.ST
+            // Hapus Fazrin Djafar (XII DPIB) & Rahmat Lahmudin (XII TKR) dari I Nyoman Master, S.ST
+            // dan kunci keduanya sebagai siswa bimbingan resmi Ni Nyoman Sumertiani, S.ST
+            // =====================================================================
+            const isTargetSiswaNiNyoman = (namaSiswaRaw) => {
+                const n = norm(namaSiswaRaw);
+                if (!n) return false;
+                return (
+                    (n.includes("fazrin") && (n.includes("djafar") || n.includes("jafar"))) ||
+                    (n.includes("fajrin") && (n.includes("djafar") || n.includes("jafar"))) ||
+                    (n.includes("rahmat") && n.includes("lahmudin")) ||
+                    (n.includes("rachmat") && n.includes("lahmudin"))
+                );
+            };
+            const isGuruINyomanMaster = (namaGuruRaw) => {
+                const g = norm(namaGuruRaw);
+                return g.includes("nyoman") && g.includes("master");
+            };
+            const isGuruNiNyomanSumertiani = (namaGuruRaw) => {
+                const g = norm(namaGuruRaw);
+                return g.includes("nyoman") && (g.includes("sumertiani") || g.includes("sumartiani"));
+            };
+
+            // Cari penulisan resmi nama guru Ni Nyoman Sumertiani, S.ST di Master Guru
+            let officialNiNyomanName = "Ni Nyoman Sumertiani, S.ST";
+            if (Array.isArray(target.guru)) {
+                const foundG = target.guru.find(g => g && isGuruNiNyomanSumertiani(g.nama));
+                if (foundG && foundG.nama) {
+                    officialNiNyomanName = foundG.nama.trim();
+                }
+            }
+
+            // 1. Perbaiki pada Data Master Siswa (target.siswa)
+            const targetStudentsFound = [];
+            if (Array.isArray(target.siswa)) {
+                target.siswa.forEach(s => {
+                    if (s && s.nama && isTargetSiswaNiNyoman(s.nama)) {
+                        s.guru = officialNiNyomanName;
+                        targetStudentsFound.push(s);
+                    }
+                });
+            }
+
+            // 2. Hapus Fazrin Djafar & Rahmat Lahmudin dari baris penempatan I Nyoman Master, S.ST
+            //    dan pastikan keduanya masuk ke baris penempatan Ni Nyoman Sumertiani, S.ST
+            if (Array.isArray(target.penempatan)) {
+                const savedIndMapForTarget = {};
+                target.penempatan.forEach(p => {
+                    if (!p || !p.guru) return;
+                    if (!isGuruNiNyomanSumertiani(p.guru)) {
+                        const sList = Array.isArray(p.siswa) ? p.siswa : (typeof p.siswa === 'string' ? p.siswa.split(',').map(x => x.trim()).filter(Boolean) : []);
+                        const sMap = (p.siswaIndustriMap && typeof p.siswaIndustriMap === 'object') ? p.siswaIndustriMap : {};
+                        sList.forEach(sn => {
+                            if (isTargetSiswaNiNyoman(sn)) {
+                                const k = norm(sn);
+                                if (sMap[k]) savedIndMapForTarget[k] = sMap[k];
+                                delete sMap[k];
+                            }
+                        });
+                        Object.keys(sMap).forEach(kMap => {
+                            if (isTargetSiswaNiNyoman(kMap)) {
+                                savedIndMapForTarget[kMap] = sMap[kMap];
+                                delete sMap[kMap];
+                            }
+                        });
+                        p.siswa = sList.filter(sn => !isTargetSiswaNiNyoman(sn));
+                    }
+                });
+
+                // Pastikan keduanya ada di baris Ni Nyoman Sumertiani, S.ST
+                const namesToAssign = targetStudentsFound.length > 0
+                    ? targetStudentsFound.map(s => s.nama.trim())
+                    : ["Fazrin Djafar", "Rahmat Lahmudin"];
+
+                let niNyomanPen = target.penempatan.find(p => p && isGuruNiNyomanSumertiani(p.guru));
+                if (!niNyomanPen) {
+                    niNyomanPen = {
+                        id: "pen_ninyoman_" + Date.now(),
+                        guru: officialNiNyomanName,
+                        industri: [],
+                        siswa: [],
+                        siswaIndustriMap: {}
+                    };
+                    target.penempatan.push(niNyomanPen);
+                } else {
+                    niNyomanPen.guru = officialNiNyomanName;
+                }
+
+                if (!Array.isArray(niNyomanPen.siswa)) {
+                    niNyomanPen.siswa = typeof niNyomanPen.siswa === 'string'
+                        ? niNyomanPen.siswa.split(',').map(x => x.trim()).filter(Boolean)
+                        : [];
+                }
+                if (!niNyomanPen.siswaIndustriMap || typeof niNyomanPen.siswaIndustriMap !== 'object') {
+                    niNyomanPen.siswaIndustriMap = {};
+                }
+
+                namesToAssign.forEach(sName => {
+                    const sKey = norm(sName);
+                    if (!niNyomanPen.siswa.some(ex => norm(ex) === sKey)) {
+                        niNyomanPen.siswa.push(sName);
+                    }
+                    const sMasterObj = (target.siswa || []).find(st => st && norm(st.nama) === sKey);
+                    const indSiswa = (sMasterObj && sMasterObj.industri && sMasterObj.industri !== '-')
+                        ? sMasterObj.industri
+                        : (savedIndMapForTarget[sKey] || "");
+                    if (indSiswa && indSiswa !== '-') {
+                        niNyomanPen.siswaIndustriMap[sKey] = indSiswa;
+                    }
+                });
+            }
         };
         window.bersihkanDataDummyLama(window.cloudState);
 
@@ -2375,6 +2488,8 @@
             }
 
             // Pencocokan berbasis kata (mengabaikan singkatan nama tengah, misal: "Rinto M. Hippi" vs "Rinto Hippi")
+            // PENTING: Jangan menyamakan dua orang berbeda yang hanya kebetulan sama kata sapaan/nama depan umumnya (seperti Nyoman, Wayan, Made, Ketut, Mohamad, Abdul, Siti, Nur)
+            const KATA_DEPAN_UMUM = new Set(["nyoman", "wayan", "made", "ketut", "putu", "gede", "kadek", "komang", "gusti", "dewa", "anak", "agung", "mohamad", "mohammad", "muhamad", "muhammad", "abdul", "siti", "nur", "sri", "andi"]);
             const getWords = (str) => {
                 return str.split(',')[0]
                     .replace(/\([^)]*\)/g, '')
@@ -2387,7 +2502,9 @@
             const wordsA = getWords(a);
             const wordsB = getWords(b);
             if (wordsA.length >= 2 && wordsB.length >= 2) {
-                if (wordsA[0] === wordsB[0] && wordsA[wordsA.length - 1] === wordsB[wordsB.length - 1]) {
+                const firstSame = (wordsA[0] === wordsB[0]);
+                const lastSame = (wordsA[wordsA.length - 1] === wordsB[wordsB.length - 1]);
+                if (firstSame && lastSame && wordsA[wordsA.length - 1] !== wordsA[0]) {
                     return true;
                 }
             }
@@ -2395,7 +2512,7 @@
             const compA = window.normalizeTextCompact(a);
             const compB = window.normalizeTextCompact(b);
             if (compA === compB) return true;
-            if (compA.length > 5 && compB.length > 5) {
+            if (compA.length > 7 && compB.length > 7) {
                 if (compA.startsWith(compB) || compB.startsWith(compA)) return true;
             }
 
@@ -2454,18 +2571,13 @@
                     });
                 } else {
                     const entry = guruMap.get(gKey);
-                    // Pilih penulisan nama guru yang lebih lengkap (misal yang bergelar S.Pd.)
-                    if (gRaw.length > entry.guru.length) {
-                        entry.guru = gRaw;
-                    }
                     sList.forEach(s => {
-                        const sClean = String(s || "").trim();
-                        if (sClean && !entry.siswa.some(ex => window.isStudentNameEqual(ex, sClean))) {
-                            entry.siswa.push(sClean);
+                        if (!entry.siswa.some(ex => window.isStudentNameEqual(ex, s))) {
+                            entry.siswa.push(s);
                         }
                     });
                     indArr.forEach(ind => {
-                        if (ind && ind !== '-' && !entry.industri.some(ex => window.isIndustriMatch(ex, ind))) {
+                        if (ind && ind !== '-' && !entry.industri.includes(ind)) {
                             entry.industri.push(ind);
                         }
                     });
@@ -2476,14 +2588,13 @@
             return Array.from(guruMap.values());
         };
 
-        // Pencocokan Khusus Nama Guru Pembimbing (Sangat Toleran terhadap Gelar, Singkatan Tengah & Variasi Ejaan)
+        // Pencocokan Khusus Nama Guru Pembimbing (Sangat Toleran terhadap Gelar, namun TIDAK menyamakan I Nyoman Master vs Ni Nyoman Sumertiani)
         window.isTeacherNameMatch = function(guruA, guruB) {
             if (!guruA || !guruB || guruA === '-' || guruB === '-') return false;
-            if (window.isNameMatch(guruA, guruB)) return true;
 
             const stripTitleAndClean = (raw) => {
                 let s = String(raw || "").toLowerCase();
-                // Hapus keterangan dalam kurung dan gelar sebelum/sesudah nama
+                // Hapus keterangan dalam kurung dan gelar akademik sebelum/sesudah nama
                 s = s.replace(/\([^)]*\)/g, ' ');
                 s = s.split(',')[0];
                 s = s.replace(/\b(drs|dra|ir|hj|h|prof|st|mt|gr|s\.?pd\.?i?|m\.?pd|s\.?st|s\.?kom|s\.?t|s\.?e|s\.?ag|s\.?sos|s\.?psi|m\.?kom|m\.?si|m\.?m)\b\.?/gi, ' ');
@@ -2496,24 +2607,53 @@
             if (!cleanA || !cleanB) return false;
             if (cleanA === cleanB) return true;
 
+            // Cek apakah ada perbedaan awalan gender Bali ("i " vs "ni ")
+            const rawLowerA = String(guruA).toLowerCase().trim();
+            const rawLowerB = String(guruB).toLowerCase().trim();
+            const isBaliMaleA = /^i\s+(nyoman|wayan|made|ketut|putu|gede|kadek|komang|gusti)\b/.test(rawLowerA);
+            const isBaliFemaleA = /^ni\s+(nyoman|wayan|made|ketut|putu|gede|kadek|komang|gusti|luh)\b/.test(rawLowerA);
+            const isBaliMaleB = /^i\s+(nyoman|wayan|made|ketut|putu|gede|kadek|komang|gusti)\b/.test(rawLowerB);
+            const isBaliFemaleB = /^ni\s+(nyoman|wayan|made|ketut|putu|gede|kadek|komang|gusti|luh)\b/.test(rawLowerB);
+            if ((isBaliMaleA && isBaliFemaleB) || (isBaliFemaleA && isBaliMaleB)) {
+                return false;
+            }
+
             const compactA = cleanA.replace(/\s+/g, '');
             const compactB = cleanB.replace(/\s+/g, '');
-            if (compactA.length >= 4 && compactB.length >= 4 && (compactA.includes(compactB) || compactB.includes(compactA))) {
-                return true;
-            }
+            if (compactA === compactB) return true;
+
+            // Daftar nama depan / marga / urutan kelahiran umum yang TIDAK BOLEH dijadikan penentu tunggal kecocokan nama guru
+            const COMMON_PREFIX_NAMES = new Set([
+                "nyoman", "wayan", "made", "ketut", "putu", "gede", "kadek", "komang", "gusti", "dewa", "luh",
+                "mohamad", "mohammad", "muhamad", "muhammad", "moh", "muh", "abdul", "abd", "siti", "nur", "sri", "andi"
+            ]);
 
             const tokensA = cleanA.split(' ').filter(w => w.length >= 3);
             const tokensB = cleanB.split(' ').filter(w => w.length >= 3);
-            if (tokensA.length >= 1 && tokensB.length >= 1) {
-                // Jika kata pertama sama dan panjang >= 4 huruf (misal: "ulco" pada "Ulco Masrun Arbie, S.Pd.")
-                if (tokensA[0] === tokensB[0] && (tokensA.length === 1 || tokensB.length === 1 || tokensA[0].length >= 4)) {
-                    return true;
+
+            if (tokensA.length >= 2 && tokensB.length >= 2) {
+                const lastA = tokensA[tokensA.length - 1];
+                const lastB = tokensB[tokensB.length - 1];
+                // Jika keduanya diawali nama sapaan umum yang sama (misal: "nyoman master" vs "nyoman sumertiani"),
+                // maka WAJIB nama belakangnya juga sama!
+                if (tokensA[0] === tokensB[0] && COMMON_PREFIX_NAMES.has(tokensA[0])) {
+                    return lastA === lastB;
                 }
-                if (tokensA.length >= 2 && tokensB.length >= 2 && tokensA[0] === tokensB[0] && tokensA[tokensA.length - 1] === tokensB[tokensB.length - 1]) {
+                if (tokensA[0] === tokensB[0] && lastA === lastB) {
                     return true;
                 }
             }
-            return false;
+
+            // Hanya izinkan pencocokan 1 kata apabila salah satu input memang cuma ditulis 1 kata panggilan unik (dan bukan nama umum seperti "nyoman")
+            if (tokensA.length === 1 || tokensB.length === 1) {
+                const singleToken = tokensA.length === 1 ? tokensA[0] : tokensB[0];
+                const otherTokens = tokensA.length === 1 ? tokensB : tokensA;
+                if (singleToken.length >= 5 && !COMMON_PREFIX_NAMES.has(singleToken) && otherTokens.includes(singleToken)) {
+                    return true;
+                }
+            }
+
+            return window.isNameMatch(guruA, guruB);
         };
 
         // Helper Terpadu Pengumpul Seluruh Siswa Bimbingan Milik Seorang Guru Pembimbing
