@@ -2226,42 +2226,42 @@
                 return `${yyyy}-${mm}-${dd}`;
             }
         };
+        // Helper Tanggal Lokal WITA (YYYY-MM-DD) yang Konsisten di Semua Fitur (DENGAN CACHE CEPAT ANTI-LAG)
+        window._cachedWitaTodayStr = "";
+        window._cachedWitaTodayAt = 0;
+
+        window.getTodayLocalWitaStr = function() {
+            const nowMs = Date.now();
+            if (window._cachedWitaTodayStr && (nowMs - window._cachedWitaTodayAt) < 30000) {
+                return window._cachedWitaTodayStr;
+            }
+            const utcMs = nowMs + (new Date().getTimezoneOffset() * 60000);
+            const witaDate = new Date(utcMs + (8 * 3600000));
+            const yyyy = witaDate.getUTCFullYear();
+            const mm = String(witaDate.getUTCMonth() + 1).padStart(2, '0');
+            const dd = String(witaDate.getUTCDate()).padStart(2, '0');
+            window._cachedWitaTodayStr = `${yyyy}-${mm}-${dd}`;
+            window._cachedWitaTodayAt = nowMs;
+            return window._cachedWitaTodayStr;
+        };
 
         window.getCurrentMonthLocalWitaStr = function() {
             return window.getTodayLocalWitaStr().substring(0, 7);
         };
 
-        // Helper Jam & Menit WITA Saat Ini (Asia/Makassar) untuk Penguncian Presensi Masuk & Pulang
+        // Helper Jam & Menit WITA Saat Ini (Asia/Makassar) - Tanpa Intl berat agar 0ms
         window.getCurrentWitaTimeObj = function() {
-            try {
-                const now = new Date();
-                const parts = new Intl.DateTimeFormat('en-GB', {
-                    timeZone: 'Asia/Makassar',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false
-                }).formatToParts(now);
-                const h = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
-                const m = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
-                return {
-                    hours: h,
-                    minutes: m,
-                    totalMinutes: (h * 60) + m,
-                    hmStr: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-                };
-            } catch (e) {
-                const now = new Date();
-                const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
-                const witaDate = new Date(utcMs + (8 * 3600000));
-                const h = witaDate.getUTCHours();
-                const m = witaDate.getUTCMinutes();
-                return {
-                    hours: h,
-                    minutes: m,
-                    totalMinutes: (h * 60) + m,
-                    hmStr: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-                };
-            }
+            const now = new Date();
+            const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const witaDate = new Date(utcMs + (8 * 3600000));
+            const h = witaDate.getUTCHours();
+            const m = witaDate.getUTCMinutes();
+            return {
+                hours: h,
+                minutes: m,
+                totalMinutes: (h * 60) + m,
+                hmStr: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+            };
         };
 
         window.parseTimeStrToMinutes = function(hmStr, fallbackMinutes) {
@@ -2325,8 +2325,8 @@
                     return {
                         allowed: false,
                         reason: "LEWAT_BATAS_PULANG",
-                        title: "Waktu Presensi Pulang Telah Berakhir 🔒",
-                        message: `Saat ini pukul <b>${nowWita.hmStr} WITA</b>.<br><br>Batas akhir <b>Presensi Pulang</b> hari ini telah ditutup pada pukul <b>${pulangBatasStr} WITA</b>.`,
+                        title: "Waktu Presensi Pulang Berakhir ⏰",
+                        message: `Saat ini sudah pukul <b>${nowWita.hmStr} WITA</b>.<br><br>Batas akhir <b>Presensi Pulang</b> pukul <b>${pulangBatasStr} WITA</b> telah berakhir.`,
                         nowStr: nowWita.hmStr
                     };
                 }
@@ -2336,27 +2336,48 @@
             return { allowed: true, nowStr: nowWita.hmStr };
         };
 
-        // Helper Konversi Timestamp/ISO ke Tanggal & Jam WITA (Asia/Makassar)
+        // Helper Konversi Timestamp/ISO ke Tanggal & Jam WITA (Asia/Makassar) - Kalkulasi Offset Langsung O(1) Tanpa Intl Berat
         window.timestampToWitaDateAndTime = function(rawTsOrIso) {
             if (!rawTsOrIso) return null;
             try {
                 const d = new Date(rawTsOrIso);
-                if (isNaN(d.getTime())) return null;
-                const ymd = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' });
-                const hm = d.toLocaleTimeString('it-IT', { timeZone: 'Asia/Makassar', hour: '2-digit', minute: '2-digit' });
-                return { tanggal: ymd, jam: hm };
+                const ms = d.getTime();
+                if (isNaN(ms)) return null;
+                const wita = new Date(ms + (8 * 3600000));
+                const yyyy = wita.getUTCFullYear();
+                const mm = String(wita.getUTCMonth() + 1).padStart(2, '0');
+                const dd = String(wita.getUTCDate()).padStart(2, '0');
+                const hh = String(wita.getUTCHours()).padStart(2, '0');
+                const mi = String(wita.getUTCMinutes()).padStart(2, '0');
+                return { tanggal: `${yyyy}-${mm}-${dd}`, jam: `${hh}:${mi}` };
             } catch (e) {
                 return null;
             }
         };
 
-        // Helper Normalisasi Tanggal ke YYYY-MM-DD (Mendukung ekstraksi akurat WITA dari ID abs_176... / jur_176..., ISO UTC, dan format Indo)
+        // Helper Normalisasi Tanggal ke YYYY-MM-DD (Fast-Path O(1) Anti-Freeze untuk Ribuan Data Presensi & Jurnal)
+        window._normTglCache = new Map();
         window.normalizeTanggalStr = function(rawTgl, recordId = "") {
-            const todayWita = window.getTodayLocalWitaStr();
-            const activeYear = todayWita.substring(0, 4); // Tahun operasional aktif (misal 2026)
+            if (!rawTgl && !recordId) return "";
+            const cacheKey = `${rawTgl || ''}|${recordId || ''}`;
+            const cached = window._normTglCache.get(cacheKey);
+            if (cached !== undefined) return cached;
 
-            // 1. Jika ada timestamp milidetik di ID (abs_176... / jur_176...), hitung tanggal WITA sebenarnya
-            // Ini memperbaiki bug di mana jam pagi WITA (06:00 - 07:59 WITA) sempat tercatat mundur 1 hari karena toISOString() UTC!
+            const todayWita = window.getTodayLocalWitaStr();
+            const activeYear = todayWita.substring(0, 4);
+            const s = String(rawTgl || "").trim();
+
+            // Fast-path: Jika sudah berformat YYYY-MM-DD dan tidak memiliki recordId timestamp yang mencurigakan
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s) && (!recordId || !String(recordId).includes('_1'))) {
+                let fastRes = s;
+                if (fastRes.substring(0, 4) !== activeYear && fastRes.substring(5, 7) === todayWita.substring(5, 7)) {
+                    fastRes = `${activeYear}-${fastRes.substring(5, 10)}`;
+                }
+                if (window._normTglCache.size > 6000) window._normTglCache.clear();
+                window._normTglCache.set(cacheKey, fastRes);
+                return fastRes;
+            }
+
             let idDerivedYmd = "";
             if (recordId && typeof recordId === 'string') {
                 const mTs = recordId.match(/(?:abs|jur|dokkeg|disp|rp)_(\d{12,14})/);
@@ -2364,18 +2385,12 @@
                     const ts = parseInt(mTs[1], 10);
                     if (!isNaN(ts) && ts > 1600000000000) {
                         const conv = window.timestampToWitaDateAndTime(ts);
-                        if (conv && conv.tanggal) {
-                            idDerivedYmd = conv.tanggal;
-                        }
+                        if (conv && conv.tanggal) idDerivedYmd = conv.tanggal;
                     }
                 }
             }
 
-            if (!rawTgl && !idDerivedYmd) return "";
-            const s = String(rawTgl || "").trim();
-
             let parsedYmd = "";
-            // Jika berupa timestamp ISO lengkap (contoh: 2026-11-13T23:30:00.000Z), konversi ke Asia/Makassar
             if (s.includes('T') && (s.endsWith('Z') || s.includes('+') || s.length > 16)) {
                 const conv = window.timestampToWitaDateAndTime(s);
                 if (conv && conv.tanggal) parsedYmd = conv.tanggal;
@@ -2399,18 +2414,14 @@
                 }
             }
 
-            // Jika tanggal dari ID berbeda <= 1 hari dengan rawTgl (akibat bug UTC pagi hari), utamakan tanggal WITA dari ID
             let finalYmd = parsedYmd || idDerivedYmd;
             if (idDerivedYmd && parsedYmd && idDerivedYmd !== parsedYmd) {
-                const diffDays = Math.abs((new Date(idDerivedYmd).getTime() - new Date(parsedYmd).getTime()) / 86400000);
+                const diffDays = Math.abs((Date.parse(idDerivedYmd) - Date.parse(parsedYmd)) / 86400000);
                 if (diffDays <= 1.5) {
                     finalYmd = idDerivedYmd;
                 }
             }
 
-            // Penyelarasan Tahun Kalender Perangkat Siswa (2024/2025 vs 2026 pada bulan November):
-            // Jika HP siswa tersetel di tahun 2025 namun bulan & tanggalnya adalah bulan berjalan (misal Nov 11, 12, 13, 14),
-            // selaraskan tahunnya ke tahun aktif agar muncul di filter tanggal 12-14 November!
             if (finalYmd && /^\d{4}-\d{2}-\d{2}$/.test(finalYmd)) {
                 const recYear = finalYmd.substring(0, 4);
                 const recMonth = finalYmd.substring(5, 7);
@@ -2420,6 +2431,8 @@
                 }
             }
 
+            if (window._normTglCache.size > 6000) window._normTglCache.clear();
+            window._normTglCache.set(cacheKey, finalYmd);
             return finalYmd;
         };
 
@@ -3248,10 +3261,15 @@
         };
 
         // Helper untuk mengunci permanen koordinat GPS Industri Utama atau Cabang Industri (Lokasi Kedua)
+        // Sekali siswa mengunci titik lokasi dengan Kode Akses, titik ini tersimpan permanen di perangkat & Cloud Supabase
         window.kunciKoordinatGpsIndustriPermanen = function(namaInd, latVal, lngVal, namaSiswaOpsional = "", isCabangBaru = false, namaCabang = "") {
             const fixedLat = parseFloat(latVal).toFixed(6).toString();
             const fixedLng = parseFloat(lngVal).toFixed(6).toString();
+            const nowTs = Date.now();
             if (!Array.isArray(window.cloudState.industri)) window.cloudState.industri = [];
+            if (!window.cloudState.gpsLockedMap || typeof window.cloudState.gpsLockedMap !== 'object') {
+                window.cloudState.gpsLockedMap = {};
+            }
 
             let foundInd = false;
             window.cloudState.industri.forEach(ind => {
@@ -3259,7 +3277,6 @@
                     foundInd = true;
                     ind.radius = (ind.radius && parseInt(ind.radius) >= 100) ? parseInt(ind.radius) : 100;
                     if (isCabangBaru) {
-                        // Simpan sebagai titik cabang tambahan agar titik industri utama siswa lain tidak terganggu
                         if (!Array.isArray(ind.cabangCoords)) ind.cabangCoords = [];
                         ind.cabangCoords.push({
                             namaCabang: namaCabang || `Cabang ${ind.nama}`,
@@ -3267,27 +3284,26 @@
                             lng: fixedLng,
                             radius: 100,
                             siswa: namaSiswaOpsional || "",
-                            lockedAt: Date.now()
+                            lockedAt: nowTs
                         });
-                        // Jika industri utama belum pernah dikunci sama sekali, isi juga titik utamanya
                         if (window.isDefaultUncalibratedCoords(ind.lat, ind.lng, ind)) {
                             ind.lat = fixedLat;
                             ind.lng = fixedLng;
                             ind.gpsLocked = true;
-                            ind.gpsLockedAt = Date.now();
+                            ind.gpsLockedAt = nowTs;
                         }
                     } else {
                         ind.lat = fixedLat;
                         ind.lng = fixedLng;
                         ind.gpsLocked = true;
-                        ind.gpsLockedAt = Date.now();
+                        ind.gpsLockedAt = nowTs;
                     }
                 }
             });
 
             if (!foundInd && namaInd && namaInd !== "Belum Ditentukan" && namaInd !== "-") {
                 window.cloudState.industri.push({
-                    id: "ind_" + Date.now(),
+                    id: "ind_" + nowTs,
                     nama: namaInd,
                     alamat: "-",
                     pimpinan: "-",
@@ -3298,19 +3314,19 @@
                     lat: fixedLat,
                     lng: fixedLng,
                     gpsLocked: true,
-                    gpsLockedAt: Date.now(),
+                    gpsLockedAt: nowTs,
                     cabangCoords: isCabangBaru ? [{
                         namaCabang: namaCabang || `Cabang ${namaInd}`,
                         lat: fixedLat,
                         lng: fixedLng,
                         radius: 100,
                         siswa: namaSiswaOpsional || "",
-                        lockedAt: Date.now()
+                        lockedAt: nowTs
                     }] : []
                 });
             }
 
-            // Simpan titik terkunci spesifik pada profil siswa agar saat Presensi Pulang & hari berikutnya langsung terkunci
+            // Simpan titik terkunci spesifik pada profil siswa agar Presensi Pulang & hari-hari berikutnya langsung terbuka otomatis
             if (Array.isArray(window.cloudState.siswa)) {
                 window.cloudState.siswa.forEach(s => {
                     if (!s) return;
@@ -3318,6 +3334,7 @@
                         s.lockedLat = fixedLat;
                         s.lockedLng = fixedLng;
                         s.gpsLocked = true;
+                        s.gpsLockedAt = nowTs;
                         if (isCabangBaru && namaCabang) {
                             s.cabangIndustri = namaCabang;
                         }
@@ -3325,36 +3342,94 @@
                         s.lockedLat = fixedLat;
                         s.lockedLng = fixedLng;
                         s.gpsLocked = true;
+                        s.gpsLockedAt = nowTs;
                     }
                 });
+            }
+
+            const indKey = window.normalizeTextCompact(namaInd);
+            const studentKey = namaSiswaOpsional ? `${indKey}__${window.normalizeTextCompact(namaSiswaOpsional)}` : "";
+            const pureStudentKey = namaSiswaOpsional ? `siswa__${window.normalizeTextCompact(namaSiswaOpsional)}` : "";
+            const lockRecord = {
+                lat: fixedLat,
+                lng: fixedLng,
+                radius: 100,
+                namaInd: namaInd || "",
+                namaSiswa: namaSiswaOpsional || "",
+                namaCabang: namaCabang || "",
+                lockedAt: nowTs
+            };
+
+            if (studentKey) window.cloudState.gpsLockedMap[studentKey] = lockRecord;
+            if (pureStudentKey) window.cloudState.gpsLockedMap[pureStudentKey] = lockRecord;
+            if (indKey && (!isCabangBaru || !window.cloudState.gpsLockedMap[indKey])) {
+                window.cloudState.gpsLockedMap[indKey] = lockRecord;
             }
 
             try {
                 const mapStr = localStorage.getItem("SIP_PKL_LOCKED_GPS_MAP") || "{}";
                 const mapObj = JSON.parse(mapStr);
-                const indKey = window.normalizeTextCompact(namaInd);
-                const studentKey = namaSiswaOpsional ? `${indKey}__${window.normalizeTextCompact(namaSiswaOpsional)}` : "";
-                if (studentKey) {
-                    mapObj[studentKey] = {
-                        lat: fixedLat,
-                        lng: fixedLng,
-                        radius: 100,
-                        namaCabang: namaCabang || "",
-                        lockedAt: Date.now()
-                    };
-                }
-                if (indKey && (!isCabangBaru || !mapObj[indKey])) {
-                    mapObj[indKey] = { lat: fixedLat, lng: fixedLng, radius: 100, lockedAt: Date.now() };
-                }
+                if (studentKey) mapObj[studentKey] = lockRecord;
+                if (pureStudentKey) mapObj[pureStudentKey] = lockRecord;
+                if (indKey && (!isCabangBaru || !mapObj[indKey])) mapObj[indKey] = lockRecord;
                 localStorage.setItem("SIP_PKL_LOCKED_GPS_MAP", JSON.stringify(mapObj));
             } catch (e) {}
+
+            // Unggah permanen ke tabel khusus Cloud `gps_locked_siswa_map` agar tidak pernah hilang saat ganti hari / ganti HP
+            if (typeof window.directRestUpsertRow === 'function') {
+                setTimeout(() => {
+                    window.directRestUpsertRow('app_cloud_db', {
+                        id: 'gps_locked_siswa_map',
+                        payload: {
+                            updatedAt: nowTs,
+                            gpsLockedMap: window.cloudState.gpsLockedMap
+                        }
+                    }, 'id').catch(() => {});
+                }, 50);
+            }
         };
 
         window.ambilKoordinatTerkunciIndustri = function(namaInd, dataIndObj, namaSiswaOpsional = "") {
             const indKey = window.normalizeTextCompact(namaInd);
-            const studentKey = (indKey && namaSiswaOpsional) ? `${indKey}__${window.normalizeTextCompact(namaSiswaOpsional)}` : "";
+            const sNorm = namaSiswaOpsional ? window.normalizeTextCompact(namaSiswaOpsional) : "";
+            const studentKey = (indKey && sNorm) ? `${indKey}__${sNorm}` : "";
+            const pureStudentKey = sNorm ? `siswa__${sNorm}` : "";
+            const radiusDefault = (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100;
 
-            // 1. Prioritas Utama: Cek apakah siswa ini memiliki titik lokasi spesifik (termasuk jika dipindah ke Cabang Industri AB) di Master Siswa
+            // 1. PRIORITAS MUTLAK: Cek peta penguncian permanen di perangkat lokal (hasil 1x Kode Akses sebelumnya)
+            try {
+                const mapStr = localStorage.getItem("SIP_PKL_LOCKED_GPS_MAP");
+                if (mapStr) {
+                    const mapObj = JSON.parse(mapStr);
+                    const rec = (studentKey && mapObj[studentKey]) || (pureStudentKey && mapObj[pureStudentKey]) || (indKey && mapObj[indKey]);
+                    if (rec && rec.lat && rec.lng && !window.isDefaultUncalibratedCoords(rec.lat, rec.lng, { gpsLocked: true })) {
+                        return {
+                            lat: parseFloat(rec.lat),
+                            lng: parseFloat(rec.lng),
+                            radius: Math.max(parseInt(rec.radius) || 100, radiusDefault, 100),
+                            isLocked: true,
+                            namaCabang: rec.namaCabang || ""
+                        };
+                    }
+                }
+            } catch (e) {}
+
+            // 2. Cek peta penguncian permanen dari Cloud (`window.cloudState.gpsLockedMap`)
+            if (window.cloudState.gpsLockedMap && typeof window.cloudState.gpsLockedMap === 'object') {
+                const gMap = window.cloudState.gpsLockedMap;
+                const recC = (studentKey && gMap[studentKey]) || (pureStudentKey && gMap[pureStudentKey]) || (indKey && gMap[indKey]);
+                if (recC && recC.lat && recC.lng && !window.isDefaultUncalibratedCoords(recC.lat, recC.lng, { gpsLocked: true })) {
+                    return {
+                        lat: parseFloat(recC.lat),
+                        lng: parseFloat(recC.lng),
+                        radius: Math.max(parseInt(recC.radius) || 100, radiusDefault, 100),
+                        isLocked: true,
+                        namaCabang: recC.namaCabang || ""
+                    };
+                }
+            }
+
+            // 3. Cek apakah siswa ini memiliki titik lokasi spesifik di Master Siswa
             if (namaSiswaOpsional && Array.isArray(window.cloudState.siswa)) {
                 const sMaster = window.cloudState.siswa.find(s => s && window.isNameMatch(s.nama, namaSiswaOpsional));
                 if (sMaster && sMaster.gpsLocked && sMaster.lockedLat && sMaster.lockedLng &&
@@ -3362,40 +3437,14 @@
                     return {
                         lat: parseFloat(sMaster.lockedLat),
                         lng: parseFloat(sMaster.lockedLng),
-                        radius: (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100,
+                        radius: radiusDefault,
                         isLocked: true,
                         namaCabang: sMaster.cabangIndustri || ""
                     };
                 }
             }
 
-            // 2. Cek dari cache penguncian lokal perangkat (spesifik siswa maupun industri)
-            try {
-                const mapStr = localStorage.getItem("SIP_PKL_LOCKED_GPS_MAP");
-                if (mapStr) {
-                    const mapObj = JSON.parse(mapStr);
-                    if (studentKey && mapObj[studentKey] && mapObj[studentKey].lat && mapObj[studentKey].lng) {
-                        return {
-                            lat: parseFloat(mapObj[studentKey].lat),
-                            lng: parseFloat(mapObj[studentKey].lng),
-                            radius: parseInt(mapObj[studentKey].radius) || 100,
-                            isLocked: true,
-                            namaCabang: mapObj[studentKey].namaCabang || ""
-                        };
-                    }
-                    if (indKey && mapObj[indKey] && mapObj[indKey].lat && mapObj[indKey].lng) {
-                        return {
-                            lat: parseFloat(mapObj[indKey].lat),
-                            lng: parseFloat(mapObj[indKey].lng),
-                            radius: parseInt(mapObj[indKey].radius) || 100,
-                            isLocked: true,
-                            namaCabang: ""
-                        };
-                    }
-                }
-            } catch (e) {}
-
-            // 3. Cek apakah siswa sudah pernah Presensi Masuk dengan koordinat valid
+            // 4. Cek apakah siswa sudah pernah Presensi Masuk dengan koordinat valid
             if (namaSiswaOpsional || namaInd) {
                 const riwayatMasuk = (window.cloudState.absensi || []).find(a =>
                     a && a.latitude && a.longitude &&
@@ -3411,7 +3460,7 @@
                         return {
                             lat: rLat,
                             lng: rLng,
-                            radius: (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100,
+                            radius: radiusDefault,
                             isLocked: true,
                             namaCabang: ""
                         };
@@ -3426,37 +3475,10 @@
             return {
                 lat: parseFloat(rawLat) || 0.45612,
                 lng: parseFloat(rawLng) || 121.94210,
-                radius: (dataIndObj && parseInt(dataIndObj.radius) >= 100) ? parseInt(dataIndObj.radius) : 100,
+                radius: radiusDefault,
                 isLocked: !isUncalibrated,
                 namaCabang: ""
             };
-        };
-
-        window.filterSelectOptions = function(selectId, query) {
-            const sel = document.getElementById(selectId);
-            if (!sel) return;
-            const q = (query || "").toLowerCase().trim();
-            Array.from(sel.options).forEach(opt => {
-                const txt = (opt.text || opt.value || "").toLowerCase();
-                opt.style.display = (!q || txt.includes(q)) ? "" : "none";
-            });
-            const visibleOpt = Array.from(sel.options).find(o => o.style.display !== "none");
-            if (visibleOpt && q) {
-                sel.value = visibleOpt.value;
-            }
-        };
-
-        window.filterItemLabels = function(className, query) {
-            const q = (query || "").toLowerCase().trim();
-            const items = document.querySelectorAll("." + className);
-            items.forEach(it => {
-                const text = (it.getAttribute("data-search") || it.innerText || "").toLowerCase();
-                if (!q || text.includes(q)) {
-                    it.style.display = "flex";
-                } else {
-                    it.style.display = "none";
-                }
-            });
         };
 
         // =========================================================================
@@ -3727,7 +3749,7 @@
                         kelas: kls,
                         industri: ind,
                         guru: guru,
-                        tanggal: tgl || (convP ? convM.tanggal : window.getTodayLocalWitaStr()),
+                        tanggal: tgl || (convP ? convP.tanggal : window.getTodayLocalWitaStr()),
                         jam: convP ? convP.jam : (r.jam_pulang || "16:00"),
                         tipe_absen: "Pulang",
                         kategori_hadir: r.status_kehadiran || "Hadir di Lokasi Industri",
@@ -4279,16 +4301,18 @@
                 let todayJurBucketPayload = null;
                 let masterOtoritatifPayload = null;
                 let aktivitasEkosistemPayload = null;
+                let gpsLockedMapPayload = null;
 
                 const todayWitaStr = window.getTodayLocalWitaStr();
 
-                // 1. Tarik serentak & RAMPING dari Supabase (Termasuk baris otoritatif master_alokasi_otoritatif & aktivitas_ekosistem_log)
+                // 1. Tarik serentak & RAMPING dari Supabase (Termasuk baris otoritatif master_alokasi_otoritatif, gps_locked_siswa_map & aktivitas_ekosistem_log)
                 try {
-                    const [rowState, rowCloud, rowMasterOto, rowAktivitas, rowBanner, rowDayAbs, rowDayJur, rowAbsLog, rowJurLog, rowsSqlAbs, rowsSqlJur] = await Promise.all([
+                    const [rowState, rowCloud, rowMasterOto, rowAktivitas, rowGpsLocked, rowBanner, rowDayAbs, rowDayJur, rowAbsLog, rowJurLog, rowsSqlAbs, rowsSqlJur] = await Promise.all([
                         window.directRestFetchRow('app_state', 'id', 1).catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', 'master').catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', 'master_alokasi_otoritatif').catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', 'aktivitas_ekosistem_log').catch(() => null),
+                        window.directRestFetchRow('app_cloud_db', 'id', 'gps_locked_siswa_map').catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', 'banners_master').catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', `absensi_day_${todayWitaStr}`).catch(() => null),
                         window.directRestFetchRow('app_cloud_db', 'id', `jurnal_day_${todayWitaStr}`).catch(() => null),
@@ -4301,6 +4325,7 @@
                     if (rowCloud && rowCloud.payload) cloudDbPayload = rowCloud.payload;
                     if (rowMasterOto && rowMasterOto.payload) masterOtoritatifPayload = rowMasterOto.payload;
                     if (rowAktivitas && rowAktivitas.payload) aktivitasEkosistemPayload = rowAktivitas.payload;
+                    if (rowGpsLocked && rowGpsLocked.payload) gpsLockedMapPayload = rowGpsLocked.payload;
                     if (rowBanner && rowBanner.payload) bannerMasterPayload = rowBanner.payload;
                     if (rowDayAbs && rowDayAbs.payload) todayAbsBucketPayload = rowDayAbs.payload;
                     if (rowDayJur && rowDayJur.payload) todayJurBucketPayload = rowDayJur.payload;
@@ -4309,6 +4334,17 @@
                     if (Array.isArray(rowsSqlAbs)) sqlRiwayatPresensiRows = rowsSqlAbs;
                     if (Array.isArray(rowsSqlJur)) sqlJurnalHarianRows = rowsSqlJur;
                 } catch(e) {}
+
+                // Gabungkan peta koordinat GPS siswa yang sudah pernah dikunci dengan kode akses (permanen lintas hari & perangkat)
+                if (gpsLockedMapPayload && gpsLockedMapPayload.gpsLockedMap && typeof gpsLockedMapPayload.gpsLockedMap === 'object') {
+                    window.cloudState.gpsLockedMap = Object.assign({}, gpsLockedMapPayload.gpsLockedMap, window.cloudState.gpsLockedMap || {});
+                    try {
+                        const localGpsMap = JSON.parse(localStorage.getItem("SIP_PKL_LOCKED_GPS_MAP") || "{}");
+                        const mergedGpsMap = Object.assign({}, gpsLockedMapPayload.gpsLockedMap, localGpsMap);
+                        window.cloudState.gpsLockedMap = mergedGpsMap;
+                        localStorage.setItem("SIP_PKL_LOCKED_GPS_MAP", JSON.stringify(mergedGpsMap));
+                    } catch (eGps) {}
+                }
 
                 // 2. Jika Direct REST belum mendapat data, fallback ke Supabase SDK (dibatasi ringan 180 baris terbaru)
                 if (!statePayload && !cloudDbPayload && window.supabaseClient) {
@@ -9571,22 +9607,19 @@
                     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                         <span style="font-size:11.5px; font-weight:900; color:#0369a1;">📅 Pilih Hari / Tanggal Jurnal:</span>
                         <input type="date" id="filterTanggalJurnalHarian" value="${activeDate}" onchange="window.ubahTanggalFilterRekapJurnal(this.value)" class="form-control" style="width:auto; padding:6px 10px; font-size:12px; font-weight:850; color:#0f172a; background:#ffffff;">
+                        <select onchange="if(this.value) window.ubahTanggalFilterRekapJurnal(this.value)" class="form-control" style="width:auto; min-width:210px; padding:6px 10px; font-size:11.5px; font-weight:850; color:#0369a1; background:#ffffff; border:1.5px solid #38bdf8;">
+                            <option value="">🗄️ Pintasan Arsip Tanggal (${sortedStoredDates.length} Hari)</option>
+                            ${sortedStoredDates.map(tgl => {
+                                const cnt = storedDatesMap.get(tgl) || 0;
+                                const isSel = (viewMode !== 'semua' && tgl === activeDate);
+                                return `<option value="${tgl}" ${isSel ? 'selected' : ''}>📅 ${tgl} (${cnt} Log)${tgl === todayStr ? ' — Hari Ini' : ''}</option>`;
+                            }).join('')}
+                        </select>
                         ${activeDate !== todayStr ? `
                             <button type="button" onclick="window.ubahTanggalFilterRekapJurnal('${todayStr}')" class="btn-action btn-blue" style="padding:6px 10px; font-size:10.5px;">
                                 📍 Kembali ke Hari Ini (${todayStr})
                             </button>
                         ` : `<span class="badge-status badge-green" style="font-size:10px;">📍 Siklus Hari Ini (${jurnalPadaTanggalAktif.length} Sudah / ${belumIsiJurnalList.length} Belum)</span>`}
-                    </div>
-                    <div style="padding-top:8px; border-top:1px dashed #bae6fd; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                        <span style="font-size:10.5px; font-weight:850; color:#475569;">🗄️ Pintasan Tanggal & Arsip Jurnal:</span>
-                        ${sortedStoredDates.slice(0, 14).map(tgl => {
-                            const cnt = storedDatesMap.get(tgl) || 0;
-                            const isSel = (viewMode !== 'semua' && tgl === activeDate);
-                            return `
-                            <button type="button" onclick="window.ubahTanggalFilterRekapJurnal('${tgl}')" class="btn-action" style="padding:5px 10px; font-size:10.5px; font-weight:850; background:${isSel ? '#0284c7' : (cnt > 0 ? '#ffffff' : '#f8fafc')}; color:${isSel ? '#ffffff' : (cnt > 0 ? '#0369a1' : '#64748b')}; border:1.5px solid ${isSel ? '#0284c7' : (cnt > 0 ? '#38bdf8' : '#cbd5e1')};">
-                                📅 ${tgl} (${cnt} Log)
-                            </button>`;
-                        }).join('')}
                     </div>
                 </div>
                 ` : ''}
@@ -13026,6 +13059,14 @@
                         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                             <span style="font-size:11.5px; font-weight:900; color:#0369a1;">📅 Pilih Hari / Tanggal Presensi:</span>
                             <input type="date" id="filterTanggalPresensiHarian" value="${activeDate}" onchange="window.ubahTanggalFilterRekapPresensi(this.value)" class="form-control" style="width:auto; padding:6px 10px; font-size:12px; font-weight:850; color:#0f172a; background:#ffffff;">
+                            <select id="dropdownPintasanTanggalPresensi" onchange="if(this.value) window.ubahTanggalFilterRekapPresensi(this.value)" class="form-control" style="width:auto; min-width:220px; padding:6px 10px; font-size:11.5px; font-weight:850; color:#0369a1; background:#ffffff; border:1.5px solid #38bdf8;" title="Pilih cepat tanggal arsip presensi">
+                                <option value="">🗄️ Pintasan Arsip Tanggal (${sortedStoredDates.length} Hari)</option>
+                                ${sortedStoredDates.map(tgl => {
+                                    const cnt = storedDatesMap.get(tgl) || 0;
+                                    const isSel = (viewMode !== 'semua' && tgl === activeDate);
+                                    return `<option value="${tgl}" ${isSel ? 'selected' : ''}>📅 ${tgl} (${cnt} Log)${tgl === todayStr ? ' — Hari Ini' : ''}</option>`;
+                                }).join('')}
+                            </select>
                             ${activeDate !== todayStr ? `
                                 <button type="button" onclick="window.ubahTanggalFilterRekapPresensi('${todayStr}')" class="btn-action btn-blue" style="padding:6px 10px; font-size:10.5px;">
                                     📍 Kembali ke Hari Ini (${todayStr})
@@ -13040,17 +13081,6 @@
                                 🖨️ Export PDF (${activeDate})
                             </button>
                         </div>
-                    </div>
-                    <div style="padding-top:8px; border-top:1px dashed #bae6fd; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                        <span style="font-size:10.5px; font-weight:850; color:#475569;">🗄️ Pintasan Tanggal & Arsip Presensi:</span>
-                        ${sortedStoredDates.slice(0, 14).map(tgl => {
-                            const cnt = storedDatesMap.get(tgl) || 0;
-                            const isSel = (viewMode !== 'semua' && tgl === activeDate);
-                            return `
-                            <button type="button" onclick="window.ubahTanggalFilterRekapPresensi('${tgl}')" class="btn-action" style="padding:5px 10px; font-size:10.5px; font-weight:850; background:${isSel ? '#0284c7' : (cnt > 0 ? '#ffffff' : '#f8fafc')}; color:${isSel ? '#ffffff' : (cnt > 0 ? '#0369a1' : '#64748b')}; border:1.5px solid ${isSel ? '#0284c7' : (cnt > 0 ? '#38bdf8' : '#cbd5e1')};">
-                                📅 ${tgl} (${cnt} Log)
-                            </button>`;
-                        }).join('')}
                     </div>
                     ` : ''}
 
@@ -16116,6 +16146,83 @@
             cbs.forEach(c => c.checked = isChecked);
         };
 
+        window.bukaModalLupaPassword = function() {
+            window.showModalInfo(
+                "Bantuan Reset Kata Sandi 🔑",
+                "Jika Anda lupa kata sandi akun, silakan hubungi <b>Panitia PKL</b> atau <b>Admin Utama SMK Negeri 1 Marisa</b> untuk melihat atau mereset kata sandi akun Anda."
+            );
+        };
+
+        window.filterSelectOptions = function(selectId, queryStr) {
+            const sel = document.getElementById(selectId);
+            if (!sel) return;
+            const q = String(queryStr || "").toLowerCase().trim();
+            let firstVisible = -1;
+            Array.from(sel.options).forEach((opt, idx) => {
+                const match = !q || opt.text.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q);
+                opt.style.display = match ? "" : "none";
+                if (match && firstVisible === -1) firstVisible = idx;
+            });
+            if (firstVisible !== -1 && sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].style.display === "none") {
+                sel.selectedIndex = firstVisible;
+            }
+        };
+
+        window.filterItemLabels = function(className, queryStr) {
+            const items = document.querySelectorAll('.' + className);
+            const q = String(queryStr || "").toLowerCase().trim();
+            items.forEach(el => {
+                const hay = (el.getAttribute('data-search') || el.textContent || "").toLowerCase();
+                el.style.display = (!q || hay.includes(q)) ? "" : "none";
+            });
+        };
+
+        window.omniScanSeluruhDataPresensiDanJurnalCloud = async function(fullExport = false) {
+            try {
+                const limitParam = fullExport ? 2000 : 250;
+                const [rowsSqlAbs, rowsSqlJur, rowAbsLog, rowJurLog] = await Promise.all([
+                    window.directRestGetQuery(`riwayat_presensi?select=*&order=tanggal_siklus.desc&limit=${limitParam}`).catch(() => null),
+                    window.directRestGetQuery(`jurnal_harian?select=*&order=tanggal_kegiatan.desc&limit=${limitParam}`).catch(() => null),
+                    window.directRestFetchRow('app_cloud_db', 'id', 'absensi_master_log').catch(() => null),
+                    window.directRestFetchRow('app_cloud_db', 'id', 'jurnal_master_log').catch(() => null)
+                ]);
+
+                if (Array.isArray(rowsSqlAbs) && rowsSqlAbs.length > 0) {
+                    const convertedAbs = window.konversiBarisRiwayatPresensiKeAbsensi(rowsSqlAbs);
+                    window.cloudState.absensi = window.mergeUniqueArrayById(
+                        window.cloudState.absensi || [],
+                        convertedAbs,
+                        (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen}`
+                    );
+                }
+                if (rowAbsLog && rowAbsLog.payload && Array.isArray(rowAbsLog.payload.absensi)) {
+                    window.cloudState.absensi = window.mergeUniqueArrayById(
+                        window.cloudState.absensi || [],
+                        rowAbsLog.payload.absensi,
+                        (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen}`
+                    );
+                }
+                if (Array.isArray(rowsSqlJur) && rowsSqlJur.length > 0) {
+                    const convertedJur = window.konversiBarisJurnalHarianKeJurnal(rowsSqlJur);
+                    window.cloudState.jurnal = window.mergeUniqueArrayById(
+                        window.cloudState.jurnal || [],
+                        convertedJur,
+                        (j) => `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
+                    );
+                }
+                if (rowJurLog && rowJurLog.payload && Array.isArray(rowJurLog.payload.jurnal)) {
+                    window.cloudState.jurnal = window.mergeUniqueArrayById(
+                        window.cloudState.jurnal || [],
+                        rowJurLog.payload.jurnal,
+                        (j) => `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
+                    );
+                }
+                return true;
+            } catch (e) {
+                return false;
+            }
+        };
+
         window.addEventListener('DOMContentLoaded', async () => {
             window.bersihkanDataDummyLama(window.cloudState);
             window.inisialisasiSupabaseClient();
@@ -16137,12 +16244,12 @@
                     }
                 }).catch(() => {});
 
-                // Sinkronisasi Realtime Halus di Belakang Layar (Setiap 60 Detik & Dijeda Penuh Saat Ada Aksi Simpan/Edit)
+                // Sinkronisasi Realtime Halus di Belakang Layar (Setiap 120 Detik & Dijeda Penuh Saat Ada Aksi Simpan/Edit/Scroll)
                 setInterval(async () => {
                     const now = Date.now();
                     if (window.isSavingToCloud || now < (window.cloudSyncPausedUntil || 0)) return;
-                    const isRecentlyTypingOrTouching = (now - (window.lastUserActivityAt || 0) < 15000);
-                    const isRecentlyScrolling = (now - (window.lastUserScrollAt || 0) < 10000);
+                    const isRecentlyTypingOrTouching = (now - (window.lastUserActivityAt || 0) < 30000);
+                    const isRecentlyScrolling = (now - (window.lastUserScrollAt || 0) < 25000);
                     const isRecentlyWriting = (now - (window.lastLocalWriteTimestamp || 0) < 60000);
 
                     const activeEl = document.activeElement;
@@ -16161,21 +16268,25 @@
                     if (!isInteracting && !isRecentlyTypingOrTouching && !isRecentlyScrolling && !isRecentlyWriting && !isModalOpen && !isDrawerOpen && !document.hidden) {
                         await window.tarikDataDariCloud(true);
                     }
-                }, 60000);
+                }, 120000);
                 let lastFocusSync = 0;
                 const triggerGentleSync = () => {
                     const now = Date.now();
                     if (window.isSavingToCloud || now < (window.cloudSyncPausedUntil || 0)) return;
-                    if (now - lastFocusSync < 60000) return;
-                    if (now - (window.lastUserActivityAt || 0) < 15000) return;
+                    if (now - lastFocusSync < 120000) return;
+                    if (now - (window.lastUserActivityAt || 0) < 25000) return;
+                    if (now - (window.lastUserScrollAt || 0) < 20000) return;
                     if (now - (window.lastLocalWriteTimestamp || 0) < 60000) return;
                     const isModalOpen = (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex');
                     if (!isModalOpen && !document.hidden) {
                         lastFocusSync = now;
-                        window.tarikDataDariCloud(true);
+                        setTimeout(() => {
+                            if (!document.hidden && !window.isSavingToCloud) {
+                                window.tarikDataDariCloud(true);
+                            }
+                        }, 1500);
                     }
                 };
-                window.addEventListener('focus', triggerGentleSync);
                 window.addEventListener('visibilitychange', () => {
                     if (!document.hidden) triggerGentleSync();
                 });
