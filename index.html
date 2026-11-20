@@ -1199,7 +1199,7 @@
             jamConfig: {
                 masukMulai: "06:30",
                 masukTepatWaktu: "08:15",
-                masukBatasAkhir: "15:00",
+                masukBatasAkhir: "15:50",
                 pulangMulai: "16:00",
                 pulangBatasAkhir: "23:00",
                 masuk: "08:15",
@@ -2099,7 +2099,7 @@
                 jamConfig: window.cloudState.jamConfig || {
                     masukMulai: "06:30",
                     masukTepatWaktu: "08:15",
-                    masukBatasAkhir: "15:00",
+                    masukBatasAkhir: "15:50",
                     pulangMulai: "16:00",
                     pulangBatasAkhir: "23:00"
                 },
@@ -2227,16 +2227,16 @@
             }
         };
         // Helper Tanggal Lokal WITA (YYYY-MM-DD) yang Konsisten di Semua Fitur (DENGAN CACHE CEPAT ANTI-LAG)
+        // PERBAIKAN: Date.now() sudah dalam UTC, cukup tambah +8 jam (WITA) tanpa getTimezoneOffset agar tidak mundur 1 hari di pagi hari!
         window._cachedWitaTodayStr = "";
         window._cachedWitaTodayAt = 0;
 
         window.getTodayLocalWitaStr = function() {
             const nowMs = Date.now();
-            if (window._cachedWitaTodayStr && (nowMs - window._cachedWitaTodayAt) < 30000) {
+            if (window._cachedWitaTodayStr && (nowMs - window._cachedWitaTodayAt) < 15000) {
                 return window._cachedWitaTodayStr;
             }
-            const utcMs = nowMs + (new Date().getTimezoneOffset() * 60000);
-            const witaDate = new Date(utcMs + (8 * 3600000));
+            const witaDate = new Date(nowMs + (8 * 3600000));
             const yyyy = witaDate.getUTCFullYear();
             const mm = String(witaDate.getUTCMonth() + 1).padStart(2, '0');
             const dd = String(witaDate.getUTCDate()).padStart(2, '0');
@@ -2249,11 +2249,9 @@
             return window.getTodayLocalWitaStr().substring(0, 7);
         };
 
-        // Helper Jam & Menit WITA Saat Ini (Asia/Makassar) - Tanpa Intl berat agar 0ms
+        // Helper Jam & Menit WITA Saat Ini (Asia/Makassar) - Kalkulasi UTC+8 Langsung (Akurat 100% di Semua Zona Waktu)
         window.getCurrentWitaTimeObj = function() {
-            const now = new Date();
-            const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
-            const witaDate = new Date(utcMs + (8 * 3600000));
+            const witaDate = new Date(Date.now() + (8 * 3600000));
             const h = witaDate.getUTCHours();
             const m = witaDate.getUTCMinutes();
             return {
@@ -2273,16 +2271,16 @@
             return (h * 60) + m;
         };
 
-        // Validasi Ketat Jendela Waktu Presensi Masuk & Pulang (WITA)
+        // Validasi Ketat Jendela Waktu Presensi Masuk (06:30 s/d 15:50 WITA) & Pulang (Tepat 16:00 WITA kecuali dibuka Guru Pembimbing)
         window.cekStatusWaktuPresensiWita = function(tipeAbsen) {
             const jc = window.cloudState.jamConfig || {};
             const masukMulaiStr = jc.masukMulai || "06:30";
-            const masukBatasStr = jc.masukBatasAkhir || "15:00";
+            const masukBatasStr = (jc.masukBatasAkhir && jc.masukBatasAkhir !== "15:00") ? jc.masukBatasAkhir : "15:50";
             const pulangMulaiStr = jc.pulangMulai || "16:00";
             const pulangBatasStr = jc.pulangBatasAkhir || "23:00";
 
             const masukMulaiMin = window.parseTimeStrToMinutes(masukMulaiStr, 6 * 60 + 30); // 06:30 = 390
-            const masukBatasMin = window.parseTimeStrToMinutes(masukBatasStr, 15 * 60);     // 15:00 = 900
+            const masukBatasMin = window.parseTimeStrToMinutes(masukBatasStr, 15 * 60 + 50); // 15:50 = 950
             const pulangMulaiMin = Math.max(16 * 60, window.parseTimeStrToMinutes(pulangMulaiStr, 16 * 60)); // Minimal tepat 16:00 = 960
             const pulangBatasMin = window.parseTimeStrToMinutes(pulangBatasStr, 23 * 60);   // 23:00 = 1380
 
@@ -2295,16 +2293,16 @@
                         allowed: false,
                         reason: "BELUM_WAKTU_MASUK",
                         title: "Presensi Masuk Belum Dibuka ⏰",
-                        message: `Saat ini pukul <b>${nowWita.hmStr} WITA</b>.<br><br>Fitur <b>Presensi Masuk</b> baru akan dibuka mulai pukul <b>${masukMulaiStr} WITA</b> hingga sebelum pukul <b>${masukBatasStr} WITA</b>.`,
+                        message: `Saat ini pukul <b>${nowWita.hmStr} WITA</b>.<br><br>Fitur <b>Presensi Masuk</b> baru akan dibuka mulai pukul <b>${masukMulaiStr} WITA</b> hingga pukul <b>${masukBatasStr} WITA</b>.`,
                         nowStr: nowWita.hmStr
                     };
                 }
-                if (curMin >= masukBatasMin) {
+                if (curMin > masukBatasMin) {
                     return {
                         allowed: false,
                         reason: "LEWAT_BATAS_MASUK",
                         title: "Waktu Presensi Masuk Telah Ditutup 🔒",
-                        message: `Saat ini sudah pukul <b>${nowWita.hmStr} WITA</b>.<br><br>Batas waktu <b>Presensi Masuk</b> telah berakhir tepat pada pukul <b>${masukBatasStr} WITA</b>. Anda sudah tidak dapat melakukan Presensi Masuk untuk hari ini.`,
+                        message: `Saat ini sudah pukul <b>${nowWita.hmStr} WITA</b>.<br><br>Batas waktu <b>Presensi Masuk</b> telah berakhir pada pukul <b>${masukBatasStr} WITA</b>. Anda sudah tidak dapat melakukan Presensi Masuk untuk hari ini.`,
                         nowStr: nowWita.hmStr
                     };
                 }
@@ -2317,7 +2315,7 @@
                         allowed: false,
                         reason: "BELUM_JAM_PULANG",
                         title: "Presensi Pulang Belum Dibuka 🔒",
-                        message: `Saat ini pukul <b>${nowWita.hmStr} WITA</b>.<br><br>Mulai pukul <b>06:30 hingga 15:59 WITA</b> tidak diperbolehkan melakukan Presensi Pulang.<br><br>Fitur <b>Presensi Pulang</b> baru akan terbuka tepat pada pukul <b>16:00 WITA</b>.`,
+                        message: `Saat ini pukul <b>${nowWita.hmStr} WITA</b>.<br><br>Fitur <b>Presensi Pulang</b> baru akan terbuka tepat pada pukul <b>16:00 WITA</b> (kecuali diaktifkan lebih awal oleh Guru Pembimbing Anda).`,
                         nowStr: nowWita.hmStr
                     };
                 }
@@ -8077,6 +8075,7 @@
 
             const cekWaktuMasuk = window.cekStatusWaktuPresensiWita('Masuk');
             const cekWaktuPulang = window.cekStatusWaktuPresensiWita('Pulang');
+            const masukBatasDisplay = (jc.masukBatasAkhir && jc.masukBatasAkhir !== '15:00') ? jc.masukBatasAkhir : '15:50';
 
             return `
             ${bannerHtml}
@@ -8088,33 +8087,33 @@
                     <div>
                         <div class="absensi-title-main">ABSENSI DIGITAL (${window.formatTanggalIndoLengkap(todayStr)})</div>
                         <div style="font-size: 10px; color: #0284c7; font-weight: 800; margin-top: 2px;">
-                            ⏰ Masuk: ${jc.masukMulai} s/d 14:59 WITA (Tutup 15:00) &bull; Pulang: Buka Tepat 16:00 WITA
+                            ⏰ Masuk: ${jc.masukMulai || '06:30'} s/d ${masukBatasDisplay} WITA &bull; Pulang: Buka Tepat 16:00 WITA
                         </div>
                     </div>
                     <div class="absensi-status-badge" style="color:${absenMasuk ? '#15803d' : '#b45309'}; font-weight:900;">${statusBadgeHariIni}</div>
                 </div>
                 <div class="absensi-btn-grid">
-                    <div class="btn-absensi-box ${absenMasuk ? 'done-card' : ''}" style="${(!absenMasuk && !cekWaktuMasuk.allowed) ? 'opacity:0.78; background:linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border-color:#cbd5e1;' : ''}" onclick="window.bukaModalAmbilPresensiSelfieGPS('Masuk')">
+                    <div class="btn-absensi-box ${absenMasuk ? 'done-card' : ''}" style="${absenMasuk ? 'cursor:default;' : (!cekWaktuMasuk.allowed ? 'opacity:0.78; background:linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border-color:#cbd5e1;' : '')}" onclick="window.bukaModalAmbilPresensiSelfieGPS('Masuk')">
                         <div class="btn-absensi-icon-wrap" style="${absenMasuk ? 'background:#dcfce7; border-color:#22c55e;' : (!cekWaktuMasuk.allowed ? 'background:#fee2e2; border-color:#fca5a5;' : '')}">${absenMasuk ? '✅' : (!cekWaktuMasuk.allowed ? '🔒' : '📷')}</div>
                         <div style="flex:1;">
                             <div class="btn-absensi-text">PRESENSI MASUK</div>
                             <div style="font-size: 10px; color: #475569; font-weight: 800; margin-top: 2px;">
-                                ${absenMasuk ? `Tercatat: ${absenMasuk.jam} WITA` : `Buka: ${jc.masukMulai} - Tutup: 15:00 WITA`}
+                                ${absenMasuk ? `Tercatat: ${absenMasuk.jam} WITA` : `Buka: ${jc.masukMulai || '06:30'} - ${masukBatasDisplay} WITA`}
                             </div>
                             <div style="font-size: 9.5px; font-weight: 850; margin-top: 4px; line-height: 1.25; color: ${absenMasuk ? '#15803d' : (!cekWaktuMasuk.allowed ? '#b91c1c' : '#dc2626')};">
-                                ${absenMasuk ? '✓ Anda Sudah Melakukan Presensi Masuk' : (!cekWaktuMasuk.allowed ? '🔒 Ditutup (Lewat Pukul 15:00 WITA)' : '⚠️ Anda belum melakukan presensi masuk')}
+                                ${absenMasuk ? '✅ Terkunci (Sudah Presensi Masuk Hari Ini)' : (!cekWaktuMasuk.allowed ? `🔒 Ditutup (Lewat Pukul ${masukBatasDisplay} WITA)` : '⚠️ Anda belum melakukan presensi masuk')}
                             </div>
                         </div>
                     </div>
-                    <div class="btn-absensi-box ${absenPulang ? 'done-card' : ''}" style="${(!absenPulang && !cekWaktuPulang.allowed) ? 'opacity:0.78; background:linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border-color:#cbd5e1;' : ''}" onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang')">
-                        <div class="btn-absensi-icon-wrap" style="${absenPulang ? 'background:#dcfce7; border-color:#22c55e;' : (!cekWaktuPulang.allowed ? 'background:#fef3c7; border-color:#fde68a;' : '')}">${absenPulang ? '✅' : (!cekWaktuPulang.allowed ? '🔒' : '🚪')}</div>
+                    <div class="btn-absensi-box ${absenPulang ? 'done-card' : ''}" style="${absenPulang ? 'cursor:default;' : (cekWaktuPulang.earlyApprovedByGuru ? 'background:linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-color:#10b981;' : (!cekWaktuPulang.allowed ? 'opacity:0.78; background:linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border-color:#cbd5e1;' : ''))}" onclick="window.bukaModalAmbilPresensiSelfieGPS('Pulang')">
+                        <div class="btn-absensi-icon-wrap" style="${absenPulang ? 'background:#dcfce7; border-color:#22c55e;' : (cekWaktuPulang.earlyApprovedByGuru ? 'background:#d1fae5; border-color:#10b981;' : (!cekWaktuPulang.allowed ? 'background:#fef3c7; border-color:#fde68a;' : ''))}">${absenPulang ? '✅' : (cekWaktuPulang.earlyApprovedByGuru ? '🔓' : (!cekWaktuPulang.allowed ? '🔒' : '🚪'))}</div>
                         <div style="flex:1;">
                             <div class="btn-absensi-text">PRESENSI PULANG</div>
                             <div style="font-size: 10px; color: #475569; font-weight: 800; margin-top: 2px;">
-                                ${absenPulang ? `Tercatat: ${absenPulang.jam} WITA` : `Buka Tepat: 16:00 - ${jc.pulangBatasAkhir} WITA`}
+                                ${absenPulang ? `Tercatat: ${absenPulang.jam} WITA` : (cekWaktuPulang.earlyApprovedByGuru ? '🔓 Diaktifkan Guru Pembimbing' : `Buka Tepat: 16:00 - ${jc.pulangBatasAkhir || '23:00'} WITA`)}
                             </div>
-                            <div style="font-size: 9.5px; font-weight: 850; margin-top: 4px; line-height: 1.25; color: ${absenPulang ? '#15803d' : (!cekWaktuPulang.allowed ? '#b45309' : '#dc2626')};">
-                                ${absenPulang ? '✓ Anda Sudah Melakukan Presensi Pulang' : (!cekWaktuPulang.allowed ? '🔒 Terkunci s/d Pukul 16:00 WITA' : '⚠️ Anda belum melakukan presensi pulang')}
+                            <div style="font-size: 9.5px; font-weight: 850; margin-top: 4px; line-height: 1.25; color: ${absenPulang ? '#15803d' : (cekWaktuPulang.earlyApprovedByGuru ? '#059669' : (!cekWaktuPulang.allowed ? '#b45309' : '#dc2626'))};">
+                                ${absenPulang ? '✅ Terkunci (Sudah Presensi Pulang Hari Ini)' : (cekWaktuPulang.earlyApprovedByGuru ? '✓ Terbuka lebih awal oleh Guru Pembimbing' : (!cekWaktuPulang.allowed ? '🔒 Terkunci s/d Pukul 16:00 WITA' : '⚠️ Anda belum melakukan presensi pulang'))}
                             </div>
                         </div>
                     </div>
@@ -8379,29 +8378,9 @@
 
         // Helper Waktu Real-Time WITA (Asia/Makassar) & Validasi Ketat Jam Presensi Masuk/Pulang
         window.getWaktuWitaSekarang = function() {
-            let jam = 8;
-            let menit = 0;
-            try {
-                const timeParts = new Intl.DateTimeFormat('en-GB', {
-                    timeZone: 'Asia/Makassar',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false
-                }).formatToParts(new Date());
-                const hPart = timeParts.find(p => p.type === 'hour');
-                const mPart = timeParts.find(p => p.type === 'minute');
-                if (hPart && mPart) {
-                    jam = parseInt(hPart.value, 10);
-                    menit = parseInt(mPart.value, 10);
-                }
-            } catch (e) {
-                const now = new Date();
-                const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
-                const witaDate = new Date(utcMs + (8 * 3600000));
-                jam = witaDate.getUTCHours();
-                menit = witaDate.getUTCMinutes();
-            }
-            if (jam === 24) jam = 0;
+            const witaDate = new Date(Date.now() + (8 * 3600000));
+            const jam = witaDate.getUTCHours();
+            const menit = witaDate.getUTCMinutes();
             const totalMenit = (jam * 60) + menit;
             const jamStr = `${String(jam).padStart(2, '0')}:${String(menit).padStart(2, '0')}`;
             return { jam, menit, totalMenit, jamStr };
@@ -8411,32 +8390,32 @@
             const wita = window.getWaktuWitaSekarang();
             const mNow = wita.totalMenit;
 
-            // Aturan Presensi Masuk: Buka 06:30 (390) s/d Tutup 15:00 (900) WITA
+            // Aturan Presensi Masuk: Buka 06:30 (390) s/d 15:50 (950) WITA
             if (tipeAbsen === 'Masuk') {
                 if (mNow < (6 * 60 + 30)) {
                     return {
                         diizinkan: false,
                         judul: "Presensi Masuk Belum Dibuka ⏰",
-                        pesan: `Waktu saat ini pukul <b>${wita.jamStr} WITA</b>.<br><br>Fitur <b>Presensi Masuk</b> baru dapat dibuka mulai pukul <b>06:30 WITA</b> hingga batas akhir pukul <b>15:00 WITA</b>.`
+                        pesan: `Waktu saat ini pukul <b>${wita.jamStr} WITA</b>.<br><br>Fitur <b>Presensi Masuk</b> baru dapat dibuka mulai pukul <b>06:30 WITA</b> hingga pukul <b>15:50 WITA</b>.`
                     };
                 }
-                if (mNow >= (15 * 60)) {
+                if (mNow > (15 * 60 + 50)) {
                     return {
                         diizinkan: false,
                         judul: "Waktu Presensi Masuk Telah Ditutup 🔒",
-                        pesan: `Waktu saat ini pukul <b>${wita.jamStr} WITA</b>.<br><br>Sesuai ketentuan disiplin PKL, batas akhir <b>Presensi Masuk</b> adalah pukul <b>15:00 WITA</b>. Anda sudah tidak dapat melakukan presensi masuk untuk hari ini.`
+                        pesan: `Waktu saat ini pukul <b>${wita.jamStr} WITA</b>.<br><br>Sesuai ketentuan disiplin PKL, batas akhir <b>Presensi Masuk</b> adalah pukul <b>15:50 WITA</b>. Anda sudah tidak dapat melakukan presensi masuk untuk hari ini.`
                     };
                 }
                 return { diizinkan: true, jamStr: wita.jamStr };
             }
 
-            // Aturan Presensi Pulang: Terkunci dari 06:30 s/d 15:59 WITA, Baru Terbuka Tepat Pukul 16:00 (960) s/d 23:00 (1380) WITA
+            // Aturan Presensi Pulang: Terkunci sebelum pukul 16:00 (960) WITA, kecuali diaktifkan Guru Pembimbing
             if (tipeAbsen === 'Pulang') {
                 if (mNow < (16 * 60)) {
                     return {
                         diizinkan: false,
                         judul: "Presensi Pulang Belum Dapat Dibuka 🔒",
-                        pesan: `Waktu saat ini pukul <b>${wita.jamStr} WITA</b>.<br><br>Mulai pukul <b>06:30 hingga 15:59 WITA</b> tidak diperbolehkan melakukan Presensi Pulang.<br><br><span style="color:#0284c7; font-weight:800;">✓ Fitur Presensi Pulang baru akan terbuka tepat pada pukul 16:00 WITA.</span>`
+                        pesan: `Waktu saat ini pukul <b>${wita.jamStr} WITA</b>.<br><br>Fitur <b>Presensi Pulang</b> baru akan terbuka tepat pada pukul <b>16:00 WITA</b>.<br><br><span style="color:#0284c7; font-weight:800;">💡 Jika pihak industri memulangkan Anda lebih awal, laporkan ke Guru Pembimbing Anda agar beliau menekan tombol <b>"🔓 Aktifkan Presensi Pulang"</b> di Dashboard Guru.</span>`
                     };
                 }
                 if (mNow > (23 * 60 + 59)) {
@@ -8506,16 +8485,17 @@
             let bestPoint = kandidatTitik[0] || { lat: parseFloat(fallbackLat) || 0.45612, lng: parseFloat(fallbackLng) || 121.94210, label: targetNamaInd };
 
             kandidatTitik.forEach(pt => {
-                if (!isNaN(pt.lat) && !isNaN(pt.lng)) {
-                    const d = window.hitungJarakMeterHaversine(curLat, curLng, pt.lat, pt.lng);
-                    if (d < bestDist) {
-                        bestDist = d;
-                        bestPoint = pt;
-                    }
+                if (isNaN(pt.lat) || isNaN(pt.lng)) return;
+                const d = window.hitungJarakMeterHaversine(curLat, curLng, pt.lat, pt.lng);
+                if (d < bestDist) {
+                    bestDist = d;
+                    bestPoint = pt;
                 }
             });
 
-            if (bestDist === Infinity) bestDist = 9999;
+            if (bestDist === Infinity) {
+                bestDist = window.hitungJarakMeterHaversine(curLat, curLng, bestPoint.lat, bestPoint.lng);
+            }
 
             return {
                 isCalibrated: true,
@@ -8528,13 +8508,36 @@
             };
         };
 
-        window.bukaModalAmbilPresensiSelfieGPS = function(tipeAbsen) {
+        window.bukaModalAmbilPresensiSelfieGPS = async function(tipeAbsen) {
             const profile = window.cloudState.userProfile || { nama: "Siswa" };
             const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+            const todayStr = window.getTodayLocalWitaStr();
 
-            // 1. Validasi Ketat Jam Presensi Masuk (06:30 - 15:00 WITA) & Presensi Pulang (Wajib >= 16:00 WITA)
+            // 0. PENGUNCIAN OTOMATIS JIKA SUDAH MELAKUKAN PRESENSI MASUK / PULANG HARI INI (Reset Otomatis Besok)
             if (window.cloudState.activeRole === 'siswa') {
-                const cekJam = window.cekIzinWaktuPresensiWita(tipeAbsen);
+                const sudahAbsenTipeIni = (window.cloudState.absensi || []).find(a =>
+                    a && window.normalizeTanggalStr(a.tanggal, a.id) === todayStr && a.tipe_absen === tipeAbsen &&
+                    (window.isNameMatch(a.nama, profile.nama) ||
+                     window.isNameMatch(a.nama, placementInfo.namaSiswa) ||
+                     (profile.identitas && String(a.user_id || '').trim() === String(profile.identitas).trim()))
+                );
+                if (sudahAbsenTipeIni) {
+                    return window.showModalInfo(
+                        `Presensi ${tipeAbsen} Sudah Tercatat ✅🔒`,
+                        `Anda sudah melakukan <b>Presensi ${tipeAbsen}</b> pada hari ini (<b>${window.formatTanggalIndoLengkap(todayStr)}</b>) pukul <b>${sudahAbsenTipeIni.jam} WITA</b>.<br><br>` +
+                        `<span style="color:#15803d; font-weight:800;">✓ Fitur Presensi ${tipeAbsen} terkunci untuk hari ini dan akan terbuka kembali otomatis besok saat pergantian hari.</span>`
+                    );
+                }
+            }
+
+            // 1. Validasi Ketat Jam Presensi Masuk (06:30 - 15:50 WITA) & Presensi Pulang (Wajib >= 16:00 WITA kecuali dibuka Guru Pembimbing)
+            if (window.cloudState.activeRole === 'siswa') {
+                let cekJam = window.cekIzinWaktuPresensiWita(tipeAbsen);
+                // Jika Presensi Pulang masih terbaca terkunci, cek langsung ke server Cloud siapa tahu Guru Pembimbing baru saja mengaktifkannya!
+                if (tipeAbsen === 'Pulang' && !cekJam.diizinkan && typeof window.tarikIzinPulangAwalDariCloud === 'function') {
+                    await window.tarikIzinPulangAwalDariCloud(true).catch(() => {});
+                    cekJam = window.cekIzinWaktuPresensiWita(tipeAbsen);
+                }
                 if (!cekJam.diizinkan) {
                     return window.showModalInfo(cekJam.judul, cekJam.pesan);
                 }
@@ -8542,7 +8545,6 @@
 
             // 2. Pengecekan syarat: Siswa wajib mengisi jurnal hari ini sebelum presensi pulang
             if (tipeAbsen === 'Pulang' && window.cloudState.activeRole === 'siswa') {
-                const todayStr = window.getTodayLocalWitaStr();
                 const sudahIsiJurnal = (window.cloudState.jurnal || []).some(j => 
                     (window.isNameMatch(j.siswa, profile.nama) || window.isNameMatch(j.siswa, placementInfo.namaSiswa) || j.user_id === (profile.identitas || profile.nama)) &&
                     window.normalizeTanggalStr(j.tanggal, j.id) === todayStr
@@ -13343,7 +13345,7 @@
             const jc = Object.assign({
                 masukMulai: "06:30",
                 masukTepatWaktu: "08:15",
-                masukBatasAkhir: "15:00",
+                masukBatasAkhir: "15:50",
                 pulangMulai: "16:00",
                 pulangBatasAkhir: "23:00"
             }, window.cloudState.jamConfig || {});
@@ -13369,7 +13371,7 @@
                     </div>
                     <div class="form-group">
                         <label class="form-label">Batas Akhir Masuk:</label>
-                        <input type="time" id="cfgJamMasukBatas" class="form-control" value="${jc.masukBatasAkhir || '15:00'}">
+                        <input type="time" id="cfgJamMasukBatas" class="form-control" value="${(jc.masukBatasAkhir && jc.masukBatasAkhir !== '15:00') ? jc.masukBatasAkhir : '15:50'}">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Jam Buka Pulang:</label>
@@ -13386,7 +13388,7 @@
         window.simpanJamGeofenceConfig = function() {
             const masukMulai = document.getElementById("cfgJamMasukMulai")?.value || "06:30";
             const masukTepatWaktu = document.getElementById("cfgJamMasukTepat")?.value || "08:15";
-            const masukBatasAkhir = document.getElementById("cfgJamMasukBatas")?.value || "15:00";
+            const masukBatasAkhir = document.getElementById("cfgJamMasukBatas")?.value || "15:50";
             const pulangMulai = document.getElementById("cfgJamPulangMulai")?.value || "16:00";
             const pulangBatasAkhir = document.getElementById("cfgJamPulangBatas")?.value || "23:00";
 
@@ -16226,6 +16228,31 @@
         window.addEventListener('DOMContentLoaded', async () => {
             window.bersihkanDataDummyLama(window.cloudState);
             window.inisialisasiSupabaseClient();
+            window._lastTrackedWitaDay = window.getTodayLocalWitaStr();
+
+            // Pantau pergantian hari otomatis (pukul 00:00 WITA):
+            // Jika hari berganti, reset otomatis centang presensi hari sebelumnya & perbarui filter tanggal hari ini
+            setInterval(() => {
+                window._cachedWitaTodayAt = 0;
+                const curDay = window.getTodayLocalWitaStr();
+                if (window._lastTrackedWitaDay && curDay !== window._lastTrackedWitaDay) {
+                    const prevDay = window._lastTrackedWitaDay;
+                    window._lastTrackedWitaDay = curDay;
+                    if (!window.selectedRekapPresensiDate || window.selectedRekapPresensiDate === prevDay) {
+                        window.selectedRekapPresensiDate = curDay;
+                    }
+                    if (!window.selectedRekapJurnalDate || window.selectedRekapJurnalDate === prevDay) {
+                        window.selectedRekapJurnalDate = curDay;
+                    }
+                    if (window.cloudState.userProfile && window.cloudState.currentFeature) {
+                        const cf = window.cloudState.currentFeature;
+                        if (cf === 'dashboard' || cf === 'rekap-masuk-pulang' || cf === 'rekap-absensi' || cf === 'rekap-jurnal') {
+                            window.openFeature(cf, undefined, true);
+                        }
+                    }
+                }
+            }, 60000);
+
             const savedSession = localStorage.getItem(STORAGE_KEY_SESSION);
             if (savedSession) {
                 try {
@@ -16324,30 +16351,37 @@
 
                 const rec1 = mapIzin[`${tgl}_${keyCanonical}`];
                 if (rec1 && rec1.aktif === true && rec1.tanggal === tgl) return true;
-
                 const rec2 = mapIzin[`${tgl}_${keyRaw}`];
                 if (rec2 && rec2.aktif === true && rec2.tanggal === tgl) return true;
 
-                for (const k in mapIzin) {
-                    const item = mapIzin[k];
-                    if (item && item.aktif === true && item.tanggal === tgl && item.namaSiswa) {
-                        if ((typeof window.isStudentNameEqual === 'function' && window.isStudentNameEqual(item.namaSiswa, canonicalNama)) ||
-                            (typeof window.isNameMatch === 'function' && window.isNameMatch(item.namaSiswa, canonicalNama))) {
-                            return true;
-                        }
-                    }
-                }
-                return false;
+                return Object.values(mapIzin).some(r =>
+                    r && r.aktif === true && r.tanggal === tgl &&
+                    (window.isNameMatch(r.namaSiswa, canonicalNama) || window.isNameMatch(r.namaSiswa, namaAtauIdentitas))
+                );
             };
 
-            // Simpan & sinkronkan daftar izin pulang awal ke localStorage & Cloud Supabase (tabel app_cloud_db baris 'izin_pulang_awal_harian')
-            window.simpanIzinPulangAwalKeCloud = async function() {
+            // Simpan & sinkronkan daftar izin pulang awal ke localStorage & Cloud Supabase (dengan merge agar antar guru tidak saling menimpa)
+            window.simpanIzinPulangAwalKeCloud = async function(changedKeys = [], removedKeys = []) {
+                if (typeof window.directRestFetchRow === 'function') {
+                    try {
+                        const remoteRow = await window.directRestFetchRow('app_cloud_db', 'id', 'izin_pulang_awal_harian');
+                        if (remoteRow && remoteRow.payload && remoteRow.payload.izinPulangAwal && typeof remoteRow.payload.izinPulangAwal === 'object') {
+                            const merged = Object.assign({}, remoteRow.payload.izinPulangAwal);
+                            changedKeys.forEach(k => {
+                                if (window.cloudState.izinPulangAwal && window.cloudState.izinPulangAwal[k]) {
+                                    merged[k] = window.cloudState.izinPulangAwal[k];
+                                }
+                            });
+                            removedKeys.forEach(k => { delete merged[k]; });
+                            window.cloudState.izinPulangAwal = merged;
+                        }
+                    } catch (e) {}
+                }
+
                 try {
                     localStorage.setItem("SIP_PKL_IZIN_PULANG_AWAL_MAP", JSON.stringify(window.cloudState.izinPulangAwal || {}));
                 } catch (e) {}
-                if (typeof window.simpanDatabasePersisten === 'function') {
-                    window.simpanDatabasePersisten(true);
-                }
+
                 if (typeof window.directRestUpsertRow === 'function') {
                     await window.directRestUpsertRow('app_cloud_db', {
                         id: 'izin_pulang_awal_harian',
@@ -16360,18 +16394,18 @@
             };
 
             // Tarik status izin pulang awal dari Supabase agar langsung terbaca di HP Siswa
-            window.tarikIzinPulangAwalDariCloud = async function() {
+            window.tarikIzinPulangAwalDariCloud = async function(silentRefresh = false) {
                 if (typeof window.directRestFetchRow !== 'function') return;
                 try {
                     const row = await window.directRestFetchRow('app_cloud_db', 'id', 'izin_pulang_awal_harian');
                     if (row && row.payload && row.payload.izinPulangAwal && typeof row.payload.izinPulangAwal === 'object') {
-                        const prevCount = Object.keys(window.cloudState.izinPulangAwal || {}).length;
+                        const prevStr = JSON.stringify(window.cloudState.izinPulangAwal || {});
                         window.cloudState.izinPulangAwal = row.payload.izinPulangAwal;
                         try {
                             localStorage.setItem("SIP_PKL_IZIN_PULANG_AWAL_MAP", JSON.stringify(window.cloudState.izinPulangAwal));
                         } catch (e) {}
-                        const newCount = Object.keys(window.cloudState.izinPulangAwal || {}).length;
-                        if (prevCount !== newCount && window.cloudState.userProfile && window.cloudState.currentFeature === 'dashboard') {
+                        const newStr = JSON.stringify(window.cloudState.izinPulangAwal || {});
+                        if (!silentRefresh && prevStr !== newStr && window.cloudState.userProfile && window.cloudState.currentFeature === 'dashboard') {
                             window.openFeature('dashboard', 'Beranda', true);
                         }
                     }
@@ -16397,11 +16431,11 @@
                         approvedBy: profile.nama || "Guru Pembimbing",
                         approvedAt: Date.now()
                     };
+                    await window.simpanIzinPulangAwalKeCloud([recordKey], []);
                 } else {
                     delete window.cloudState.izinPulangAwal[recordKey];
+                    await window.simpanIzinPulangAwalKeCloud([], [recordKey]);
                 }
-
-                await window.simpanIzinPulangAwalKeCloud();
 
                 if (typeof window.showModalInfo === 'function') {
                     window.showModalInfo(
@@ -16430,11 +16464,13 @@
 
                 const tgl = typeof window.getTodayLocalWitaStr === 'function' ? window.getTodayLocalWitaStr() : new Date().toISOString().split('T')[0];
                 window.cloudState.izinPulangAwal = window.cloudState.izinPulangAwal || {};
+                const addedKeys = [];
 
                 daftarSiswa.forEach(s => {
                     if (!s || !s.nama) return;
                     const keySiswa = window.normalizeTextCompact(s.nama);
-                    window.cloudState.izinPulangAwal[`${tgl}_${keySiswa}`] = {
+                    const recKey = `${tgl}_${keySiswa}`;
+                    window.cloudState.izinPulangAwal[recKey] = {
                         namaSiswa: s.nama,
                         keySiswa: keySiswa,
                         tanggal: tgl,
@@ -16442,9 +16478,10 @@
                         approvedBy: profile.nama || "Guru Pembimbing",
                         approvedAt: Date.now()
                     };
+                    addedKeys.push(recKey);
                 });
 
-                await window.simpanIzinPulangAwalKeCloud();
+                await window.simpanIzinPulangAwalKeCloud(addedKeys, []);
 
                 if (typeof window.showModalInfo === 'function') {
                     window.showModalInfo(
