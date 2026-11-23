@@ -13093,8 +13093,14 @@
                             <button type="button" onclick="window.unduhExcelRekapMasukPulang('harian')" class="btn-action btn-blue" style="font-size:11px; font-weight:850;">
                                 📄 Export Excel Harian (${activeDate})
                             </button>
-                            <button type="button" onclick="window.cetakPdfRekapPresensiUtuh('harian')" class="btn-action btn-red" style="font-size:11px; font-weight:850;">
-                                🖨️ Export PDF (${activeDate})
+                            <button type="button" onclick="window.exportHtmlDanPrintPdfRekapPresensi('harian')" class="btn-action btn-red" style="font-size:11px; font-weight:850;">
+                                🌐 Export HTML &amp; Print PDF (${activeDate})
+                            </button>
+                            <button type="button" onclick="window.unduhExcelRekapMasukPulang('belum')" class="btn-action btn-amber" style="font-size:11px; font-weight:850;">
+                                ⚠️ Export Belum Presensi Excel (${activeDate})
+                            </button>
+                            <button type="button" onclick="window.exportHtmlDanPrintPdfRekapPresensi('belum')" class="btn-action" style="background:#b91c1c; color:#ffffff; font-size:11px; font-weight:850;">
+                                🌐 Export Belum Presensi HTML &amp; PDF
                             </button>
                         </div>
                     </div>
@@ -13113,8 +13119,8 @@
                             <button type="button" onclick="window.unduhExcelRekapMasukPulang('semua')" class="btn-action btn-amber" style="font-size:11px; font-weight:900; padding:8px 12px;">
                                 📦 Export Excel Semua Tanggal (${allRoleAbsensi.length})
                             </button>
-                            <button type="button" onclick="window.cetakPdfRekapPresensiUtuh('semua')" class="btn-action btn-red" style="font-size:11px; font-weight:900; padding:8px 12px;">
-                                🖨️ Export PDF Utuh
+                            <button type="button" onclick="window.exportHtmlDanPrintPdfRekapPresensi('semua')" class="btn-action btn-red" style="font-size:11px; font-weight:900; padding:8px 12px;">
+                                🌐 Export HTML &amp; Print PDF Utuh
                             </button>
                         </div>
                     </div>
@@ -13164,6 +13170,65 @@
             </div>`;
         };
 
+        // Helper daftar siswa sesuai hak akses untuk mendeteksi siswa yang Belum Presensi Masuk & Belum Presensi Pulang
+        window.getDaftarSiswaBelumPresensiPadaTanggal = function(targetDate, role, profile, filteredAbsensiOnDate) {
+            let poolSiswa = [];
+            if (role === 'guru' && typeof window.getMyGuruStudentsMap === 'function') {
+                poolSiswa = Array.from(window.getMyGuruStudentsMap(profile.nama, profile.identitas).values());
+            } else if (role === 'industri' && typeof window.getMyIndustriStudents === 'function') {
+                poolSiswa = Array.from(window.getMyIndustriStudents(profile.nama).values());
+            } else {
+                poolSiswa = Array.isArray(window.cloudState.siswa) ? window.cloudState.siswa : [];
+            }
+
+            const belumMasuk = [];
+            const belumPulang = [];
+            const gabunganBelum = [];
+
+            poolSiswa.forEach(s => {
+                if (!s || !s.nama) return;
+                const info = window.getStudentPlacementInfo(s.nama, s.nis);
+                const namaResmi = (info && info.namaSiswa) ? info.namaSiswa : s.nama;
+                const kls = (s.kelas && s.kelas !== '-') ? s.kelas : ((info && info.kelas) ? info.kelas : '-');
+                const ind = (info && info.industri && info.industri !== 'Belum Ditentukan') ? info.industri : (s.industri || '-');
+                const guru = (info && info.guru && info.guru !== 'Belum Ditentukan') ? info.guru : (s.guru || '-');
+                const nis = (s.nis && s.nis !== '-') ? s.nis : ((info && info.nis) ? info.nis : '-');
+                const noHp = s.noHp || (info && info.siswaObj && info.siswaObj.noHp) || '-';
+
+                const absMasuk = filteredAbsensiOnDate.find(ab =>
+                    ab && ab.tipe_absen !== 'Pulang' &&
+                    (window.isNameMatch(ab.nama, namaResmi) || (nis !== '-' && String(ab.user_id || ab.nis || '').trim() === String(nis).trim()))
+                );
+                const absPulang = filteredAbsensiOnDate.find(ab =>
+                    ab && ab.tipe_absen === 'Pulang' &&
+                    (window.isNameMatch(ab.nama, namaResmi) || (nis !== '-' && String(ab.user_id || ab.nis || '').trim() === String(nis).trim()))
+                );
+
+                const rec = {
+                    tanggal: targetDate,
+                    nama: namaResmi,
+                    nis: nis,
+                    kelas: kls,
+                    industri: ind,
+                    guru: guru,
+                    noHp: noHp,
+                    statusMasuk: absMasuk ? `Sudah (${absMasuk.jam || '-'} WITA)` : 'Belum Presensi Masuk',
+                    statusPulang: absPulang ? `Sudah (${absPulang.jam || '-'} WITA)` : 'Belum Presensi Pulang'
+                };
+
+                if (!absMasuk) belumMasuk.push(rec);
+                if (!absPulang) belumPulang.push(rec);
+                if (!absMasuk || !absPulang) gabunganBelum.push(rec);
+            });
+
+            const sortFn = (a, b) => (a.nama || '').localeCompare(b.nama || '');
+            belumMasuk.sort(sortFn);
+            belumPulang.sort(sortFn);
+            gabunganBelum.sort(sortFn);
+
+            return { belumMasuk, belumPulang, gabunganBelum };
+        };
+
         window.unduhExcelRekapMasukPulang = async function(mode = 'bulanan') {
             if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
 
@@ -13178,12 +13243,34 @@
             const targetDate = document.getElementById("filterTanggalPresensiHarian")?.value || window.selectedRekapPresensiDate || todayStr;
             const targetMonth = document.getElementById("filterBulanExportPresensi")?.value || window.selectedRekapPresensiMonth || todayStr.substring(0, 7);
 
-            let filteredAbsensi = window.filterAbsensiByRoleAndProfile(window.cloudState.absensi || [], role, profile);
+            const allRoleAbsensi = window.filterAbsensiByRoleAndProfile(window.cloudState.absensi || [], role, profile);
+            const absensiOnTargetDate = allRoleAbsensi.filter(ab => ab && window.normalizeTanggalStr(ab.tanggal, ab.id) === targetDate);
 
+            // MODE KHUSUS: Export Siswa Belum Presensi (Belum Masuk & Belum Pulang) ke Excel
+            if (mode === 'belum') {
+                const { belumMasuk, belumPulang, gabunganBelum } = window.getDaftarSiswaBelumPresensiPadaTanggal(targetDate, role, profile, absensiOnTargetDate);
+                const wbBelum = XLSX.utils.book_new();
+
+                const buildSheetBelum = (arr) => {
+                    const rows = [["No", "Tanggal", "Nama Siswa", "NIS", "Kelas / Jurusan", "Tempat PKL (Industri)", "Guru Pembimbing", "No HP / WA", "Status Presensi Masuk", "Status Presensi Pulang"]];
+                    arr.forEach((s, idx) => {
+                        rows.push([idx + 1, s.tanggal, s.nama, s.nis, s.kelas, s.industri, s.guru, s.noHp, s.statusMasuk, s.statusPulang]);
+                    });
+                    return XLSX.utils.aoa_to_sheet(rows);
+                };
+
+                XLSX.utils.book_append_sheet(wbBelum, buildSheetBelum(belumMasuk), `Belum_Masuk_${targetDate}`.substring(0, 31));
+                XLSX.utils.book_append_sheet(wbBelum, buildSheetBelum(belumPulang), `Belum_Pulang_${targetDate}`.substring(0, 31));
+                XLSX.utils.book_append_sheet(wbBelum, buildSheetBelum(gabunganBelum), `Rekap_Belum_Lengkap`.substring(0, 31));
+                XLSX.writeFile(wbBelum, `Rekap_Belum_Presensi_${targetDate}_SMKN1_Marisa.xlsx`);
+                return;
+            }
+
+            let filteredAbsensi = allRoleAbsensi;
             if (mode === 'harian') {
-                filteredAbsensi = filteredAbsensi.filter(ab => ab && window.normalizeTanggalStr(ab.tanggal, ab.id) === targetDate);
+                filteredAbsensi = absensiOnTargetDate;
             } else if (mode === 'bulanan') {
-                filteredAbsensi = filteredAbsensi.filter(ab => ab && String(window.normalizeTanggalStr(ab.tanggal, ab.id) || '').startsWith(targetMonth));
+                filteredAbsensi = allRoleAbsensi.filter(ab => ab && String(window.normalizeTanggalStr(ab.tanggal, ab.id) || '').startsWith(targetMonth));
             }
             // Jika mode === 'semua', ekspor 100% seluruh data tanpa batasan tanggal/paginasi
 
@@ -13264,14 +13351,269 @@
 
             const ws = XLSX.utils.aoa_to_sheet(data);
             const wb = XLSX.utils.book_new();
-            const sheetTitle = mode === 'harian' ? `Presensi_${targetDate}` : (mode === 'bulanan' ? `Rekap_${targetMonth}` : 'Semua_Presensi');
+            const sheetTitle = mode === 'harian' ? `Sudah_Presensi_${targetDate}` : (mode === 'bulanan' ? `Rekap_${targetMonth}` : 'Semua_Presensi');
             XLSX.utils.book_append_sheet(wb, ws, sheetTitle.substring(0, 31));
+
+            // Pada Export Excel Harian, otomatis sertakan juga Sheet Belum Presensi Masuk & Sheet Belum Presensi Pulang
+            if (mode === 'harian') {
+                const { belumMasuk, belumPulang } = window.getDaftarSiswaBelumPresensiPadaTanggal(targetDate, role, profile, absensiOnTargetDate);
+                const rowsBM = [["No", "Tanggal", "Nama Siswa", "NIS", "Kelas / Jurusan", "Tempat PKL (Industri)", "Guru Pembimbing", "No HP / WA", "Status Masuk", "Status Pulang"]];
+                belumMasuk.forEach((s, idx) => rowsBM.push([idx + 1, s.tanggal, s.nama, s.nis, s.kelas, s.industri, s.guru, s.noHp, s.statusMasuk, s.statusPulang]));
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rowsBM), `Belum_Masuk_${targetDate}`.substring(0, 31));
+
+                const rowsBP = [["No", "Tanggal", "Nama Siswa", "NIS", "Kelas / Jurusan", "Tempat PKL (Industri)", "Guru Pembimbing", "No HP / WA", "Status Masuk", "Status Pulang"]];
+                belumPulang.forEach((s, idx) => rowsBP.push([idx + 1, s.tanggal, s.nama, s.nis, s.kelas, s.industri, s.guru, s.noHp, s.statusMasuk, s.statusPulang]));
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rowsBP), `Belum_Pulang_${targetDate}`.substring(0, 31));
+            }
+
             const fileName = mode === 'harian'
                 ? `Rekap_Presensi_Harian_${targetDate}.xlsx`
                 : (mode === 'bulanan'
                     ? `Rekap_Presensi_Bulanan_${targetMonth}_SMKN1_Marisa.xlsx`
                     : `Rekap_Presensi_Lengkap_SMKN1_Marisa_${todayStr}.xlsx`);
             XLSX.writeFile(wb, fileName);
+        };
+
+        window.exportHtmlDanPrintPdfRekapPresensi = async function(mode = 'harian') {
+            if (typeof window.omniScanSeluruhDataPresensiDanJurnalCloud === 'function') {
+                await window.omniScanSeluruhDataPresensiDanJurnalCloud(true).catch(() => {});
+            }
+            const role = window.cloudState.activeRole || "panitia";
+            const profile = window.cloudState.userProfile || { nama: "" };
+            const todayStr = window.getTodayLocalWitaStr();
+            const targetDate = document.getElementById("filterTanggalPresensiHarian")?.value || window.selectedRekapPresensiDate || todayStr;
+
+            const allRoleAbsensi = window.filterAbsensiByRoleAndProfile(window.cloudState.absensi || [], role, profile);
+            const absensiOnTargetDate = allRoleAbsensi.filter(ab => ab && window.normalizeTanggalStr(ab.tanggal, ab.id) === targetDate);
+            const filteredAbsensi = (mode === 'harian') ? absensiOnTargetDate : allRoleAbsensi;
+
+            const pairMap = new Map();
+            filteredAbsensi.forEach(ab => {
+                if (!ab || !ab.nama) return;
+                const info = window.getStudentPlacementInfo(ab.nama, ab.user_id || ab.nis);
+                const canonicalNama = (info && info.namaSiswa) ? info.namaSiswa : ab.nama;
+                const sKey = window.normalizeTextCompact(canonicalNama);
+                const tglNorm = window.normalizeTanggalStr(ab.tanggal, ab.id) || targetDate;
+                const key = `${tglNorm}_${sKey}`;
+                const opsiInfo = window.normalisasiLabelTigaOpsiPresensi(ab.kategori_hadir, ab.status_validasi_lokasi);
+                if (!pairMap.has(key)) {
+                    const kls = (ab.kelas && ab.kelas !== '-') ? ab.kelas : ((info && info.kelas && info.kelas !== '-') ? info.kelas : '-');
+                    const indName = (ab.industri && ab.industri !== '-' && ab.industri !== 'Belum Ditentukan') ? ab.industri : (info.industri || '-');
+                    pairMap.set(key, {
+                        tanggal: tglNorm,
+                        nama: canonicalNama,
+                        kelas: kls,
+                        industri: indName,
+                        masukJam: '-',
+                        pulangJam: '-',
+                        opsiLabel: opsiInfo.label,
+                        alasan: ab.alasan_presensi || '-',
+                        lokasi: ab.nama_lokasi_absen || indName || '-'
+                    });
+                }
+                const entry = pairMap.get(key);
+                if (ab.tipe_absen === 'Pulang') {
+                    entry.pulangJam = ab.jam ? `${ab.jam} WITA` : '-';
+                    if (opsiInfo.kode !== 'hadir_lokasi') entry.opsiLabel = opsiInfo.label;
+                    if (ab.alasan_presensi) entry.alasan = ab.alasan_presensi;
+                } else {
+                    entry.masukJam = ab.jam ? `${ab.jam} WITA` : '-';
+                    entry.opsiLabel = opsiInfo.label;
+                    if (ab.alasan_presensi) entry.alasan = ab.alasan_presensi;
+                }
+            });
+
+            const listSudah = Array.from(pairMap.values()).sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || '') || (a.nama || '').localeCompare(b.nama || ''));
+            const { belumMasuk, belumPulang } = window.getDaftarSiswaBelumPresensiPadaTanggal(targetDate, role, profile, absensiOnTargetDate);
+
+            const rowsSudahHtml = listSudah.map((it, idx) => `<tr>
+                <td style="text-align:center;">${idx + 1}</td>
+                <td>${it.tanggal}</td>
+                <td><b>${it.nama}</b> (${it.kelas})</td>
+                <td>${it.industri}</td>
+                <td style="text-align:center;">${it.masukJam}</td>
+                <td style="text-align:center;">${it.pulangJam}</td>
+                <td><b>${it.opsiLabel}</b>${it.alasan && it.alasan !== '-' ? `<br><i>Alasan: ${it.alasan}</i>` : ''}<br><span style="font-size:10px; color:#475569;">📍 ${it.lokasi}</span></td>
+            </tr>`).join('');
+
+            const buildBelumTableHtml = (arr, emptyMsg) => {
+                if (!arr || arr.length === 0) {
+                    return `<tr><td colspan="7" style="text-align:center; color:#15803d; font-weight:bold; padding:10px;">${emptyMsg}</td></tr>`;
+                }
+                return arr.map((s, idx) => `<tr>
+                    <td style="text-align:center;">${idx + 1}</td>
+                    <td><b>${s.nama}</b> (${s.kelas})</td>
+                    <td>${s.nis}</td>
+                    <td>${s.industri}</td>
+                    <td>${s.guru}</td>
+                    <td><span style="color:${s.statusMasuk.includes('Belum') ? '#dc2626' : '#15803d'}; font-weight:bold;">${s.statusMasuk}</span></td>
+                    <td><span style="color:${s.statusPulang.includes('Belum') ? '#d97706' : '#15803d'}; font-weight:bold;">${s.statusPulang}</span></td>
+                </tr>`).join('');
+            };
+
+            const judulUtama = (mode === 'belum')
+                ? `DAFTAR SISWA BELUM PRESENSI MASUK & PULANG (${targetDate})`
+                : (mode === 'harian'
+                    ? `REKAPITULASI PRESENSI HARIAN SISWA PKL (${targetDate})`
+                    : `REKAPITULASI LENGKAP PRESENSI SISWA PKL (SEMUA TANGGAL)`);
+
+            const fileNameHtml = (mode === 'belum')
+                ? `Rekap_Belum_Presensi_${targetDate}_SMKN1_Marisa.html`
+                : (mode === 'harian'
+                    ? `Rekap_Presensi_Harian_${targetDate}_SMKN1_Marisa.html`
+                    : `Rekap_Presensi_Utuh_SMKN1_Marisa_${todayStr}.html`);
+
+            const bagianSudahHtml = (mode !== 'belum') ? `
+                <h3 style="margin:14px 0 6px; font-size:13px; color:#0369a1; border-bottom:2px solid #0284c7; padding-bottom:4px;">
+                    ✅ DAFTAR SISWA SUDAH PRESENSI (${listSudah.length} Baris)
+                </h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:30px; text-align:center;">No</th>
+                            <th style="width:78px;">Tanggal</th>
+                            <th>Nama Siswa &amp; Kelas</th>
+                            <th>Tempat PKL (Industri)</th>
+                            <th style="width:78px; text-align:center;">Jam Masuk</th>
+                            <th style="width:78px; text-align:center;">Jam Pulang</th>
+                            <th>Opsi Presensi, Alasan &amp; Lokasi GPS</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsSudahHtml || '<tr><td colspan="7" style="text-align:center;">Belum ada data presensi</td></tr>'}</tbody>
+                </table>
+            ` : '';
+
+            const bagianBelumHtml = (mode === 'harian' || mode === 'belum') ? `
+                <h3 style="margin:18px 0 6px; font-size:13px; color:#b91c1c; border-bottom:2px solid #ef4444; padding-bottom:4px;">
+                    ⚠️ DAFTAR SISWA BELUM PRESENSI MASUK — TANGGAL ${targetDate} (${belumMasuk.length} Siswa)
+                </h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:30px; text-align:center;">No</th>
+                            <th>Nama Siswa &amp; Kelas</th>
+                            <th style="width:85px;">NIS</th>
+                            <th>Tempat PKL (Industri)</th>
+                            <th>Guru Pembimbing</th>
+                            <th style="width:120px;">Status Masuk</th>
+                            <th style="width:120px;">Status Pulang</th>
+                        </tr>
+                    </thead>
+                    <tbody>${buildBelumTableHtml(belumMasuk, 'Semua siswa sudah melakukan Presensi Masuk pada tanggal ini.')}</tbody>
+                </table>
+
+                <h3 style="margin:18px 0 6px; font-size:13px; color:#b45309; border-bottom:2px solid #f59e0b; padding-bottom:4px;">
+                    🚪 DAFTAR SISWA BELUM PRESENSI PULANG — TANGGAL ${targetDate} (${belumPulang.length} Siswa)
+                </h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:30px; text-align:center;">No</th>
+                            <th>Nama Siswa &amp; Kelas</th>
+                            <th style="width:85px;">NIS</th>
+                            <th>Tempat PKL (Industri)</th>
+                            <th>Guru Pembimbing</th>
+                            <th style="width:120px;">Status Masuk</th>
+                            <th style="width:120px;">Status Pulang</th>
+                        </tr>
+                    </thead>
+                    <tbody>${buildBelumTableHtml(belumPulang, 'Semua siswa sudah melakukan Presensi Pulang pada tanggal ini.')}</tbody>
+                </table>
+            ` : '';
+
+            const fullHtmlDocument = `<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${judulUtama} - SMKN 1 Marisa</title>
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; padding: 20px; color: #0f172a; background: #ffffff; margin: 0; }
+        .toolbar-print {
+            position: sticky; top: 0; z-index: 99;
+            background: #eff6ff; border: 1.5px solid #38bdf8; border-radius: 12px;
+            padding: 10px 14px; margin-bottom: 16px;
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+        }
+        .btn-tool {
+            border: none; border-radius: 8px; padding: 8px 14px; font-size: 12px; font-weight: bold;
+            cursor: pointer; color: #ffffff;
+        }
+        .btn-print-pdf { background: #dc2626; }
+        .btn-dl-html { background: #0284c7; }
+        .kop-header { text-align: center; border-bottom: 3px double #0f172a; padding-bottom: 10px; margin-bottom: 14px; }
+        .kop-header h2 { margin: 0; font-size: 16px; letter-spacing: 0.4px; }
+        .kop-header p { margin: 4px 0 0; font-size: 11px; color: #334155; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+        th, td { border: 1px solid #94a3b8; padding: 6px 8px; text-align: left; vertical-align: top; }
+        th { background: #e0f2fe; font-weight: bold; color: #0f172a; }
+        tr:nth-child(even) { background: #f8fafc; }
+        @media print {
+            .no-print { display: none !important; }
+            body { padding: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar-print no-print">
+        <div style="font-size:12px; font-weight:bold; color:#0369a1;">
+            📄 Laporan HTML Siap Cetak — SIP-PKL SMK Negeri 1 Marisa
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="btn-tool btn-dl-html" onclick="unduhBerkasHtmlIni()">💾 Simpan File HTML (.html)</button>
+            <button type="button" class="btn-tool btn-print-pdf" onclick="window.print()">🖨️ Print / Simpan PDF</button>
+        </div>
+    </div>
+
+    <div class="kop-header">
+        <h2>${judulUtama}</h2>
+        <p><b>SMK NEGERI 1 MARISA</b> &bull; Sistem Informasi Pengelolaan PKL (SIP-PKL)</p>
+        <p>Dicetak pada: ${todayStr} WITA &bull; Sudah Presensi: <b>${listSudah.length}</b> | Belum Masuk: <b>${belumMasuk.length}</b> | Belum Pulang: <b>${belumPulang.length}</b></p>
+    </div>
+
+    ${bagianSudahHtml}
+    ${bagianBelumHtml}
+
+    <script>
+        function unduhBerkasHtmlIni() {
+            var htmlContent = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;
+            var blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = "${fileNameHtml}";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+        }
+    <\/script>
+</body>
+</html>`;
+
+            const w = window.open('', '_blank');
+            if (w) {
+                w.document.open();
+                w.document.write(fullHtmlDocument);
+                w.document.close();
+            } else {
+                // Fallback jika browser memblokir pop-up: langsung unduh file .html ke perangkat
+                const blob = new Blob([fullHtmlDocument], { type: "text/html;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = fileNameHtml;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                window.showModalInfo("File HTML Diunduh 🌐", `Berkas <b>${fileNameHtml}</b> berhasil diunduh. Buka file tersebut di browser lalu klik tombol <b>🖨️ Print / Simpan PDF</b>.`);
+            }
+        };
+
+        // Pertahankan alias fungsi lama agar kompatibel jika dipanggil dari bagian lain
+        window.cetakPdfRekapPresensiUtuh = function(mode = 'semua') {
+            return window.exportHtmlDanPrintPdfRekapPresensi(mode);
         };
 
         window.cetakPdfRekapPresensiUtuh = async function(mode = 'semua') {
