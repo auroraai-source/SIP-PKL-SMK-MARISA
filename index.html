@@ -2271,18 +2271,18 @@
             return (h * 60) + m;
         };
 
-        // Validasi Ketat Jendela Waktu Presensi Masuk (06:30 s/d 15:50 WITA) & Pulang (Tepat 16:00 WITA kecuali dibuka Guru Pembimbing)
+        // Validasi Ketat Jendela Waktu Presensi Masuk & Pulang (Mengikuti 100% Pengaturan Jam & Geofence GPS Panitia PKL)
         window.cekStatusWaktuPresensiWita = function(tipeAbsen) {
             const jc = window.cloudState.jamConfig || {};
             const masukMulaiStr = jc.masukMulai || "06:30";
-            const masukBatasStr = (jc.masukBatasAkhir && jc.masukBatasAkhir !== "15:00") ? jc.masukBatasAkhir : "15:50";
+            const masukBatasStr = jc.masukBatasAkhir || "15:50";
             const pulangMulaiStr = jc.pulangMulai || "16:00";
             const pulangBatasStr = jc.pulangBatasAkhir || "23:00";
 
-            const masukMulaiMin = window.parseTimeStrToMinutes(masukMulaiStr, 6 * 60 + 30); // 06:30 = 390
-            const masukBatasMin = window.parseTimeStrToMinutes(masukBatasStr, 15 * 60 + 50); // 15:50 = 950
-            const pulangMulaiMin = Math.max(16 * 60, window.parseTimeStrToMinutes(pulangMulaiStr, 16 * 60)); // Minimal tepat 16:00 = 960
-            const pulangBatasMin = window.parseTimeStrToMinutes(pulangBatasStr, 23 * 60);   // 23:00 = 1380
+            const masukMulaiMin = window.parseTimeStrToMinutes(masukMulaiStr, 6 * 60 + 30);
+            const masukBatasMin = window.parseTimeStrToMinutes(masukBatasStr, 15 * 60 + 50);
+            const pulangMulaiMin = window.parseTimeStrToMinutes(pulangMulaiStr, 16 * 60);
+            const pulangBatasMin = window.parseTimeStrToMinutes(pulangBatasStr, 23 * 60);
 
             const nowWita = window.getCurrentWitaTimeObj();
             const curMin = nowWita.totalMinutes;
@@ -2315,7 +2315,7 @@
                         allowed: false,
                         reason: "BELUM_JAM_PULANG",
                         title: "Presensi Pulang Belum Dibuka 🔒",
-                        message: `Saat ini pukul <b>${nowWita.hmStr} WITA</b>.<br><br>Fitur <b>Presensi Pulang</b> baru akan terbuka tepat pada pukul <b>16:00 WITA</b> (kecuali diaktifkan lebih awal oleh Guru Pembimbing Anda).`,
+                        message: `Saat ini pukul <b>${nowWita.hmStr} WITA</b>.<br><br>Fitur <b>Presensi Pulang</b> baru akan terbuka mulai pukul <b>${pulangMulaiStr} WITA</b> (kecuali diaktifkan lebih awal oleh Guru Pembimbing Anda).`,
                         nowStr: nowWita.hmStr
                     };
                 }
@@ -8075,7 +8075,10 @@
 
             const cekWaktuMasuk = window.cekStatusWaktuPresensiWita('Masuk');
             const cekWaktuPulang = window.cekStatusWaktuPresensiWita('Pulang');
-            const masukBatasDisplay = (jc.masukBatasAkhir && jc.masukBatasAkhir !== '15:00') ? jc.masukBatasAkhir : '15:50';
+            const masukMulaiDisplay = jc.masukMulai || '06:30';
+            const masukBatasDisplay = jc.masukBatasAkhir || '15:50';
+            const pulangMulaiDisplay = jc.pulangMulai || '16:00';
+            const pulangBatasDisplay = jc.pulangBatasAkhir || '23:00';
 
             return `
             ${bannerHtml}
@@ -8087,7 +8090,7 @@
                     <div>
                         <div class="absensi-title-main">ABSENSI DIGITAL (${window.formatTanggalIndoLengkap(todayStr)})</div>
                         <div style="font-size: 10px; color: #0284c7; font-weight: 800; margin-top: 2px;">
-                            ⏰ Masuk: ${jc.masukMulai || '06:30'} s/d ${masukBatasDisplay} WITA &bull; Pulang: Buka Tepat 16:00 WITA
+                            ⏰ Masuk: ${masukMulaiDisplay} s/d ${masukBatasDisplay} WITA &bull; Pulang: Buka ${pulangMulaiDisplay} s/d ${pulangBatasDisplay} WITA
                         </div>
                     </div>
                     <div class="absensi-status-badge" style="color:${absenMasuk ? '#15803d' : '#b45309'}; font-weight:900;">${statusBadgeHariIni}</div>
@@ -8098,10 +8101,10 @@
                         <div style="flex:1;">
                             <div class="btn-absensi-text">PRESENSI MASUK</div>
                             <div style="font-size: 10px; color: #475569; font-weight: 800; margin-top: 2px;">
-                                ${absenMasuk ? `Tercatat: ${absenMasuk.jam} WITA` : `Buka: ${jc.masukMulai || '06:30'} - ${masukBatasDisplay} WITA`}
+                                ${absenMasuk ? `Tercatat: ${absenMasuk.jam} WITA` : `Buka: ${masukMulaiDisplay} - ${masukBatasDisplay} WITA`}
                             </div>
                             <div style="font-size: 9.5px; font-weight: 850; margin-top: 4px; line-height: 1.25; color: ${absenMasuk ? '#15803d' : (!cekWaktuMasuk.allowed ? '#b91c1c' : '#dc2626')};">
-                                ${absenMasuk ? '✅ Terkunci (Sudah Presensi Masuk Hari Ini)' : (!cekWaktuMasuk.allowed ? `🔒 Ditutup (Lewat Pukul ${masukBatasDisplay} WITA)` : '⚠️ Anda belum melakukan presensi masuk')}
+                                ${absenMasuk ? '✅ Terkunci (Sudah Presensi Masuk Hari Ini)' : (!cekWaktuMasuk.allowed ? (cekWaktuMasuk.reason === 'BELUM_WAKTU_MASUK' ? `🔒 Dibuka Pukul ${masukMulaiDisplay} WITA` : `🔒 Ditutup (Lewat Pukul ${masukBatasDisplay} WITA)`) : '⚠️ Anda belum melakukan presensi masuk')}
                             </div>
                         </div>
                     </div>
@@ -8110,10 +8113,10 @@
                         <div style="flex:1;">
                             <div class="btn-absensi-text">PRESENSI PULANG</div>
                             <div style="font-size: 10px; color: #475569; font-weight: 800; margin-top: 2px;">
-                                ${absenPulang ? `Tercatat: ${absenPulang.jam} WITA` : (cekWaktuPulang.earlyApprovedByGuru ? '🔓 Diaktifkan Guru Pembimbing' : `Buka Tepat: 16:00 - ${jc.pulangBatasAkhir || '23:00'} WITA`)}
+                                ${absenPulang ? `Tercatat: ${absenPulang.jam} WITA` : (cekWaktuPulang.earlyApprovedByGuru ? '🔓 Diaktifkan Guru Pembimbing' : `Buka: ${pulangMulaiDisplay} - ${pulangBatasDisplay} WITA`)}
                             </div>
                             <div style="font-size: 9.5px; font-weight: 850; margin-top: 4px; line-height: 1.25; color: ${absenPulang ? '#15803d' : (cekWaktuPulang.earlyApprovedByGuru ? '#059669' : (!cekWaktuPulang.allowed ? '#b45309' : '#dc2626'))};">
-                                ${absenPulang ? '✅ Terkunci (Sudah Presensi Pulang Hari Ini)' : (cekWaktuPulang.earlyApprovedByGuru ? '✓ Terbuka lebih awal oleh Guru Pembimbing' : (!cekWaktuPulang.allowed ? '🔒 Terkunci s/d Pukul 16:00 WITA' : '⚠️ Anda belum melakukan presensi pulang'))}
+                                ${absenPulang ? '✅ Terkunci (Sudah Presensi Pulang Hari Ini)' : (cekWaktuPulang.earlyApprovedByGuru ? '✓ Terbuka lebih awal oleh Guru Pembimbing' : (!cekWaktuPulang.allowed ? `🔒 Terkunci s/d Pukul ${pulangMulaiDisplay} WITA` : '⚠️ Anda belum melakukan presensi pulang'))}
                             </div>
                         </div>
                     </div>
@@ -8387,42 +8390,53 @@
         };
 
         window.cekIzinWaktuPresensiWita = function(tipeAbsen) {
+            const jc = window.cloudState.jamConfig || {};
+            const masukMulaiStr = jc.masukMulai || "06:30";
+            const masukBatasStr = jc.masukBatasAkhir || "15:50";
+            const pulangMulaiStr = jc.pulangMulai || "16:00";
+            const pulangBatasStr = jc.pulangBatasAkhir || "23:00";
+
+            const masukMulaiMin = window.parseTimeStrToMinutes(masukMulaiStr, 6 * 60 + 30);
+            const masukBatasMin = window.parseTimeStrToMinutes(masukBatasStr, 15 * 60 + 50);
+            const pulangMulaiMin = window.parseTimeStrToMinutes(pulangMulaiStr, 16 * 60);
+            const pulangBatasMin = window.parseTimeStrToMinutes(pulangBatasStr, 23 * 60);
+
             const wita = window.getWaktuWitaSekarang();
             const mNow = wita.totalMenit;
 
-            // Aturan Presensi Masuk: Buka 06:30 (390) s/d 15:50 (950) WITA
+            // Aturan Presensi Masuk: Mengikuti 100% Pengaturan Jam & Geofence GPS Panitia PKL
             if (tipeAbsen === 'Masuk') {
-                if (mNow < (6 * 60 + 30)) {
+                if (mNow < masukMulaiMin) {
                     return {
                         diizinkan: false,
                         judul: "Presensi Masuk Belum Dibuka ⏰",
-                        pesan: `Waktu saat ini pukul <b>${wita.jamStr} WITA</b>.<br><br>Fitur <b>Presensi Masuk</b> baru dapat dibuka mulai pukul <b>06:30 WITA</b> hingga pukul <b>15:50 WITA</b>.`
+                        pesan: `Waktu saat ini pukul <b>${wita.jamStr} WITA</b>.<br><br>Fitur <b>Presensi Masuk</b> baru dapat dibuka mulai pukul <b>${masukMulaiStr} WITA</b> hingga pukul <b>${masukBatasStr} WITA</b>.`
                     };
                 }
-                if (mNow > (15 * 60 + 50)) {
+                if (mNow > masukBatasMin) {
                     return {
                         diizinkan: false,
                         judul: "Waktu Presensi Masuk Telah Ditutup 🔒",
-                        pesan: `Waktu saat ini pukul <b>${wita.jamStr} WITA</b>.<br><br>Sesuai ketentuan disiplin PKL, batas akhir <b>Presensi Masuk</b> adalah pukul <b>15:50 WITA</b>. Anda sudah tidak dapat melakukan presensi masuk untuk hari ini.`
+                        pesan: `Waktu saat ini pukul <b>${wita.jamStr} WITA</b>.<br><br>Sesuai pengaturan Panitia PKL, batas akhir <b>Presensi Masuk</b> adalah pukul <b>${masukBatasStr} WITA</b>. Anda sudah tidak dapat melakukan presensi masuk untuk hari ini.`
                     };
                 }
                 return { diizinkan: true, jamStr: wita.jamStr };
             }
 
-            // Aturan Presensi Pulang: Terkunci sebelum pukul 16:00 (960) WITA, kecuali diaktifkan Guru Pembimbing
+            // Aturan Presensi Pulang: Mengikuti 100% Pengaturan Jam & Geofence GPS Panitia PKL (kecuali diaktifkan lebih awal oleh Guru Pembimbing)
             if (tipeAbsen === 'Pulang') {
-                if (mNow < (16 * 60)) {
+                if (mNow < pulangMulaiMin) {
                     return {
                         diizinkan: false,
                         judul: "Presensi Pulang Belum Dapat Dibuka 🔒",
-                        pesan: `Waktu saat ini pukul <b>${wita.jamStr} WITA</b>.<br><br>Fitur <b>Presensi Pulang</b> baru akan terbuka tepat pada pukul <b>16:00 WITA</b>.<br><br><span style="color:#0284c7; font-weight:800;">💡 Jika pihak industri memulangkan Anda lebih awal, laporkan ke Guru Pembimbing Anda agar beliau menekan tombol <b>"🔓 Aktifkan Presensi Pulang"</b> di Dashboard Guru.</span>`
+                        pesan: `Waktu saat ini pukul <b>${wita.jamStr} WITA</b>.<br><br>Fitur <b>Presensi Pulang</b> baru akan terbuka mulai pukul <b>${pulangMulaiStr} WITA</b>.<br><br><span style="color:#0284c7; font-weight:800;">💡 Jika pihak industri memulangkan Anda lebih awal, laporkan ke Guru Pembimbing Anda agar beliau menekan tombol <b>"🔓 Aktifkan Presensi Pulang"</b> di Dashboard Guru.</span>`
                     };
                 }
-                if (mNow > (23 * 60 + 59)) {
+                if (mNow > pulangBatasMin) {
                     return {
                         diizinkan: false,
                         judul: "Waktu Presensi Pulang Berakhir ⏰",
-                        pesan: `Waktu presensi pulang hari ini telah ditutup.`
+                        pesan: `Batas akhir presensi pulang hari ini (pukul <b>${pulangBatasStr} WITA</b>) telah berakhir.`
                     };
                 }
                 return { diizinkan: true, jamStr: wita.jamStr };
@@ -13371,7 +13385,7 @@
                     </div>
                     <div class="form-group">
                         <label class="form-label">Batas Akhir Masuk:</label>
-                        <input type="time" id="cfgJamMasukBatas" class="form-control" value="${(jc.masukBatasAkhir && jc.masukBatasAkhir !== '15:00') ? jc.masukBatasAkhir : '15:50'}">
+                        <input type="time" id="cfgJamMasukBatas" class="form-control" value="${jc.masukBatasAkhir || '15:50'}">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Jam Buka Pulang:</label>
@@ -13385,16 +13399,46 @@
             </div>`;
         };
 
-        window.simpanJamGeofenceConfig = function() {
+        window.simpanJamGeofenceConfig = async function() {
             const masukMulai = document.getElementById("cfgJamMasukMulai")?.value || "06:30";
             const masukTepatWaktu = document.getElementById("cfgJamMasukTepat")?.value || "08:15";
             const masukBatasAkhir = document.getElementById("cfgJamMasukBatas")?.value || "15:50";
             const pulangMulai = document.getElementById("cfgJamPulangMulai")?.value || "16:00";
             const pulangBatasAkhir = document.getElementById("cfgJamPulangBatas")?.value || "23:00";
+            const nowTs = Date.now();
 
-            window.cloudState.jamConfig = { masukMulai, masukTepatWaktu, masukBatasAkhir, pulangMulai, pulangBatasAkhir };
+            const newJamCfg = {
+                masukMulai,
+                masukTepatWaktu,
+                masukBatasAkhir,
+                pulangMulai,
+                pulangBatasAkhir,
+                masuk: masukTepatWaktu,
+                pulang: pulangMulai,
+                toleransi: 100,
+                updatedAt: nowTs
+            };
+
+            window.cloudState.jamConfig = newJamCfg;
+            try {
+                localStorage.setItem("SIP_PKL_JAM_CONFIG_V2", JSON.stringify(newJamCfg));
+            } catch (e) {}
+
+            // Simpan ke saluran khusus Cloud jam_geofence_config agar langsung disinkronkan ke seluruh HP Siswa
+            if (typeof window.directRestUpsertRow === 'function') {
+                await window.directRestUpsertRow('app_cloud_db', {
+                    id: 'jam_geofence_config',
+                    payload: newJamCfg
+                }, 'id').catch(() => {});
+            }
+
             window.simpanDatabasePersisten(true);
-            window.showModalInfo("Tersimpan ⏰", "Konfigurasi jam presensi berhasil diperbarui.");
+            window.showModalInfo(
+                "Jam Presensi Tersimpan & Tersinkron! ⏰✅",
+                `Pengaturan jam berhasil dikunci dan langsung berlaku di seluruh Dashboard Siswa:<br><br>` +
+                `&bull; <b>Presensi Masuk:</b> ${masukMulai} s/d ${masukBatasAkhir} WITA (Tepat Waktu s/d ${masukTepatWaktu})<br>` +
+                `&bull; <b>Presensi Pulang:</b> ${pulangMulai} s/d ${pulangBatasAkhir} WITA`
+            );
         };
 
         window.renderPeriodePKLPanel = function() {
@@ -13495,42 +13539,24 @@
         };
 
         window.siarkanBannerKeSeluruhEkosistem = async function() {
-            const nowTs = Date.now();
-            window.cloudState.customBannerUpdatedAt = nowTs;
-            window.cloudState.lastUpdated = nowTs;
-            try {
-                localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(window.cloudState.bannerSliderImages || []));
-            } catch(e) {}
-            window.showModalInfo("⏳ Menyiarkan Banner...", "Sedang mengunggah dan menyinkronkan gambar banner dari Admin ke seluruh Dashboard Siswa, Guru, Industri, dan Orang Tua...");
-            await window.simpanBannerMasterKeSupabase(window.cloudState.bannerSliderImages || []);
-            const ok = await window.kirimSnapshotKeSupabase(window.cloudState, true);
-            if (ok) {
-                window.showModalInfo(
-                    "Banner Berhasil Disiarkan ke Seluruh Ekosistem! 🚀",
-                    `Seluruh <b>${(window.cloudState.bannerSliderImages || []).length} slide gambar banner</b> di Panel Admin telah dikunci sebagai versi terbaru di Supabase Cloud.<br><br>` +
-                    `<span style="color:#16a34a; font-weight:800;">✓ Saat Siswa, Guru, Industri, atau Orang Tua membuka dashboard mereka, gambar banner baru akan langsung tampil menggantikan banner lama!</span>`
-                );
-            } else {
-                window.showModalInfo("Gagal Menyiarkan Banner ⚠️", "Pastikan koneksi internet aktif lalu coba tekan tombol kembali.");
-            }
+            const list = (window.cloudState.bannerSliderImages && window.cloudState.bannerSliderImages.length > 0)
+                ? window.cloudState.bannerSliderImages
+                : DEFAULT_BANNER_IMAGES;
+            await window.simpanBannerMasterKeSupabase(list);
+            window.simpanDatabasePersisten(true);
+            window.showModalInfo("Banner Disiarkan 🚀", "Seluruh gambar banner berhasil dikirim ke server Cloud dan akan tampil di semua perangkat ekosistem.");
         };
 
-        window.pulihkan9BannerJurusanDefault = function() {
-            window.showConfirmDialog(
-                "Muat 9 Banner Jurusan",
-                "Kembalikan daftar slide menjadi <b>9 Banner Jurusan SMK Negeri 1 Marisa</b> (AK, BD, NKPI, DPIB, TSM, TKR, TJKT, TP, TKP)?<br><br><i>Setelah dimuat, Anda tetap dapat menekan tombol <b>✏️ Edit</b> pada masing-masing jurusan untuk mengganti fotonya.</i>",
-                async () => {
-                    window.cloudState.bannerSliderImages = JSON.parse(JSON.stringify(DEFAULT_BANNER_IMAGES));
-                    window.cloudState.customBannerUpdatedAt = Date.now();
-                    try {
-                        localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(window.cloudState.bannerSliderImages));
-                    } catch(e) {}
-                    await window.simpanBannerMasterKeSupabase(window.cloudState.bannerSliderImages);
-                    window.simpanDatabasePersisten(true);
-                    window.showModalInfo("9 Banner Jurusan Aktif ✅", "Kesembilan banner jurusan SMK Negeri 1 Marisa berhasil dimuat dan dikunci. Gunakan tombol <b>✏️ Edit</b> di samping setiap banner jika ingin mengganti gambar per jurusan.");
-                    window.openFeature("banner-jadwal", "Banner Gambar Slider");
-                }
-            );
+        window.pulihkan9BannerJurusanDefault = async function() {
+            window.cloudState.bannerSliderImages = JSON.parse(JSON.stringify(DEFAULT_BANNER_IMAGES));
+            window.cloudState.customBannerUpdatedAt = Date.now();
+            try {
+                localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(window.cloudState.bannerSliderImages));
+            } catch (e) {}
+            await window.simpanBannerMasterKeSupabase(window.cloudState.bannerSliderImages);
+            window.simpanDatabasePersisten(true);
+            window.showModalInfo("9 Banner Jurusan Dipulihkan 🔄", "Seluruh 9 slide banner konsentrasi keahlian SMKN 1 Marisa telah dimuat kembali.");
+            window.openFeature("banner-jadwal", "Banner Gambar Slider");
         };
 
         window.bukaModalUploadBannerBaru = function() {
@@ -16617,6 +16643,258 @@
                     window.tarikIzinPulangAwalDariCloud();
                 }
             }, 25000);
+        })();
+
+        // =========================================================================
+        // MODUL ADITIF: SINKRONISASI JAM & GEOFENCE PANITIA + KUNCI GPS PERMANEN PER SISWA
+        // (1x Kode Akses untuk Hadir di Lokasi Industri 100m, tidak perlu kode lagi saat pulang/hari berikutnya)
+        // =========================================================================
+        (function() {
+            // 1. Muat konfigurasi jam terbaru dari penyimpanan lokal jika ada
+            try {
+                const rawJam = localStorage.getItem("SIP_PKL_JAM_CONFIG_V2");
+                if (rawJam) {
+                    const parsedJam = JSON.parse(rawJam);
+                    if (parsedJam && parsedJam.masukMulai && Number(parsedJam.updatedAt || 0) >= Number(window.cloudState.jamConfig?.updatedAt || 0)) {
+                        window.cloudState.jamConfig = Object.assign({}, window.cloudState.jamConfig || {}, parsedJam);
+                    }
+                }
+            } catch (e) {}
+
+            // Tarik konfigurasi jam resmi terbaru dari baris khusus `jam_geofence_config` di Supabase
+            window.tarikJamGeofenceConfigDariCloud = async function(silentRefresh = false) {
+                if (typeof window.directRestFetchRow !== 'function') return;
+                try {
+                    const row = await window.directRestFetchRow('app_cloud_db', 'id', 'jam_geofence_config');
+                    if (row && row.payload && row.payload.masukMulai) {
+                        const remoteCfg = row.payload;
+                        const localTs = Number(window.cloudState.jamConfig?.updatedAt || 0);
+                        const remoteTs = Number(remoteCfg.updatedAt || 0);
+                        const prevKey = JSON.stringify(window.cloudState.jamConfig || {});
+                        if (remoteTs >= localTs || !localTs) {
+                            window.cloudState.jamConfig = Object.assign({}, window.cloudState.jamConfig || {}, remoteCfg);
+                            try {
+                                localStorage.setItem("SIP_PKL_JAM_CONFIG_V2", JSON.stringify(window.cloudState.jamConfig));
+                            } catch (e) {}
+                            const newKey = JSON.stringify(window.cloudState.jamConfig || {});
+                            if (!silentRefresh && prevKey !== newKey && window.cloudState.userProfile && window.cloudState.currentFeature === 'dashboard' && window.cloudState.activeRole === 'siswa') {
+                                window.openFeature('dashboard', 'Beranda', true);
+                            }
+                        }
+                    }
+                } catch (e) {}
+            };
+
+            // 2. Penguatan Penguncian Permanen Titik Lokasi GPS Per Siswa (Baris Atomik `gpslock_<siswa>` anti-tertimpa)
+            window.simpanKunciGpsAtomikSiswa = function(namaSiswa, namaInd, latVal, lngVal, namaCabang = "") {
+                const sNorm = window.normalizeTextCompact(namaSiswa);
+                const fixedLat = parseFloat(latVal);
+                const fixedLng = parseFloat(lngVal);
+                if (!sNorm || isNaN(fixedLat) || isNaN(fixedLng)) return;
+
+                const rec = {
+                    lat: fixedLat.toFixed(6),
+                    lng: fixedLng.toFixed(6),
+                    radius: 100,
+                    namaInd: namaInd || "",
+                    namaSiswa: namaSiswa || "",
+                    namaCabang: namaCabang || "",
+                    lockedAt: Date.now()
+                };
+
+                try {
+                    localStorage.setItem(`SIP_PKL_GPSLOCK_${sNorm}`, JSON.stringify(rec));
+                } catch (e) {}
+
+                window.cloudState.gpsLockedMap = window.cloudState.gpsLockedMap || {};
+                window.cloudState.gpsLockedMap[`siswa__${sNorm}`] = rec;
+                const indKey = window.normalizeTextCompact(namaInd);
+                if (indKey) window.cloudState.gpsLockedMap[`${indKey}__${sNorm}`] = rec;
+
+                if (typeof window.directRestUpsertRow === 'function') {
+                    window.directRestUpsertRow('app_cloud_db', {
+                        id: `gpslock_${sNorm}`,
+                        payload: rec
+                    }, 'id').catch(() => {});
+                }
+            };
+
+            window.tarikKunciGpsAtomikSiswaLogin = async function() {
+                if (window.cloudState.activeRole !== 'siswa' || !window.cloudState.userProfile) return;
+                if (typeof window.directRestFetchRow !== 'function') return;
+                try {
+                    const prof = window.cloudState.userProfile;
+                    const pInfo = typeof window.getStudentPlacementInfo === 'function' ? window.getStudentPlacementInfo(prof.nama, prof.identitas) : null;
+                    const namaResmi = (pInfo && pInfo.namaSiswa) ? pInfo.namaSiswa : prof.nama;
+                    const sNorm = window.normalizeTextCompact(namaResmi);
+                    if (!sNorm) return;
+
+                    const row = await window.directRestFetchRow('app_cloud_db', 'id', `gpslock_${sNorm}`);
+                    if (row && row.payload && row.payload.lat && row.payload.lng) {
+                        const rec = row.payload;
+                        try {
+                            localStorage.setItem(`SIP_PKL_GPSLOCK_${sNorm}`, JSON.stringify(rec));
+                        } catch (e) {}
+                        window.cloudState.gpsLockedMap = window.cloudState.gpsLockedMap || {};
+                        window.cloudState.gpsLockedMap[`siswa__${sNorm}`] = rec;
+                        const indKey = window.normalizeTextCompact(rec.namaInd || (pInfo ? pInfo.industri : ""));
+                        if (indKey) window.cloudState.gpsLockedMap[`${indKey}__${sNorm}`] = rec;
+                    }
+                } catch (e) {}
+            };
+
+            // Bungkus kunciKoordinatGpsIndustriPermanen agar selalu menulis baris atomik per siswa
+            const origKunciGps = window.kunciKoordinatGpsIndustriPermanen;
+            if (typeof origKunciGps === 'function') {
+                window.kunciKoordinatGpsIndustriPermanen = function(namaInd, latVal, lngVal, namaSiswaOpsional, isCabangBaru, namaCabang) {
+                    const res = origKunciGps.apply(this, arguments);
+                    if (namaSiswaOpsional) {
+                        window.simpanKunciGpsAtomikSiswa(namaSiswaOpsional, namaInd, latVal, lngVal, namaCabang || "");
+                    }
+                    return res;
+                };
+            }
+
+            // Bungkus ambilKoordinatTerkunciIndustri agar prioritas #1 membaca kunci atomik milik siswa tersebut
+            const origAmbilKunciGps = window.ambilKoordinatTerkunciIndustri;
+            if (typeof origAmbilKunciGps === 'function') {
+                window.ambilKoordinatTerkunciIndustri = function(namaInd, dataIndObj, namaSiswaOpsional) {
+                    if (namaSiswaOpsional) {
+                        const sNorm = window.normalizeTextCompact(namaSiswaOpsional);
+                        try {
+                            const rawAtom = localStorage.getItem(`SIP_PKL_GPSLOCK_${sNorm}`);
+                            if (rawAtom) {
+                                const rec = JSON.parse(rawAtom);
+                                if (rec && rec.lat && rec.lng && !window.isDefaultUncalibratedCoords(rec.lat, rec.lng, { gpsLocked: true })) {
+                                    return {
+                                        lat: parseFloat(rec.lat),
+                                        lng: parseFloat(rec.lng),
+                                        radius: Math.max(parseInt(rec.radius) || 100, 100),
+                                        isLocked: true,
+                                        namaCabang: rec.namaCabang || ""
+                                    };
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                    return origAmbilKunciGps.apply(this, arguments);
+                };
+            }
+
+            // Bungkus hitungJarakTerdekatKeIndustri agar juga membandingkan dengan koordinat Presensi Masuk valid milik siswa sendiri
+            // sehingga siswa yang sudah berhasil presensi masuk di lokasi industri tidak diminta kode akses lagi saat presensi pulang
+            const origHitungJarak = window.hitungJarakTerdekatKeIndustri;
+            if (typeof origHitungJarak === 'function') {
+                window.hitungJarakTerdekatKeIndustri = function(curLat, curLng, targetNamaInd, namaSiswaResmi, fallbackLat, fallbackLng, fallbackRadius) {
+                    const baseRes = origHitungJarak.apply(this, arguments);
+                    if (baseRes && baseRes.isCalibrated && baseRes.inRadius) return baseRes;
+
+                    const extraPoints = [];
+                    const sNorm = window.normalizeTextCompact(namaSiswaResmi);
+
+                    // 1. Cek kunci atomik per siswa
+                    try {
+                        const rawAtom = localStorage.getItem(`SIP_PKL_GPSLOCK_${sNorm}`);
+                        if (rawAtom) {
+                            const rec = JSON.parse(rawAtom);
+                            if (rec && rec.lat && rec.lng) {
+                                extraPoints.push({ lat: parseFloat(rec.lat), lng: parseFloat(rec.lng), label: rec.namaCabang || targetNamaInd });
+                            }
+                        }
+                    } catch (e) {}
+
+                    // 2. Cek riwayat Presensi Masuk "Hadir di Lokasi Industri" yang pernah berhasil dilakukan siswa ini
+                    const prevValidAbsens = (window.cloudState.absensi || []).filter(a =>
+                        a && a.latitude && a.longitude &&
+                        window.isNameMatch(a.nama, namaSiswaResmi) &&
+                        String(a.kategori_hadir || "Hadir di Lokasi Industri").toLowerCase().includes("hadir") &&
+                        !window.isDefaultUncalibratedCoords(a.latitude, a.longitude, { gpsLocked: true })
+                    ).slice(0, 5);
+
+                    prevValidAbsens.forEach(a => {
+                        const aLat = parseFloat(a.latitude);
+                        const aLng = parseFloat(a.longitude);
+                        if (!isNaN(aLat) && !isNaN(aLng)) {
+                            extraPoints.push({ lat: aLat, lng: aLng, label: targetNamaInd });
+                        }
+                    });
+
+                    if (extraPoints.length > 0) {
+                        const rad = Math.max(baseRes?.radius || 100, 100);
+                        let bestD = baseRes ? baseRes.distance : Infinity;
+                        let bestPt = null;
+                        extraPoints.forEach(pt => {
+                            if (isNaN(pt.lat) || isNaN(pt.lng)) return;
+                            const d = window.hitungJarakMeterHaversine(curLat, curLng, pt.lat, pt.lng);
+                            if (d < bestD) {
+                                bestD = d;
+                                bestPt = pt;
+                            }
+                        });
+                        if (bestPt) {
+                            return {
+                                isCalibrated: true,
+                                inRadius: bestD <= rad,
+                                distance: bestD,
+                                targetLat: bestPt.lat,
+                                targetLng: bestPt.lng,
+                                radius: rad,
+                                lokasiLabel: bestPt.label || targetNamaInd
+                            };
+                        }
+                    }
+
+                    return baseRes;
+                };
+            }
+
+            // Bungkus bukaModalAmbilPresensiSelfieGPS agar terlebih dahulu menyinkronkan jamConfig & kunci GPS atomik siswa
+            const origBukaPresensi = window.bukaModalAmbilPresensiSelfieGPS;
+            if (typeof origBukaPresensi === 'function') {
+                window.bukaModalAmbilPresensiSelfieGPS = async function(tipeAbsen) {
+                    if (window.cloudState.activeRole === 'siswa') {
+                        await Promise.race([
+                            Promise.all([
+                                window.tarikJamGeofenceConfigDariCloud(true).catch(() => {}),
+                                window.tarikKunciGpsAtomikSiswaLogin().catch(() => {})
+                            ]),
+                            new Promise(r => setTimeout(r, 1200))
+                        ]);
+                    }
+                    return origBukaPresensi.apply(this, arguments);
+                };
+            }
+
+            // Bungkus simpanPresensiSelfieFinal: setiap kali siswa berhasil presensi "Hadir di Lokasi Industri",
+            // perkuat & kunci permanen titik lokasinya pada baris atomik siswa agar Presensi Pulang & hari berikutnya bebas kode akses
+            const origSimpanPresensi = window.simpanPresensiSelfieFinal;
+            if (typeof origSimpanPresensi === 'function') {
+                window.simpanPresensiSelfieFinal = async function(tipeAbsen, industriNama, indLat, indLng, indRadius) {
+                    const kat = document.getElementById("presensiKategoriSelect")?.value || "hadir_lokasi";
+                    const loc = window.currentSelfieLocation;
+                    const res = await origSimpanPresensi.apply(this, arguments);
+                    if (kat === 'hadir_lokasi' && loc && loc.inRadius && loc.lat && loc.lng) {
+                        const prof = window.cloudState.userProfile || {};
+                        const pInfo = typeof window.getStudentPlacementInfo === 'function' ? window.getStudentPlacementInfo(prof.nama, prof.identitas) : null;
+                        const namaResmi = (pInfo && pInfo.namaSiswa) ? pInfo.namaSiswa : prof.nama;
+                        if (namaResmi) {
+                            window.simpanKunciGpsAtomikSiswa(namaResmi, industriNama, loc.lat, loc.lng, "");
+                        }
+                    }
+                    return res;
+                };
+            }
+
+            // Jalankan sinkronisasi jamConfig & kunci GPS atomik saat aplikasi dibuka & berkala
+            setTimeout(() => {
+                window.tarikJamGeofenceConfigDariCloud();
+                window.tarikKunciGpsAtomikSiswaLogin();
+            }, 900);
+            setInterval(() => {
+                if (!document.hidden && !window.isSavingToCloud) {
+                    window.tarikJamGeofenceConfigDariCloud();
+                }
+            }, 30000);
         })();
         
     </script>
