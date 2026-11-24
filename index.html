@@ -13269,22 +13269,15 @@
             const allRoleAbsensi = window.filterAbsensiByRoleAndProfile(window.cloudState.absensi || [], role, profile);
             const absensiOnTargetDate = allRoleAbsensi.filter(ab => ab && window.normalizeTanggalStr(ab.tanggal, ab.id) === targetDate);
 
-            // MODE KHUSUS: Export Siswa Belum Presensi (Belum Masuk & Belum Pulang) ke Excel
+            // MODE KHUSUS: Export HANYA Siswa yang Belum Presensi ke Excel (Terpisah penuh dari Sudah Presensi)
             if (mode === 'belum') {
-                const { belumMasuk, belumPulang, gabunganBelum } = window.getDaftarSiswaBelumPresensiPadaTanggal(targetDate, role, profile, absensiOnTargetDate);
+                const { belumMasuk } = window.getDaftarSiswaBelumPresensiPadaTanggal(targetDate, role, profile, absensiOnTargetDate);
                 const wbBelum = XLSX.utils.book_new();
-
-                const buildSheetBelum = (arr) => {
-                    const rows = [["No", "Tanggal", "Nama Siswa", "NIS", "Kelas / Jurusan", "Tempat PKL (Industri)", "Guru Pembimbing", "No HP / WA", "Status Presensi Masuk", "Status Presensi Pulang"]];
-                    arr.forEach((s, idx) => {
-                        rows.push([idx + 1, s.tanggal, s.nama, s.nis, s.kelas, s.industri, s.guru, s.noHp, s.statusMasuk, s.statusPulang]);
-                    });
-                    return XLSX.utils.aoa_to_sheet(rows);
-                };
-
-                XLSX.utils.book_append_sheet(wbBelum, buildSheetBelum(belumMasuk), `Belum_Masuk_${targetDate}`.substring(0, 31));
-                XLSX.utils.book_append_sheet(wbBelum, buildSheetBelum(belumPulang), `Belum_Pulang_${targetDate}`.substring(0, 31));
-                XLSX.utils.book_append_sheet(wbBelum, buildSheetBelum(gabunganBelum), `Rekap_Belum_Lengkap`.substring(0, 31));
+                const rowsBelum = [["No", "Tanggal", "Nama Siswa", "NIS", "Kelas / Jurusan", "Tempat PKL (Industri)", "Guru Pembimbing", "No HP / WA", "Status Kehadiran"]];
+                belumMasuk.forEach((s, idx) => {
+                    rowsBelum.push([idx + 1, s.tanggal, s.nama, s.nis, s.kelas, s.industri, s.guru, s.noHp, "Belum Presensi"]);
+                });
+                XLSX.utils.book_append_sheet(wbBelum, XLSX.utils.aoa_to_sheet(rowsBelum), `Belum_Presensi_${targetDate}`.substring(0, 31));
                 XLSX.writeFile(wbBelum, `Rekap_Belum_Presensi_${targetDate}_SMKN1_Marisa.xlsx`);
                 return;
             }
@@ -13377,20 +13370,8 @@
             const sheetTitle = mode === 'harian' ? `Sudah_Presensi_${targetDate}` : (mode === 'bulanan' ? `Rekap_${targetMonth}` : 'Semua_Presensi');
             XLSX.utils.book_append_sheet(wb, ws, sheetTitle.substring(0, 31));
 
-            // Pada Export Excel Harian, otomatis sertakan juga Sheet Belum Presensi Masuk & Sheet Belum Presensi Pulang
-            if (mode === 'harian') {
-                const { belumMasuk, belumPulang } = window.getDaftarSiswaBelumPresensiPadaTanggal(targetDate, role, profile, absensiOnTargetDate);
-                const rowsBM = [["No", "Tanggal", "Nama Siswa", "NIS", "Kelas / Jurusan", "Tempat PKL (Industri)", "Guru Pembimbing", "No HP / WA", "Status Masuk", "Status Pulang"]];
-                belumMasuk.forEach((s, idx) => rowsBM.push([idx + 1, s.tanggal, s.nama, s.nis, s.kelas, s.industri, s.guru, s.noHp, s.statusMasuk, s.statusPulang]));
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rowsBM), `Belum_Masuk_${targetDate}`.substring(0, 31));
-
-                const rowsBP = [["No", "Tanggal", "Nama Siswa", "NIS", "Kelas / Jurusan", "Tempat PKL (Industri)", "Guru Pembimbing", "No HP / WA", "Status Masuk", "Status Pulang"]];
-                belumPulang.forEach((s, idx) => rowsBP.push([idx + 1, s.tanggal, s.nama, s.nis, s.kelas, s.industri, s.guru, s.noHp, s.statusMasuk, s.statusPulang]));
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rowsBP), `Belum_Pulang_${targetDate}`.substring(0, 31));
-            }
-
             const fileName = mode === 'harian'
-                ? `Rekap_Presensi_Harian_${targetDate}.xlsx`
+                ? `Rekap_Sudah_Presensi_Harian_${targetDate}.xlsx`
                 : (mode === 'bulanan'
                     ? `Rekap_Presensi_Bulanan_${targetMonth}_SMKN1_Marisa.xlsx`
                     : `Rekap_Presensi_Lengkap_SMKN1_Marisa_${todayStr}.xlsx`);
@@ -18543,7 +18524,7 @@
 
                     const allRoleAbsensi = window.filterAbsensiByRoleAndProfile(window.cloudState.absensi || [], role, profile);
                     const absensiOnTargetDate = allRoleAbsensi.filter(ab => ab && window.normalizeTanggalStr(ab.tanggal, ab.id) === targetDate);
-                    const filteredAbsensi = (mode === 'harian') ? absensiOnTargetDate : allRoleAbsensi;
+                    const filteredAbsensi = (mode === 'semua') ? allRoleAbsensi : absensiOnTargetDate;
 
                     const pairMap = new Map();
                     filteredAbsensi.forEach(ab => {
@@ -18582,7 +18563,7 @@
                     });
 
                     const listSudah = Array.from(pairMap.values()).sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || '') || (a.nama || '').localeCompare(b.nama || ''));
-                    const { belumMasuk, belumPulang } = window.getDaftarSiswaBelumPresensiPadaTanggal(targetDate, role, profile, absensiOnTargetDate);
+                    const { belumMasuk } = window.getDaftarSiswaBelumPresensiPadaTanggal(targetDate, role, profile, absensiOnTargetDate);
 
                     const rowsSudahHtml = listSudah.map((it, idx) => `<tr>
                         <td style="text-align:center;">${idx + 1}</td>
@@ -18596,7 +18577,7 @@
 
                     const buildBelumTableHtml = (arr, emptyMsg) => {
                         if (!arr || arr.length === 0) {
-                            return `<tr><td colspan="7" style="text-align:center; color:#15803d; font-weight:bold; padding:10px;">${emptyMsg}</td></tr>`;
+                            return `<tr><td colspan="6" style="text-align:center; color:#15803d; font-weight:bold; padding:10px;">${emptyMsg}</td></tr>`;
                         }
                         return arr.map((s, idx) => `<tr>
                             <td style="text-align:center;">${idx + 1}</td>
@@ -18604,23 +18585,27 @@
                             <td>${s.nis}</td>
                             <td>${s.industri}</td>
                             <td>${s.guru}</td>
-                            <td><span style="color:${s.statusMasuk.includes('Belum') ? '#dc2626' : '#15803d'}; font-weight:bold;">${s.statusMasuk}</span></td>
-                            <td><span style="color:${s.statusPulang.includes('Belum') ? '#d97706' : '#15803d'}; font-weight:bold;">${s.statusPulang}</span></td>
+                            <td><span style="color:#dc2626; font-weight:bold;">Belum Presensi</span></td>
                         </tr>`).join('');
                     };
 
                     const judulUtama = (mode === 'belum')
-                        ? `DAFTAR SISWA BELUM PRESENSI MASUK & PULANG (${targetDate})`
+                        ? `DAFTAR SISWA BELUM PRESENSI (${targetDate})`
                         : (mode === 'harian'
-                            ? `REKAPITULASI PRESENSI HARIAN SISWA PKL (${targetDate})`
-                            : `REKAPITULASI LENGKAP PRESENSI SISWA PKL (SEMUA TANGGAL)`);
+                            ? `REKAPITULASI SISWA SUDAH PRESENSI HARIAN (${targetDate})`
+                            : `REKAPITULASI LENGKAP SISWA SUDAH PRESENSI (SEMUA TANGGAL)`);
 
                     const fileNameHtml = (mode === 'belum')
                         ? `Rekap_Belum_Presensi_${targetDate}_SMKN1_Marisa.html`
                         : (mode === 'harian'
-                            ? `Rekap_Presensi_Harian_${targetDate}_SMKN1_Marisa.html`
-                            : `Rekap_Presensi_Utuh_SMKN1_Marisa_${todayStr}.html`);
+                            ? `Rekap_Sudah_Presensi_Harian_${targetDate}_SMKN1_Marisa.html`
+                            : `Rekap_Sudah_Presensi_Utuh_SMKN1_Marisa_${todayStr}.html`);
 
+                    const ringkasanKopHtml = (mode === 'belum')
+                        ? `Dicetak pada: ${todayStr} WITA &bull; Tanggal Rekap: <b>${targetDate}</b> &bull; Total Belum Presensi: <b>${belumMasuk.length} Siswa</b>`
+                        : `Dicetak pada: ${todayStr} WITA &bull; Total Sudah Presensi: <b>${listSudah.length} Baris</b>`;
+
+                    // Terpisah penuh: mode 'harian'/'semua' HANYA menampilkan tabel Sudah Presensi
                     const bagianSudahHtml = (mode !== 'belum') ? `
                         <h3 style="margin:14px 0 6px; font-size:13px; color:#0369a1; border-bottom:2px solid #0284c7; padding-bottom:4px;">
                             ✅ DAFTAR SISWA SUDAH PRESENSI (${listSudah.length} Baris)
@@ -18641,9 +18626,10 @@
                         </table>
                     ` : '';
 
-                    const bagianBelumHtml = (mode === 'harian' || mode === 'belum') ? `
-                        <h3 style="margin:18px 0 6px; font-size:13px; color:#b91c1c; border-bottom:2px solid #ef4444; padding-bottom:4px;">
-                            ⚠️ DAFTAR SISWA BELUM PRESENSI MASUK — TANGGAL ${targetDate} (${belumMasuk.length} Siswa)
+                    // Terpisah penuh: mode 'belum' HANYA menampilkan tabel Siswa Belum Presensi (tanpa mencampur siswa yang sudah presensi)
+                    const bagianBelumHtml = (mode === 'belum') ? `
+                        <h3 style="margin:14px 0 6px; font-size:13px; color:#b91c1c; border-bottom:2px solid #ef4444; padding-bottom:4px;">
+                            ⚠️ DAFTAR SISWA BELUM PRESENSI — TANGGAL ${targetDate} (${belumMasuk.length} Siswa)
                         </h3>
                         <table>
                             <thead>
@@ -18653,29 +18639,10 @@
                                     <th style="width:85px;">NIS</th>
                                     <th>Tempat PKL (Industri)</th>
                                     <th>Guru Pembimbing</th>
-                                    <th style="width:120px;">Status Masuk</th>
-                                    <th style="width:120px;">Status Pulang</th>
+                                    <th style="width:120px;">Status Kehadiran</th>
                                 </tr>
                             </thead>
-                            <tbody>${buildBelumTableHtml(belumMasuk, 'Semua siswa sudah melakukan Presensi Masuk pada tanggal ini.')}</tbody>
-                        </table>
-
-                        <h3 style="margin:18px 0 6px; font-size:13px; color:#b45309; border-bottom:2px solid #f59e0b; padding-bottom:4px;">
-                            🚪 DAFTAR SISWA BELUM PRESENSI PULANG — TANGGAL ${targetDate} (${belumPulang.length} Siswa)
-                        </h3>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th style="width:30px; text-align:center;">No</th>
-                                    <th>Nama Siswa &amp; Kelas</th>
-                                    <th style="width:85px;">NIS</th>
-                                    <th>Tempat PKL (Industri)</th>
-                                    <th>Guru Pembimbing</th>
-                                    <th style="width:120px;">Status Masuk</th>
-                                    <th style="width:120px;">Status Pulang</th>
-                                </tr>
-                            </thead>
-                            <tbody>${buildBelumTableHtml(belumPulang, 'Semua siswa sudah melakukan Presensi Pulang pada tanggal ini.')}</tbody>
+                            <tbody>${buildBelumTableHtml(belumMasuk, 'Semua siswa sudah melakukan presensi pada tanggal ini.')}</tbody>
                         </table>
                     ` : '';
 
@@ -18705,7 +18672,7 @@
     <div class="kop-header">
         <h2>${judulUtama}</h2>
         <p><b>SMK NEGERI 1 MARISA</b> &bull; Sistem Informasi Pengelolaan PKL (SIP-PKL)</p>
-        <p>Dicetak pada: ${todayStr} WITA &bull; Sudah Presensi: <b>${listSudah.length}</b> | Belum Masuk: <b>${belumMasuk.length}</b> | Belum Pulang: <b>${belumPulang.length}</b></p>
+        <p>${ringkasanKopHtml}</p>
         <button type="button" class="btn-print-inline no-print" onclick="window.print()">🖨️ Print / Simpan PDF</button>
     </div>
 
