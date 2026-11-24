@@ -17238,6 +17238,802 @@
                 }
             }, 30000);
         })();
+
+        // =========================================================================
+        // MODUL ADITIF FINAL:
+        // 1. ATURAN PENGISIAN JURNAL HARIAN MULAI PUKUL 12:00 WITA & ANTI-MACET
+        // 2. PENGESAHAN JURNAL CAP STEMPEL BASAH NAMA INDUSTRI + EXPORT HTML/PDF BERSTEMPEL
+        // =========================================================================
+        (function() {
+            window.cloudState = window.cloudState || {};
+            window.cloudState.jurnalStempelMap = window.cloudState.jurnalStempelMap || {};
+            window._stempelSvgCounter = 0;
+
+            try {
+                const rawStmp = localStorage.getItem("SIP_PKL_STEMPEL_JURNAL_MAP");
+                if (rawStmp) {
+                    window.cloudState.jurnalStempelMap = Object.assign({}, JSON.parse(rawStmp), window.cloudState.jurnalStempelMap || {});
+                }
+            } catch (e) {}
+
+            // ---------------------------------------------------------------------
+            // BAGIAN 1: ATURAN PENGISIAN JURNAL HARIAN MULAI PUKUL 12:00 WITA
+            // ---------------------------------------------------------------------
+            window.cekWaktuBukaJurnalWita = function() {
+                const nowWita = typeof window.getCurrentWitaTimeObj === 'function'
+                    ? window.getCurrentWitaTimeObj()
+                    : { hours: new Date().getHours(), minutes: new Date().getMinutes(), totalMinutes: (new Date().getHours() * 60) + new Date().getMinutes(), hmStr: "12:00" };
+                const allowed = nowWita.totalMinutes >= (12 * 60);
+                return { allowed, hmStr: nowWita.hmStr };
+            };
+
+            window.tampilkanPopupJurnalBelumJam12 = function(hmStr) {
+                window.showModalInfo(
+                    "Pengisian Jurnal Dimulai Pukul 12:00 WITA ⏰",
+                    `Saat ini pukul <b>${hmStr} WITA</b>.<br><br>` +
+                    `Pengisian <b>Jurnal Harian PKL</b> baru dapat dibuka dan diisi mulai pukul <b>12:00 WITA</b>.<br><br>` +
+                    `<span style="color:#0369a1; font-weight:800;">📌 Silakan laksanakan kegiatan praktik kerja di industri terlebih dahulu, lalu catat kegiatan Anda mulai pukul 12:00 WITA.</span>`
+                );
+            };
+
+            window.bukaDanIsiJurnalSiswa = function() {
+                if (window.cloudState.activeRole === 'siswa') {
+                    const cek = window.cekWaktuBukaJurnalWita();
+                    if (!cek.allowed) {
+                        window.tampilkanPopupJurnalBelumJam12(cek.hmStr);
+                        return;
+                    }
+                }
+                window.openFeature('jurnal', 'Jurnal Harian PKL');
+            };
+
+            const origBukaModalTambahJurnal = window.bukaModalTambahJurnal;
+            if (typeof origBukaModalTambahJurnal === 'function') {
+                window.bukaModalTambahJurnal = function() {
+                    if (window.cloudState.activeRole === 'siswa') {
+                        const cek = window.cekWaktuBukaJurnalWita();
+                        if (!cek.allowed) {
+                            window.tampilkanPopupJurnalBelumJam12(cek.hmStr);
+                            return;
+                        }
+                    }
+                    return origBukaModalTambahJurnal.apply(this, arguments);
+                };
+            }
+
+            // Perkuat simpanJurnalBaru agar tidak pernah macet (try/catch/finally + timeout 3.5 detik)
+            window.simpanJurnalBaru = async function() {
+                if (window.cloudState.activeRole === 'siswa') {
+                    const cek = window.cekWaktuBukaJurnalWita();
+                    if (!cek.allowed) {
+                        window.tampilkanPopupJurnalBelumJam12(cek.hmStr);
+                        return;
+                    }
+                }
+
+                const profile = window.cloudState.userProfile || { nama: "Siswa" };
+                const rawTgl = document.getElementById("jurTanggal")?.value || window.getTodayLocalWitaStr();
+                const tgl = window.normalizeTanggalStr(rawTgl) || window.getTodayLocalWitaStr();
+                const kegiatan = document.getElementById("jurKegiatan")?.value.trim();
+                const kendala = document.getElementById("jurKendala")?.value.trim() || "-";
+
+                if (!kegiatan) {
+                    return window.showModalInfo("Lengkapi Jurnal", "Uraian kegiatan hari ini wajib diisi!");
+                }
+
+                const btnSubmit = document.querySelector('#modalDynamicCard button[onclick*="simpanJurnalBaru"]');
+                const origBtnHtml = btnSubmit ? btnSubmit.innerHTML : "";
+                if (btnSubmit) {
+                    btnSubmit.disabled = true;
+                    btnSubmit.innerHTML = "⏳ Menyimpan & Mengirim Jurnal...";
+                }
+
+                try {
+                    const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+                    const namaResmiSiswa = placementInfo.namaSiswa || profile.nama;
+                    const indName = (placementInfo.industri && placementInfo.industri !== 'Belum Ditentukan')
+                        ? placementInfo.industri
+                        : "DUDI Mitra";
+                    const guruName = (placementInfo.guru && placementInfo.guru !== 'Belum Ditentukan')
+                        ? placementInfo.guru
+                        : "-";
+
+                    const itemJurnal = {
+                        id: "jur_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                        user_id: profile.identitas || namaResmiSiswa,
+                        nis: placementInfo.nis || profile.identitas || "-",
+                        siswa: namaResmiSiswa,
+                        kelas: placementInfo.kelas || "-",
+                        industri: indName,
+                        guru: guruName,
+                        tanggal: tgl,
+                        kegiatan: kegiatan,
+                        kendala: kendala,
+                        status: "Menunggu Verifikasi"
+                    };
+
+                    if (!Array.isArray(window.cloudState.jurnal)) window.cloudState.jurnal = [];
+                    window.cloudState.jurnal.unshift(itemJurnal);
+
+                    // Sinkronkan ke Supabase dengan batas tunggu aman 3.5 detik agar tombol tidak pernah macet
+                    if (typeof window.simpanLogJurnalKhususKeSupabase === 'function') {
+                        await Promise.race([
+                            window.simpanLogJurnalKhususKeSupabase(itemJurnal).catch(() => false),
+                            new Promise(resolve => setTimeout(resolve, 3500))
+                        ]);
+                    }
+                    window.simpanDatabasePersisten(true);
+                    window.closeDynamicModal();
+                    window.showModalInfo(
+                        "Jurnal Berhasil Dikirim 📖✅",
+                        "Jurnal harian Anda berhasil disimpan dan terintegrasi langsung ke Dashboard <b>Guru Pembimbing, Mitra Industri, Orang Tua, Kepala Sekolah, dan Admin/Panitia PKL</b>.<br><br><span style='color:#15803d; font-weight:800;'>✓ Syarat Jurnal untuk Presensi Pulang hari ini telah terpenuhi!</span>"
+                    );
+                    window.openFeature("jurnal", "Jurnal Harian PKL");
+                } catch (err) {
+                    window.showModalInfo("Gagal Menyimpan Jurnal ⚠️", "Terjadi kendala saat menyimpan jurnal: " + (err?.message || "Silakan coba lagi."));
+                } finally {
+                    if (btnSubmit) {
+                        btnSubmit.disabled = false;
+                        btnSubmit.innerHTML = origBtnHtml || "💾 Kirim Jurnal";
+                    }
+                }
+            };
+
+            // ---------------------------------------------------------------------
+            // BAGIAN 2: CAP STEMPEL BASAH NAMA INDUSTRI & EXPORT HTML/PDF BERSTEMPEL
+            // ---------------------------------------------------------------------
+            window.getKunciJurnalStempel = function(j) {
+                if (!j) return "";
+                const sKey = window.normalizeTextCompact(j.siswa || j.nama_siswa || "");
+                const tKey = window.normalizeTanggalStr(j.tanggal || j.tanggal_kegiatan, j.id) || "";
+                const kKey = window.normalizeTextCompact(j.kegiatan || j.uraian_kegiatan || "").substring(0, 40);
+                return `${sKey}_${tKey}_${kKey}`;
+            };
+
+            window.ambilDataStempelJurnal = function(j) {
+                if (!j) return null;
+                if (j.stempelIndustri && j.stempelIndustri.namaIndustri) return j.stempelIndustri;
+                const map = window.cloudState.jurnalStempelMap || {};
+                if (j.id && map[j.id] && map[j.id].namaIndustri) return map[j.id];
+                const key = window.getKunciJurnalStempel(j);
+                if (key && map[key] && map[key].namaIndustri) return map[key];
+                return null;
+            };
+
+            window.simpanPetaStempelJurnalKeCloud = async function(changedEntries = {}) {
+                window.cloudState.jurnalStempelMap = Object.assign({}, window.cloudState.jurnalStempelMap || {}, changedEntries);
+                try {
+                    if (typeof window.directRestFetchRow === 'function') {
+                        const remoteRow = await window.directRestFetchRow('app_cloud_db', 'id', 'jurnal_stempel_industri_map');
+                        if (remoteRow && remoteRow.payload && remoteRow.payload.stempelMap && typeof remoteRow.payload.stempelMap === 'object') {
+                            window.cloudState.jurnalStempelMap = Object.assign({}, remoteRow.payload.stempelMap, window.cloudState.jurnalStempelMap);
+                        }
+                    }
+                } catch (e) {}
+
+                try {
+                    localStorage.setItem("SIP_PKL_STEMPEL_JURNAL_MAP", JSON.stringify(window.cloudState.jurnalStempelMap));
+                } catch (e) {}
+
+                if (typeof window.directRestUpsertRow === 'function') {
+                    await window.directRestUpsertRow('app_cloud_db', {
+                        id: 'jurnal_stempel_industri_map',
+                        payload: {
+                            updatedAt: Date.now(),
+                            stempelMap: window.cloudState.jurnalStempelMap
+                        }
+                    }, 'id').catch(() => {});
+                }
+            };
+
+            window.tarikPetaStempelJurnalDariCloud = async function() {
+                if (typeof window.directRestFetchRow !== 'function') return;
+                try {
+                    const row = await window.directRestFetchRow('app_cloud_db', 'id', 'jurnal_stempel_industri_map');
+                    if (row && row.payload && row.payload.stempelMap && typeof row.payload.stempelMap === 'object') {
+                        window.cloudState.jurnalStempelMap = Object.assign({}, row.payload.stempelMap, window.cloudState.jurnalStempelMap || {});
+                        try {
+                            localStorage.setItem("SIP_PKL_STEMPEL_JURNAL_MAP", JSON.stringify(window.cloudState.jurnalStempelMap));
+                        } catch (e) {}
+                    }
+                } catch (e) {}
+            };
+
+            // Generator Visual Cap Stempel Basah Resmi (Tinta Biru Melingkar dengan Nama Industri & Tanggal)
+            window.renderCapStempelBasahIndustriSvg = function(namaIndustri, tanggalSah = "", ukuranPx = 88) {
+                const uid = ++window._stempelSvgCounter;
+                const cleanNama = String(namaIndustri || "MITRA INDUSTRI DUDI")
+                    .toUpperCase()
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .trim();
+                const displayNama = cleanNama.length > 28 ? cleanNama.substring(0, 27) + "…" : cleanNama;
+                const cleanTgl = String(tanggalSah || window.getTodayLocalWitaStr()).trim();
+
+                return `
+                <div style="display:inline-flex; flex-direction:column; align-items:center; justify-content:center; margin-top:4px;" title="Disahkan Cap Stempel Basah oleh ${displayNama} (${cleanTgl})">
+                    <svg viewBox="0 0 140 140" width="${ukuranPx}" height="${ukuranPx}" style="transform:rotate(-8deg); opacity:0.88; filter:drop-shadow(0 1px 1px rgba(29,78,216,0.22)); overflow:visible;">
+                        <defs>
+                            <path id="stmpTop_${uid}" d="M 22,70 A 48,48 0 1,1 118,70" />
+                            <path id="stmpBot_${uid}" d="M 116,74 A 46,46 0 0,1 24,74" />
+                        </defs>
+                        <!-- Lingkaran Ganda Cap Stempel Basah Tinta Biru -->
+                        <circle cx="70" cy="70" r="64" fill="rgba(29, 78, 216, 0.04)" stroke="#1d4ed8" stroke-width="3.2" />
+                        <circle cx="70" cy="70" r="59" fill="none" stroke="#1d4ed8" stroke-width="1.2" stroke-dasharray="2,1.5" />
+                        <circle cx="70" cy="70" r="39" fill="none" stroke="#1d4ed8" stroke-width="1.5" />
+
+                        <!-- Teks Melingkar Nama Industri -->
+                        <text fill="#1d4ed8" font-size="9.2" font-weight="900" letter-spacing="0.6" font-family="Arial, sans-serif">
+                            <textPath href="#stmpTop_${uid}" startOffset="50%" text-anchor="middle">${displayNama}</textPath>
+                        </text>
+
+                        <!-- Teks Melingkar Bawah -->
+                        <text fill="#1e40af" font-size="7.8" font-weight="800" letter-spacing="0.8" font-family="Arial, sans-serif">
+                            <textPath href="#stmpBot_${uid}" startOffset="50%" text-anchor="middle">★ MITRA DUDI PKL ★</textPath>
+                        </text>
+
+                        <!-- Pita Tengah Pengesahan -->
+                        <line x1="12" y1="57" x2="128" y2="57" stroke="#1d4ed8" stroke-width="1.8" />
+                        <line x1="12" y1="83" x2="128" y2="83" stroke="#1d4ed8" stroke-width="1.8" />
+                        <rect x="13" y="58" width="114" height="24" fill="rgba(255,255,255,0.78)" />
+
+                        <text x="70" y="69" text-anchor="middle" fill="#1d4ed8" font-size="11.5" font-weight="950" letter-spacing="1.2" font-family="Arial, sans-serif">DISAHKAN</text>
+                        <text x="70" y="79.5" text-anchor="middle" fill="#1e3a8a" font-size="7.5" font-weight="800" font-family="Arial, sans-serif">${cleanTgl}</text>
+                    </svg>
+                </div>`;
+            };
+
+            // Override sahkanJurnalSiswa: Jika disahkan oleh Mitra Industri, bubuhkan Cap Stempel Basah Nama Industri!
+            window.sahkanJurnalSiswa = async function(idx) {
+                const j = (window.cloudState.jurnal || [])[idx];
+                if (!j) return;
+
+                const role = window.cloudState.activeRole || "guru";
+                const profile = window.cloudState.userProfile || { nama: "Pembimbing" };
+                const todayWita = window.getTodayLocalWitaStr();
+
+                j.status = 'Disetujui';
+
+                if (role === 'industri') {
+                    const stempelData = {
+                        namaIndustri: profile.nama || j.industri || "Mitra Industri DUDI",
+                        tanggal: todayWita,
+                        oleh: profile.nama || "Mitra Industri DUDI",
+                        stampedAt: Date.now()
+                    };
+                    j.stempelIndustri = stempelData;
+                    const key = window.getKunciJurnalStempel(j);
+                    const delta = {};
+                    if (j.id) delta[j.id] = stempelData;
+                    if (key) delta[key] = stempelData;
+                    await window.simpanPetaStempelJurnalKeCloud(delta);
+                }
+
+                if (typeof window.upsertItemJurnalKeTabelSql === 'function') {
+                    window.upsertItemJurnalKeTabelSql(j).catch(() => {});
+                }
+                if (typeof window.simpanLogJurnalKhususKeSupabase === 'function') {
+                    window.simpanLogJurnalKhususKeSupabase(j).catch(() => {});
+                }
+                window.simpanDatabasePersisten(true);
+
+                if (role === 'industri') {
+                    window.showModalInfo(
+                        "Jurnal Disahkan & Dicap Stempel Basah! 🖋️✅",
+                        `Jurnal siswa <b>${j.siswa}</b> telah resmi disahkan dengan <b>Cap Stempel Basah "${profile.nama}"</b>.<br><br>` +
+                        `<div style="text-align:center;">${window.renderCapStempelBasahIndustriSvg(profile.nama, todayWita, 108)}</div>` +
+                        `<span style="font-size:11px; color:#15803d; font-weight:800;">✓ Cap stempel basah ini akan otomatis tampil di Dashboard Siswa, Guru Pembimbing, Orang Tua, Panitia, serta ikut tercetak saat jurnal di-export / di-download.</span>`
+                    );
+                }
+
+                const curFeat = window.cloudState.currentFeature || "validasi-jurnal";
+                window.openFeature(curFeat, undefined, true);
+            };
+
+            // Export HTML & Print PDF Jurnal Harian Berstempel Basah Industri
+            window.exportHtmlDanPrintPdfJurnalBerstempel = async function(mode = 'semua') {
+                if (typeof window.omniScanSeluruhDataPresensiDanJurnalCloud === 'function') {
+                    await window.omniScanSeluruhDataPresensiDanJurnalCloud(true).catch(() => {});
+                }
+                await window.tarikPetaStempelJurnalDariCloud().catch(() => {});
+
+                const role = window.cloudState.activeRole || "panitia";
+                const profile = window.cloudState.userProfile || { nama: "" };
+                const todayStr = window.getTodayLocalWitaStr();
+                const targetDate = window.selectedRekapJurnalDate || todayStr;
+                let list = Array.isArray(window.cloudState.jurnal) ? [...window.cloudState.jurnal] : [];
+                let subJudul = "Semua Siswa PKL";
+
+                if (role === 'siswa') {
+                    const info = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+                    const namaResmi = info.namaSiswa || profile.nama;
+                    list = list.filter(j =>
+                        j && (window.isNameMatch(j.siswa, namaResmi) || window.isNameMatch(j.siswa, profile.nama) ||
+                        (profile.identitas && String(j.user_id || '').trim() === String(profile.identitas).trim()))
+                    );
+                    subJudul = `Siswa: ${namaResmi} (${info.kelas || '-'}) &bull; Industri: ${info.industri || '-'}`;
+                } else if (role === 'orangtua') {
+                    const rawAnanda = profile.namaAnanda || profile.nama.replace(/^Wali dari\s*/i, "").trim();
+                    const info = window.getStudentPlacementInfo(rawAnanda);
+                    const namaAnanda = info.namaSiswa || rawAnanda;
+                    list = list.filter(j => j && (window.isNameMatch(j.siswa, namaAnanda) || window.isNameMatch(j.siswa, rawAnanda)));
+                    subJudul = `Ananda: ${namaAnanda} (${info.kelas || '-'}) &bull; Industri: ${info.industri || '-'}`;
+                } else if (role === 'guru') {
+                    const myMap = window.getMyGuruStudentsMap(profile.nama, profile.identitas);
+                    const myNames = Array.from(myMap.values()).map(s => s.nama);
+                    list = list.filter(j => j && j.siswa && (myNames.some(sn => window.isNameMatch(sn, j.siswa)) || (j.guru && window.isTeacherNameMatch(j.guru, profile.nama))));
+                    subJudul = `Guru Pembimbing: ${profile.nama}`;
+                } else if (role === 'industri') {
+                    const sMap = window.getMyIndustriStudents(profile.nama);
+                    const indNames = Array.from(sMap.values()).map(s => s.nama);
+                    list = list.filter(j => j && j.siswa && (indNames.some(sn => window.isNameMatch(sn, j.siswa)) || window.isIndustriMatch(j.industri, profile.nama)));
+                    subJudul = `Mitra Industri DUDI: ${profile.nama}`;
+                } else if (mode === 'harian') {
+                    list = list.filter(j => j && window.normalizeTanggalStr(j.tanggal, j.id) === targetDate);
+                    subJudul = `Rekap Harian Tanggal ${targetDate}`;
+                }
+
+                list.sort((a, b) => (window.normalizeTanggalStr(b.tanggal, b.id) || '').localeCompare(window.normalizeTanggalStr(a.tanggal, a.id) || ''));
+
+                const rowsHtml = list.map((j, idx) => {
+                    const info = window.getStudentPlacementInfo(j.siswa, j.user_id);
+                    const kls = (j.kelas && j.kelas !== '-') ? j.kelas : (info.kelas || '-');
+                    const ind = (j.industri && j.industri !== '-' && j.industri !== 'DUDI Mitra') ? j.industri : (info.industri || '-');
+                    const tgl = window.normalizeTanggalStr(j.tanggal, j.id) || j.tanggal || '-';
+                    const stempel = window.ambilDataStempelJurnal(j);
+                    const pengesahanCell = stempel
+                        ? `<div style="text-align:center;">
+                                ${window.renderCapStempelBasahIndustriSvg(stempel.namaIndustri, stempel.tanggal, 82)}
+                                <div style="font-size:9px; color:#1d4ed8; font-weight:bold; margin-top:2px;">Disahkan: ${stempel.namaIndustri}</div>
+                           </div>`
+                        : `<div style="text-align:center; font-weight:bold; color:${j.status === 'Disetujui' ? '#15803d' : '#b45309'};">${j.status || 'Menunggu Verifikasi'}</div>`;
+
+                    return `<tr>
+                        <td style="text-align:center;">${idx + 1}</td>
+                        <td style="white-space:nowrap;"><b>${tgl}</b></td>
+                        <td><b>${j.siswa || '-'}</b><br><span style="color:#475569; font-size:10px;">${kls}</span></td>
+                        <td>${ind}</td>
+                        <td>
+                            <div>${j.kegiatan || '-'}</div>
+                            ${j.kendala && j.kendala !== '-' ? `<div style="font-size:10px; color:#64748b; margin-top:4px;"><i>Kendala: ${j.kendala}</i></div>` : ''}
+                        </td>
+                        <td style="text-align:center; width:135px;">${pengesahanCell}</td>
+                    </tr>`;
+                }).join('');
+
+                const fileNameHtml = `Jurnal_PKL_Berstempel_SMKN1_Marisa_${todayStr}.html`;
+                const fullDoc = `<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jurnal Harian PKL Berstempel - SMK Negeri 1 Marisa</title>
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; padding: 20px; color: #0f172a; background: #ffffff; margin: 0; }
+        .toolbar-print {
+            position: sticky; top: 0; z-index: 99;
+            background: #eff6ff; border: 1.5px solid #38bdf8; border-radius: 12px;
+            padding: 10px 14px; margin-bottom: 16px;
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+        }
+        .btn-tool { border: none; border-radius: 8px; padding: 8px 14px; font-size: 12px; font-weight: bold; cursor: pointer; color: #ffffff; }
+        .btn-print-pdf { background: #dc2626; }
+        .btn-dl-html { background: #0284c7; }
+        .kop-header { text-align: center; border-bottom: 3px double #0f172a; padding-bottom: 10px; margin-bottom: 14px; }
+        .kop-header h2 { margin: 0; font-size: 16px; }
+        .kop-header p { margin: 4px 0 0; font-size: 11px; color: #334155; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #94a3b8; padding: 7px 8px; text-align: left; vertical-align: middle; }
+        th { background: #e0f2fe; font-weight: bold; }
+        @media print {
+            .no-print { display: none !important; }
+            body { padding: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar-print no-print">
+        <div style="font-size:12px; font-weight:bold; color:#0369a1;">
+            🖋️ Dokumen Jurnal Harian PKL (Dilengkapi Cap Stempel Basah Industri)
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="btn-tool btn-dl-html" onclick="unduhJurnalHtmlBerstempel()">💾 Simpan File HTML (.html)</button>
+            <button type="button" class="btn-tool btn-print-pdf" onclick="window.print()">🖨️ Print / Simpan PDF</button>
+        </div>
+    </div>
+
+    <div class="kop-header">
+        <h2>JURNAL KEGIATAN HARIAN PRAKTIK KERJA LAPANGAN (PKL)</h2>
+        <p><b>SMK NEGERI 1 MARISA</b> &bull; ${subJudul}</p>
+        <p>Total Catatan: <b>${list.length} Jurnal</b> &bull; Dicetak pada: ${todayStr} WITA</p>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width:30px; text-align:center;">No</th>
+                <th style="width:82px;">Tanggal</th>
+                <th style="width:155px;">Nama Siswa &amp; Kelas</th>
+                <th style="width:145px;">Mitra Industri DUDI</th>
+                <th>Uraian Kegiatan Harian</th>
+                <th style="width:135px; text-align:center;">Pengesahan &amp; Cap Stempel Basah</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${rowsHtml || '<tr><td colspan="6" style="text-align:center; padding:16px;">Belum ada data jurnal harian</td></tr>'}
+        </tbody>
+    </table>
+
+    <script>
+        function unduhJurnalHtmlBerstempel() {
+            var htmlContent = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;
+            var blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = "${fileNameHtml}";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+        }
+    <\/script>
+</body>
+</html>`;
+
+                const w = window.open('', '_blank');
+                if (w) {
+                    w.document.open();
+                    w.document.write(fullDoc);
+                    w.document.close();
+                } else {
+                    const blob = new Blob([fullDoc], { type: "text/html;charset=utf-8" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = fileNameHtml;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    window.showModalInfo("File HTML Jurnal Diunduh 🖋️", `Berkas <b>${fileNameHtml}</b> (lengkap dengan Cap Stempel Basah Industri) berhasil diunduh.`);
+                }
+            };
+
+            // Arahkan Export PDF Jurnal lama agar juga menyertakan Cap Stempel Basah Industri
+            window.cetakPdfRekapJurnalUtuh = function() {
+                return window.exportHtmlDanPrintPdfJurnalBerstempel('semua');
+            };
+
+            // Sertakan kolom Cap Stempel Basah Industri pada Export Excel Jurnal
+            window.unduhExcelRekapJurnal = async function(mode = 'semua') {
+                if (typeof XLSX === 'undefined') return window.showModalInfo("Gagal", "Pustaka SheetJS belum dimuat");
+                if (typeof window.omniScanSeluruhDataPresensiDanJurnalCloud === 'function') {
+                    await window.omniScanSeluruhDataPresensiDanJurnalCloud(true).catch(() => {});
+                }
+                await window.tarikPetaStempelJurnalDariCloud().catch(() => {});
+
+                const role = window.cloudState.activeRole || "panitia";
+                const profile = window.cloudState.userProfile || { nama: "" };
+                let allJurnal = window.cloudState.jurnal || [];
+
+                if (role === 'guru') {
+                    const myMap = window.getMyGuruStudentsMap(profile.nama, profile.identitas);
+                    const mySiswaNames = Array.from(myMap.values()).map(s => s.nama);
+                    allJurnal = allJurnal.filter(j => j && j.siswa && (mySiswaNames.some(sn => window.isNameMatch(sn, j.siswa)) || (j.guru && window.isTeacherNameMatch(j.guru, profile.nama))));
+                } else if (role === 'industri') {
+                    const sMap = window.getMyIndustriStudents(profile.nama);
+                    const indSiswaNames = Array.from(sMap.values()).map(s => s.nama);
+                    allJurnal = allJurnal.filter(j => j && j.siswa && (indSiswaNames.some(sn => window.isNameMatch(sn, j.siswa)) || window.isIndustriMatch(j.industri, profile.nama)));
+                } else if (role === 'siswa') {
+                    const info = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+                    allJurnal = allJurnal.filter(j => j && (window.isNameMatch(j.siswa, info.namaSiswa) || window.isNameMatch(j.siswa, profile.nama)));
+                }
+
+                const targetDate = window.selectedRekapJurnalDate || window.getTodayLocalWitaStr();
+                if (mode === 'harian') {
+                    allJurnal = allJurnal.filter(j => j && window.normalizeTanggalStr(j.tanggal, j.id) === targetDate);
+                }
+
+                const data = [
+                    ["No", "Hari / Tanggal", "Nama Siswa", "Kelas / Jurusan", "Mitra Industri", "Guru Pembimbing", "Uraian Pekerjaan", "Kendala & Solusi", "Status Verifikasi", "Cap Stempel Basah Industri"]
+                ];
+                allJurnal.forEach((j, idx) => {
+                    const info = window.getStudentPlacementInfo(j.siswa, j.user_id);
+                    const kls = (j.kelas && j.kelas !== '-') ? j.kelas : ((info && info.kelas && info.kelas !== '-') ? info.kelas : '-');
+                    const guruName = (j.guru && j.guru !== '-') ? j.guru : (info.guru || '-');
+                    const stempel = window.ambilDataStempelJurnal(j);
+                    const capText = stempel ? `DISAHKAN CAP BASAH: ${stempel.namaIndustri} (${stempel.tanggal})` : '-';
+                    data.push([
+                        idx + 1,
+                        window.normalizeTanggalStr(j.tanggal, j.id) || j.tanggal || '-',
+                        j.siswa || '-',
+                        kls,
+                        j.industri || info.industri || '-',
+                        guruName,
+                        j.kegiatan || '-',
+                        j.kendala || '-',
+                        j.status || 'Menunggu Verifikasi',
+                        capText
+                    ]);
+                });
+                const ws = XLSX.utils.aoa_to_sheet(data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Rekap Jurnal Berstempel");
+                const suffix = mode === 'harian' ? targetDate : `Lengkap_${window.getTodayLocalWitaStr()}`;
+                XLSX.writeFile(wb, `Rekap_Jurnal_PKL_Berstempel_SMKN1_Marisa_${suffix}.xlsx`);
+            };
+
+            // ---------------------------------------------------------------------
+            // BAGIAN 3: PENYEMPURNAAN TAMPILAN DASHBOARD & HALAMAN JURNAL (NON-DESTRUKTIF)
+            // ---------------------------------------------------------------------
+
+            // A. Dashboard Siswa: Arahkan tombol "Buka & Isi Jurnal Harian PKL" ke validasi mulai pukul 12:00 WITA
+            const origRenderSiswaDash = window.renderSiswaOfficialDashboard;
+            if (typeof origRenderSiswaDash === 'function') {
+                window.renderSiswaOfficialDashboard = function() {
+                    let html = origRenderSiswaDash.apply(this, arguments);
+                    if (typeof html === 'string') {
+                        html = html.replace(
+                            `onclick="window.openFeature('jurnal', 'Jurnal PKL')"`,
+                            `onclick="window.bukaDanIsiJurnalSiswa()"`
+                        );
+                    }
+                    return html;
+                };
+            }
+
+            // B. Dashboard Industri: Ubah label tombol pengesahan menjadi "🖋️ Sahkan & Cap Stempel Basah"
+            const origRenderIndustriDash = window.renderIndustriOfficialDashboard;
+            if (typeof origRenderIndustriDash === 'function') {
+                window.renderIndustriOfficialDashboard = function() {
+                    let html = origRenderIndustriDash.apply(this, arguments);
+                    if (typeof html === 'string') {
+                        html = html.replaceAll('✓ Sahkan Jurnal', '🖋️ Sahkan &amp; Cap Stempel Basah');
+                    }
+                    return html;
+                };
+            }
+
+            // C. Halaman Jurnal Siswa: Tampilkan Cap Stempel Basah & Tombol Export HTML/PDF Berstempel
+            window.renderJurnalKegiatan = function() {
+                const profile = window.cloudState.userProfile || { nama: "Siswa" };
+                const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+                const namaResmi = placementInfo.namaSiswa || profile.nama;
+                const myJurnal = (window.cloudState.jurnal || []).filter(j =>
+                    window.isNameMatch(j.siswa, namaResmi) ||
+                    window.isNameMatch(j.siswa, profile.nama) ||
+                    (profile.identitas && String(j.user_id || '').trim() === String(profile.identitas).trim())
+                ).sort((a, b) => (window.normalizeTanggalStr(b.tanggal, b.id) || '').localeCompare(window.normalizeTanggalStr(a.tanggal, a.id) || ''));
+
+                let rows = "";
+                myJurnal.forEach((j, idx) => {
+                    const origIdx = (window.cloudState.jurnal || []).indexOf(j);
+                    const stempel = window.ambilDataStempelJurnal(j);
+                    const capHtml = stempel ? window.renderCapStempelBasahIndustriSvg(stempel.namaIndustri, stempel.tanggal, 76) : "";
+                    rows += `<tr>
+                        <td><input type="checkbox" class="cb-jurnal-siswa" value="${origIdx}"></td>
+                        <td>${idx + 1}</td>
+                        <td><b>${window.normalizeTanggalStr(j.tanggal, j.id) || j.tanggal}</b></td>
+                        <td style="white-space:normal; min-width:180px;">${j.kegiatan}</td>
+                        <td style="text-align:center;">
+                            <span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span>
+                            ${capHtml}
+                        </td>
+                        <td>
+                            <button onclick="window.konfirmasiHapusJurnalSiswa(${origIdx})" class="btn-action btn-red" style="padding:4px 8px;">Hapus</button>
+                        </td>
+                    </tr>`;
+                });
+
+                return `
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                        <div>
+                            <div style="font-size:11px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">LOG AKTIVITAS PKL (PENGISIAN DIBUKA MULAI PUKUL 12:00 WITA)</div>
+                            <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📖 Jurnal Harian Siswa PKL (${myJurnal.length} Catatan)</h3>
+                        </div>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <button onclick="window.bukaModalTambahJurnal()" class="btn-action btn-blue">+ Tulis Jurnal Baru</button>
+                            <button onclick="window.exportHtmlDanPrintPdfJurnalBerstempel('semua')" class="btn-action btn-emerald">🌐 Export HTML / PDF Berstempel</button>
+                            <button onclick="window.hapusMasalJurnalSiswa()" class="btn-action btn-red">🗑️ Hapus Terpilih</button>
+                        </div>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:36px;"><input type="checkbox" onchange="window.toggleAllCheckboxes('jurnal-siswa', this.checked)"></th>
+                                    <th style="width:40px;">No</th>
+                                    <th>Hari/Tanggal</th>
+                                    <th>Uraian Kegiatan</th>
+                                    <th style="text-align:center;">Status &amp; Cap Stempel Industri</th>
+                                    <th style="width:80px;">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada jurnal yang ditulis</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+            };
+
+            // D. Halaman Validasi / Pengesahan Jurnal (Industri & Guru): Tombol Cap Stempel Basah & Export Berstempel
+            window.renderValidasiJurnalList = function() {
+                const profile = window.cloudState.userProfile || { nama: "Pembimbing" };
+                const role = window.cloudState.activeRole || "guru";
+                const isIndustri = (role === 'industri');
+                let list = Array.isArray(window.cloudState.jurnal) ? window.cloudState.jurnal : [];
+
+                if (role === 'guru') {
+                    const myStudentMap = window.getMyGuruStudentsMap(profile.nama, profile.identitas);
+                    const mySiswaNames = Array.from(myStudentMap.values()).map(s => s.nama);
+                    const isMatchGuru = (guruName) => window.isTeacherNameMatch(guruName, profile.nama);
+                    list = list.filter(j => {
+                        if (!j || !(j.siswa || j.nama_siswa)) return false;
+                        const jSiswa = j.siswa || j.nama_siswa;
+                        if (j.guru && isMatchGuru(j.guru)) return true;
+                        if (mySiswaNames.some(sn => window.isNameMatch(sn, jSiswa))) return true;
+                        const inf = window.getStudentPlacementInfo(jSiswa, j.user_id);
+                        return inf && inf.guru && isMatchGuru(inf.guru);
+                    });
+                } else if (isIndustri) {
+                    const sMap = window.getMyIndustriStudents(profile.nama);
+                    const indSiswaNames = Array.from(sMap.values()).map(s => s.nama);
+                    list = list.filter(j => {
+                        if (!j || !j.siswa) return false;
+                        if (j.industri && window.isIndustriMatch(j.industri, profile.nama)) return true;
+                        if (indSiswaNames.some(sn => window.isNameMatch(sn, j.siswa))) return true;
+                        const inf = window.getStudentPlacementInfo(j.siswa, j.user_id);
+                        return inf && inf.industri && window.isIndustriMatch(inf.industri, profile.nama);
+                    });
+                }
+
+                let rows = "";
+                list.forEach((j, idx) => {
+                    const origIdx = (window.cloudState.jurnal || []).indexOf(j);
+                    const isApproved = (j.status === 'Disetujui');
+                    const stempel = window.ambilDataStempelJurnal(j);
+                    const capHtml = stempel ? window.renderCapStempelBasahIndustriSvg(stempel.namaIndustri, stempel.tanggal, 76) : "";
+
+                    let aksiHtml = "";
+                    if (isIndustri) {
+                        if (!stempel) {
+                            aksiHtml = `<button onclick="window.sahkanJurnalSiswa(${origIdx})" class="btn-action btn-blue" style="padding:6px 10px; font-size:10.5px; font-weight:900;">🖋️ Sahkan &amp; Cap Stempel Basah</button>`;
+                        } else {
+                            aksiHtml = `<span style="font-size:10.5px; color:#1d4ed8; font-weight:900;">✓ Sudah Dicap Basah</span>`;
+                        }
+                    } else {
+                        aksiHtml = !isApproved
+                            ? `<button onclick="window.sahkanJurnalSiswa(${origIdx})" class="btn-action btn-emerald" style="padding:5px 10px; font-size:11px; font-weight:900;">✓ Sahkan</button>`
+                            : `<span style="font-size:11px; color:#15803d; font-weight:800;">✓ Disahkan</span>`;
+                    }
+
+                    rows += `<tr>
+                        <td>${idx + 1}</td>
+                        <td><b>${j.siswa}</b><div style="font-size:10px; color:#0284c7;">🏢 ${j.industri || '-'}</div></td>
+                        <td><b>${window.normalizeTanggalStr(j.tanggal, j.id) || j.tanggal}</b></td>
+                        <td style="white-space:normal; min-width:190px;">${j.kegiatan || '-'}</td>
+                        <td style="text-align:center;">
+                            <span class="badge-status ${isApproved ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span>
+                            ${capHtml}
+                        </td>
+                        <td>${aksiHtml}</td>
+                    </tr>`;
+                });
+
+                return `
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                        <div>
+                            <div style="font-size:10.5px; font-weight:900; color:#0284c7; letter-spacing:0.5px;">${isIndustri ? 'PENGESAHAN CAP STEMPEL BASAH INDUSTRI DUDI' : 'PENGESAHAN JURNAL'}</div>
+                            <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📋 ${isIndustri ? 'Pengesahan Jurnal (Cap Stempel Basah)' : 'Validasi & Pengesahan Jurnal Siswa'}</h3>
+                        </div>
+                        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                            <button onclick="window.exportHtmlDanPrintPdfJurnalBerstempel('semua')" class="btn-action btn-emerald" style="font-size:11px; font-weight:900;">🌐 Export HTML / PDF Berstempel</button>
+                            <span class="badge-status badge-blue">${list.length} Jurnal</span>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>Nama Siswa</th>
+                                    <th>Tanggal</th>
+                                    <th>Kegiatan</th>
+                                    <th style="text-align:center;">Status &amp; Cap Basah</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows || '<tr><td colspan="6" class="empty-placeholder">Belum ada jurnal siswa yang masuk</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+            };
+
+            // E. Halaman Jurnal Ananda (Orang Tua): Tampilkan Cap Stempel Basah & Export Berstempel
+            window.renderJurnalAnandaOnly = function() {
+                const profile = window.cloudState.userProfile || { nama: "Orang Tua Siswa" };
+                const rawAnanda = profile.namaAnanda || profile.nama.replace(/^Wali dari\s*/i, "").trim();
+                const placementInfo = window.getStudentPlacementInfo(rawAnanda);
+                const namaAnanda = placementInfo.namaSiswa || rawAnanda;
+                const list = (window.cloudState.jurnal || []).filter(j =>
+                    j && (window.isNameMatch(j.siswa, namaAnanda) || window.isNameMatch(j.siswa, rawAnanda))
+                );
+
+                let rows = "";
+                list.forEach((j, idx) => {
+                    const stempel = window.ambilDataStempelJurnal(j);
+                    const capHtml = stempel ? window.renderCapStempelBasahIndustriSvg(stempel.namaIndustri, stempel.tanggal, 76) : "";
+                    rows += `<tr>
+                        <td>${idx + 1}</td>
+                        <td><b>${window.normalizeTanggalStr(j.tanggal, j.id) || j.tanggal}</b></td>
+                        <td style="white-space:normal; min-width:190px;">${j.kegiatan || '-'}</td>
+                        <td>${j.kendala || '-'}</td>
+                        <td style="text-align:center;">
+                            <span class="badge-status ${j.status === 'Disetujui' ? 'badge-green' : 'badge-amber'}">${j.status || 'Menunggu'}</span>
+                            ${capHtml}
+                        </td>
+                    </tr>`;
+                });
+
+                return `
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                        <div>
+                            <div style="font-size:11px; font-weight:900; color:#7e22ce; letter-spacing:0.5px;">LOG KEGIATAN HARIAN ANANDA</div>
+                            <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin-top:2px;">📖 Jurnal Kegiatan PKL: ${namaAnanda}</h3>
+                        </div>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <button onclick="window.exportHtmlDanPrintPdfJurnalBerstempel('semua')" class="btn-action btn-emerald" style="font-size:11px;">🌐 Export HTML / PDF Berstempel</button>
+                            <span class="badge-status badge-blue">${list.length} Catatan</span>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>Tanggal</th>
+                                    <th>Uraian Kegiatan</th>
+                                    <th>Kendala</th>
+                                    <th style="text-align:center;">Status &amp; Cap Basah Industri</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows || '<tr><td colspan="5" class="empty-placeholder">Belum ada catatan jurnal harian ananda</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+            };
+
+            // F. Halaman Rekap Jurnal Admin/Panitia/Kepsek/Guru: Tambahkan tombol Export HTML/PDF Berstempel & tampilkan stempel
+            const origRenderRekapJurnalAdmin = window.renderRekapJurnalAdmin;
+            if (typeof origRenderRekapJurnalAdmin === 'function') {
+                window.renderRekapJurnalAdmin = function() {
+                    let html = origRenderRekapJurnalAdmin.apply(this, arguments);
+                    if (typeof html === 'string') {
+                        html = html.replace(
+                            `🖨️ Export PDF Utuh`,
+                            `🌐 Export HTML &amp; PDF Berstempel`
+                        );
+                    }
+                    return html;
+                };
+            }
+
+            // Sinkronkan peta Cap Stempel Basah Industri dari Cloud saat aplikasi dibuka
+            setTimeout(() => {
+                window.tarikPetaStempelJurnalDariCloud();
+            }, 1100);
+        })();
         
     </script>
 </body>
