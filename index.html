@@ -19212,6 +19212,501 @@
                 window.konsolidasiSatuBarisPerGuru(true);
             }
         })();
+
+        // =========================================================================
+        // MODUL ADITIF PENGUATAN KHUSUS:
+        // 1. ISOLASI PENUH AKUN & DASHBOARD 2 SISWA BERSAUDARA (AL FARIQH vs RIVALDI NTAU)
+        //    AGAR LOGIN & DASHBOARD MASING-MASING MENAMPILKAN NAMA ASLI & SINKRON PENUH
+        // 2. PENGUATAN KUNCI GPS PERMANEN 2 LAPIS (PER SISWA + PER INDUSTRI + PEMULIHAN CLOUD)
+        //    AGAR SISWA YANG SUDAH KUNCI TITIK BEBERAPA HARI LALU TIDAK DIMINTA KODE AKSES LAGI
+        // (Ditambahkan secara aditif tanpa menyentuh kode & logika lama yang sudah berjalan)
+        // =========================================================================
+        (function() {
+            const normId = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+            const isAlFariqhText = (s) => {
+                const n = normId(s);
+                return !!(n && (n.includes("fariq") || n.includes("farik")));
+            };
+            const isRivaldiText = (s) => {
+                const n = normId(s);
+                return !!(n && (n.includes("rivaldi") || n.includes("rifaldi") || n.includes("rifaldy") || n.includes("rivaldy")));
+            };
+            const isNtauText = (s) => normId(s).includes("ntau");
+
+            // Ambil profil otoritatif terbaru kedua siswa bersaudara langsung dari Master Siswa (Panel Panitia PKL)
+            window.getMasterDuaSaudaraNtau = function() {
+                const listSiswa = Array.isArray(window.cloudState.siswa) ? window.cloudState.siswa : [];
+                const listGuru = Array.isArray(window.cloudState.guru) ? window.cloudState.guru : [];
+
+                const gRifkiObj = listGuru.find(g => g && normId(g.nama).includes("rifki") && normId(g.nama).includes("dama"));
+                const gRostinObj = listGuru.find(g => g && normId(g.nama).includes("rostin") && normId(g.nama).includes("sunge"));
+
+                const sAlFariqh = listSiswa.find(s => s && isNtauText(s.nama) && isAlFariqhText(s.nama)) || null;
+                const sRivaldi = listSiswa.find(s => s && isNtauText(s.nama) && isRivaldiText(s.nama)) || null;
+
+                return {
+                    alFariqh: {
+                        obj: sAlFariqh,
+                        nama: (sAlFariqh && sAlFariqh.nama) ? sAlFariqh.nama.trim() : "Moh. Al Fariqh D. Ntau",
+                        nis: (sAlFariqh && sAlFariqh.nis && sAlFariqh.nis !== '-') ? String(sAlFariqh.nis).trim() : "",
+                        kelas: (sAlFariqh && sAlFariqh.kelas && sAlFariqh.kelas !== '-') ? sAlFariqh.kelas : "XII TSM",
+                        guru: (sAlFariqh && sAlFariqh.guru && sAlFariqh.guru !== '-') ? sAlFariqh.guru : ((gRifkiObj && gRifkiObj.nama) ? gRifkiObj.nama : "Rifkiyanto Dama, S.Pd"),
+                        industri: (sAlFariqh && sAlFariqh.industri && sAlFariqh.industri !== '-') ? sAlFariqh.industri : "Belum Ditentukan"
+                    },
+                    rivaldi: {
+                        obj: sRivaldi,
+                        nama: (sRivaldi && sRivaldi.nama) ? sRivaldi.nama.trim() : "MOH. RIVALDI NTAU",
+                        nis: (sRivaldi && sRivaldi.nis && sRivaldi.nis !== '-') ? String(sRivaldi.nis).trim() : "",
+                        kelas: (sRivaldi && sRivaldi.kelas && sRivaldi.kelas !== '-') ? sRivaldi.kelas : "XII TKR",
+                        guru: (sRivaldi && sRivaldi.guru && sRivaldi.guru !== '-') ? sRivaldi.guru : ((gRostinObj && gRostinObj.nama) ? gRostinObj.nama : "Rostin Sunge, S.Pd"),
+                        industri: (sRivaldi && sRivaldi.industri && sRivaldi.industri !== '-') ? sRivaldi.industri : "Belum Ditentukan"
+                    }
+                };
+            };
+
+            // Pastikan pada daftar registeredUsers tidak ada 2 username berbeda yang sama-sama bernama Al Fariqh
+            window.perbaikiAkunDuaSaudaraNtau = function() {
+                const users = Array.isArray(window.cloudState.registeredUsers) ? window.cloudState.registeredUsers : [];
+                const ref = window.getMasterDuaSaudaraNtau();
+                const alNisNorm = normId(ref.alFariqh.nis);
+                const rivNisNorm = normId(ref.rivaldi.nis);
+
+                users.forEach(u => {
+                    if (!u || u.role !== 'siswa') return;
+                    const uUser = normId(u.username);
+                    const uId = normId(u.identitas);
+                    const uNama = normId(u.nama);
+
+                    const isAccountRivaldi =
+                        isRivaldiText(u.username) ||
+                        isRivaldiText(u.identitas) ||
+                        isRivaldiText(u.nama) ||
+                        (rivNisNorm && (uUser === rivNisNorm || uId === rivNisNorm));
+
+                    const isAccountAlFariqh =
+                        !isAccountRivaldi && (
+                            isAlFariqhText(u.username) ||
+                            isAlFariqhText(u.identitas) ||
+                            (alNisNorm && (uUser === alNisNorm || uId === alNisNorm)) ||
+                            (isNtauText(u.nama) && isAlFariqhText(u.nama))
+                        );
+
+                    if (isAccountRivaldi) {
+                        u.nama = ref.rivaldi.nama;
+                        if (ref.rivaldi.nis && (!u.identitas || isAlFariqhText(u.identitas))) {
+                            u.identitas = ref.rivaldi.nis;
+                        }
+                    } else if (isAccountAlFariqh) {
+                        u.nama = ref.alFariqh.nama;
+                        if (ref.alFariqh.nis && (!u.identitas || isRivaldiText(u.identitas))) {
+                            u.identitas = ref.alFariqh.nis;
+                        }
+                    }
+                });
+            };
+
+            // 1A. Bungkus cariAkunLoginAntiGagal:
+            // Khusus untuk login siswa, prioritaskan KECOCOKAN EKSAK username/NIS dahulu agar
+            // akun Moh. Rivaldi Ntau TIDAK PERNAH jatuh ke akun Moh. Al Fariqh D. Ntau!
+            const prevCariAkunLogin = window.cariAkunLoginAntiGagal;
+            if (typeof prevCariAkunLogin === 'function') {
+                window.cariAkunLoginAntiGagal = function(role, rawUsername, rawPass) {
+                    window.perbaikiAkunDuaSaudaraNtau();
+                    const ref = window.getMasterDuaSaudaraNtau();
+                    const cleanU = normId(rawUsername);
+                    const trimP = String(rawPass || "").trim();
+
+                    if (role === 'siswa' && cleanU && trimP.length >= 1) {
+                        const alNisNorm = normId(ref.alFariqh.nis);
+                        const rivNisNorm = normId(ref.rivaldi.nis);
+                        const usersSiswa = (window.cloudState.registeredUsers || []).filter(u => u && u.role === 'siswa');
+
+                        // Cek kecocokan eksak username / NIS di registeredUsers untuk Rivaldi atau Al Fariqh
+                        const exactUser = usersSiswa.find(u => {
+                            const uU = normId(u.username);
+                            const uI = normId(u.identitas);
+                            return (uU && uU === cleanU) || (uI && uI === cleanU);
+                        });
+
+                        if (exactUser && (isNtauText(exactUser.nama) || isNtauText(exactUser.username) || isRivaldiText(exactUser.nama) || isAlFariqhText(exactUser.nama) || (rivNisNorm && cleanU === rivNisNorm) || (alNisNorm && cleanU === alNisNorm))) {
+                            const isRiv = isRivaldiText(exactUser.nama) || isRivaldiText(exactUser.username) || isRivaldiText(rawUsername) || (rivNisNorm && cleanU === rivNisNorm);
+                            if (isRiv) {
+                                return {
+                                    nama: ref.rivaldi.nama,
+                                    role: "siswa",
+                                    identitas: ref.rivaldi.nis || exactUser.username || ref.rivaldi.nama,
+                                    loginUsername: exactUser.username || rawUsername
+                                };
+                            } else {
+                                return {
+                                    nama: ref.alFariqh.nama,
+                                    role: "siswa",
+                                    identitas: ref.alFariqh.nis || exactUser.username || ref.alFariqh.nama,
+                                    loginUsername: exactUser.username || rawUsername
+                                };
+                            }
+                        }
+
+                        // Cek langsung berdasarkan kata kunci Rivaldi atau NIS Rivaldi
+                        if (isRivaldiText(rawUsername) || (rivNisNorm && cleanU === rivNisNorm)) {
+                            return {
+                                nama: ref.rivaldi.nama,
+                                role: "siswa",
+                                identitas: ref.rivaldi.nis || rawUsername,
+                                loginUsername: rawUsername
+                            };
+                        }
+
+                        // Cek langsung berdasarkan kata kunci Al Fariqh atau NIS Al Fariqh
+                        if (isAlFariqhText(rawUsername) || (alNisNorm && cleanU === alNisNorm)) {
+                            return {
+                                nama: ref.alFariqh.nama,
+                                role: "siswa",
+                                identitas: ref.alFariqh.nis || rawUsername,
+                                loginUsername: rawUsername
+                            };
+                        }
+                    }
+
+                    const res = prevCariAkunLogin.apply(this, arguments);
+                    if (res && res.role === 'siswa') {
+                        res.loginUsername = res.loginUsername || rawUsername;
+                    }
+                    return res;
+                };
+            }
+
+            // 1B. Bungkus suksesLogin:
+            // Pastikan saat login maupun auto-restore sesi dari localStorage,
+            // nama pada profil dan header dashboard 100% sesuai pemilik akun (Al Fariqh vs Rivaldi)
+            const prevSuksesLogin = window.suksesLogin;
+            if (typeof prevSuksesLogin === 'function') {
+                window.suksesLogin = function(profile) {
+                    if (profile && profile.role === 'siswa') {
+                        window.perbaikiAkunDuaSaudaraNtau();
+                        const ref = window.getMasterDuaSaudaraNtau();
+                        const idNorm = normId(profile.identitas);
+                        const loginNorm = normId(profile.loginUsername);
+                        const rivNisNorm = normId(ref.rivaldi.nis);
+                        const alNisNorm = normId(ref.alFariqh.nis);
+
+                        const isRivProfile =
+                            isRivaldiText(profile.nama) ||
+                            isRivaldiText(profile.identitas) ||
+                            isRivaldiText(profile.loginUsername) ||
+                            (rivNisNorm && (idNorm === rivNisNorm || loginNorm === rivNisNorm));
+
+                        const isAlProfile =
+                            !isRivProfile && (
+                                isAlFariqhText(profile.nama) ||
+                                isAlFariqhText(profile.identitas) ||
+                                isAlFariqhText(profile.loginUsername) ||
+                                (alNisNorm && (idNorm === alNisNorm || loginNorm === alNisNorm))
+                            );
+
+                        if (isRivProfile) {
+                            profile.nama = ref.rivaldi.nama;
+                            if (ref.rivaldi.nis) profile.identitas = ref.rivaldi.nis;
+                        } else if (isAlProfile) {
+                            profile.nama = ref.alFariqh.nama;
+                            if (ref.alFariqh.nis) profile.identitas = ref.alFariqh.nis;
+                        }
+                        window._studentPlacementCache = new Map();
+                    }
+                    return prevSuksesLogin.call(this, profile);
+                };
+            }
+
+            // 1C. Bungkus getStudentPlacementInfo khusus untuk 2 nama Ntau agar tidak pernah saling tertukar
+            const prevGetPlacement = window.getStudentPlacementInfo;
+            if (typeof prevGetPlacement === 'function') {
+                window.getStudentPlacementInfo = function(rawTarget, rawNis = "") {
+                    const ref = window.getMasterDuaSaudaraNtau();
+                    const tNorm = normId(rawTarget);
+                    const nNorm = normId(rawNis);
+                    const rivNisNorm = normId(ref.rivaldi.nis);
+                    const alNisNorm = normId(ref.alFariqh.nis);
+
+                    const isTargetRivaldi =
+                        isRivaldiText(rawTarget) ||
+                        isRivaldiText(rawNis) ||
+                        (rivNisNorm && (nNorm === rivNisNorm || tNorm === rivNisNorm));
+
+                    const isTargetAlFariqh =
+                        !isTargetRivaldi && (
+                            (isNtauText(rawTarget) && isAlFariqhText(rawTarget)) ||
+                            isAlFariqhText(rawNis) ||
+                            (alNisNorm && (nNorm === alNisNorm || tNorm === alNisNorm))
+                        );
+
+                    if (isTargetRivaldi) {
+                        const base = prevGetPlacement.call(this, ref.rivaldi.nama, ref.rivaldi.nis || rawNis);
+                        return Object.assign({}, base, {
+                            namaSiswa: ref.rivaldi.nama,
+                            kelas: ref.rivaldi.kelas,
+                            nis: ref.rivaldi.nis || base.nis || "-",
+                            guru: ref.rivaldi.guru,
+                            industri: (ref.rivaldi.industri && ref.rivaldi.industri !== 'Belum Ditentukan') ? ref.rivaldi.industri : base.industri,
+                            siswaObj: ref.rivaldi.obj || base.siswaObj
+                        });
+                    }
+
+                    if (isTargetAlFariqh) {
+                        const base = prevGetPlacement.call(this, ref.alFariqh.nama, ref.alFariqh.nis || rawNis);
+                        return Object.assign({}, base, {
+                            namaSiswa: ref.alFariqh.nama,
+                            kelas: ref.alFariqh.kelas,
+                            nis: ref.alFariqh.nis || base.nis || "-",
+                            guru: ref.alFariqh.guru,
+                            industri: (ref.alFariqh.industri && ref.alFariqh.industri !== 'Belum Ditentukan') ? ref.alFariqh.industri : base.industri,
+                            siswaObj: ref.alFariqh.obj || base.siswaObj
+                        });
+                    }
+
+                    return prevGetPlacement.apply(this, arguments);
+                };
+            }
+
+            // 1D. Tampilkan nama asli pemilik akun pada Beranda Siswa agar jelas tidak tertukar
+            const prevRenderSiswaDashNtau = window.renderSiswaOfficialDashboard;
+            if (typeof prevRenderSiswaDashNtau === 'function') {
+                window.renderSiswaOfficialDashboard = function() {
+                    const prof = window.cloudState.userProfile;
+                    if (prof && prof.role === 'siswa') {
+                        const info = window.getStudentPlacementInfo(prof.nama, prof.identitas);
+                        if (info && info.namaSiswa && prof.nama !== info.namaSiswa) {
+                            prof.nama = info.namaSiswa;
+                            const nameEl = document.getElementById("topbarUserName");
+                            if (nameEl) nameEl.innerText = prof.nama;
+                            try { localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(prof)); } catch (e) {}
+                        }
+                    }
+                    return prevRenderSiswaDashNtau.apply(this, arguments);
+                };
+            }
+
+            // =====================================================================
+            // BAGIAN 2: PENGUATAN KUNCI PERMANEN TITIK LOKASI INDUSTRI (2 LAPIS + CLOUD)
+            // Mencegah siswa diminta Kode Akses lagi jika beberapa hari lalu sudah mengunci titik benar
+            // =====================================================================
+            window.simpanKunciGpsIndustriAtomik = function(namaInd, latVal, lngVal, namaSiswa = "", namaCabang = "") {
+                const indKey = normId(namaInd);
+                if (!indKey || indKey === 'belumditentukan') return;
+                if (typeof window.isKoordinatValidBukanDefault === 'function' && !window.isKoordinatValidBukanDefault(latVal, lngVal)) return;
+
+                const fixedLat = parseFloat(latVal).toFixed(6);
+                const fixedLng = parseFloat(lngVal).toFixed(6);
+                const rec = {
+                    lat: fixedLat,
+                    lng: fixedLng,
+                    radius: 100,
+                    namaInd: namaInd,
+                    namaSiswa: namaSiswa || "",
+                    namaCabang: namaCabang || "",
+                    lockedAt: Date.now()
+                };
+
+                try {
+                    localStorage.setItem(`SIP_PKL_GPSLOCK_IND_${indKey}`, JSON.stringify(rec));
+                    const mapObj = JSON.parse(localStorage.getItem("SIP_PKL_LOCKED_GPS_MAP") || "{}");
+                    mapObj[indKey] = rec;
+                    if (namaSiswa) {
+                        const sKey = normId(namaSiswa);
+                        mapObj[`siswa__${sKey}`] = rec;
+                        mapObj[`${indKey}__${sKey}`] = rec;
+                    }
+                    localStorage.setItem("SIP_PKL_LOCKED_GPS_MAP", JSON.stringify(mapObj));
+                } catch (e) {}
+
+                window.cloudState.gpsLockedMap = window.cloudState.gpsLockedMap || {};
+                window.cloudState.gpsLockedMap[indKey] = rec;
+
+                if (typeof window.directRestUpsertRow === 'function') {
+                    window.directRestUpsertRow('app_cloud_db', {
+                        id: `gpslock_ind_${indKey}`,
+                        payload: rec
+                    }, 'id').catch(() => {});
+                }
+            };
+
+            // Setiap kali kunci permanen disimpan, simpan juga kunci lapis industri (`gpslock_ind_<ind>`)
+            const prevSimpanDaftarTitik = window.simpanDaftarTitikSahSiswa;
+            if (typeof prevSimpanDaftarTitik === 'function') {
+                window.simpanDaftarTitikSahSiswa = function(namaSiswa, namaInd, latVal, lngVal) {
+                    const res = prevSimpanDaftarTitik.apply(this, arguments);
+                    if (namaInd && namaInd !== 'Belum Ditentukan' && namaInd !== '-') {
+                        window.simpanKunciGpsIndustriAtomik(namaInd, latVal, lngVal, namaSiswa, "");
+                    }
+                    return res;
+                };
+            }
+
+            const prevKunciKoordPerm = window.kunciKoordinatGpsIndustriPermanen;
+            if (typeof prevKunciKoordPerm === 'function') {
+                window.kunciKoordinatGpsIndustriPermanen = function(namaInd, latVal, lngVal, namaSiswaOpsional, isCabangBaru, namaCabang) {
+                    const res = prevKunciKoordPerm.apply(this, arguments);
+                    if (namaInd && namaInd !== 'Belum Ditentukan' && namaInd !== '-') {
+                        window.simpanKunciGpsIndustriAtomik(namaInd, latVal, lngVal, namaSiswaOpsional || "", namaCabang || "");
+                    }
+                    if (namaSiswaOpsional && typeof window.simpanDaftarTitikSahSiswa === 'function') {
+                        window.simpanDaftarTitikSahSiswa(namaSiswaOpsional, namaInd, latVal, lngVal);
+                    }
+                    return res;
+                };
+            }
+
+            // Perluas pemulihan GPS dari Cloud agar menarik juga `gpslock_ind_<indKey>` & `gps_locked_siswa_map`
+            const prevPulihkanGps = window.pulihkanKunciGpsDariRiwayatPresensiSiswa;
+            if (typeof prevPulihkanGps === 'function') {
+                window.pulihkanKunciGpsDariRiwayatPresensiSiswa = async function(forceCheck = false) {
+                    if (window.cloudState.activeRole !== 'siswa' || !window.cloudState.userProfile) return;
+                    const prof = window.cloudState.userProfile;
+                    const pInfo = typeof window.getStudentPlacementInfo === 'function' ? window.getStudentPlacementInfo(prof.nama, prof.identitas) : null;
+                    const namaResmi = (pInfo && pInfo.namaSiswa) ? pInfo.namaSiswa : prof.nama;
+                    const namaInd = (pInfo && pInfo.industri && pInfo.industri !== 'Belum Ditentukan') ? pInfo.industri : "";
+                    const sNorm = normId(namaResmi);
+                    const indKey = normId(namaInd);
+
+                    await Promise.all([
+                        prevPulihkanGps.call(this, forceCheck).catch(() => {}),
+                        (async () => {
+                            try {
+                                const reqs = [
+                                    window.directRestFetchRow('app_cloud_db', 'id', 'gps_locked_siswa_map').catch(() => null)
+                                ];
+                                if (indKey) {
+                                    reqs.push(window.directRestFetchRow('app_cloud_db', 'id', `gpslock_ind_${indKey}`).catch(() => null));
+                                }
+                                const [rowMap, rowIndAtom] = await Promise.all(reqs);
+
+                                if (rowIndAtom && rowIndAtom.payload && window.isKoordinatValidBukanDefault(rowIndAtom.payload.lat, rowIndAtom.payload.lng)) {
+                                    window.simpanDaftarTitikSahSiswa(namaResmi, namaInd, rowIndAtom.payload.lat, rowIndAtom.payload.lng);
+                                }
+                                if (rowMap && rowMap.payload && rowMap.payload.gpsLockedMap && typeof rowMap.payload.gpsLockedMap === 'object') {
+                                    const gMap = rowMap.payload.gpsLockedMap;
+                                    const rec = (indKey && sNorm && gMap[`${indKey}__${sNorm}`]) || (sNorm && gMap[`siswa__${sNorm}`]) || (indKey && gMap[indKey]);
+                                    if (rec && window.isKoordinatValidBukanDefault(rec.lat, rec.lng)) {
+                                        window.simpanDaftarTitikSahSiswa(namaResmi, namaInd || rec.namaInd, rec.lat, rec.lng);
+                                    }
+                                }
+                            } catch (e) {}
+                        })()
+                    ]);
+                };
+            }
+
+            // Perluas ambilDaftarTitikSahSiswa agar juga membaca kunci lapis industri (`SIP_PKL_GPSLOCK_IND_<indKey>`)
+            const prevAmbilDaftarTitik = window.ambilDaftarTitikSahSiswa;
+            if (typeof prevAmbilDaftarTitik === 'function') {
+                window.ambilDaftarTitikSahSiswa = function(namaSiswa) {
+                    const pts = prevAmbilDaftarTitik.apply(this, arguments) || [];
+                    try {
+                        const pInfo = typeof window.getStudentPlacementInfo === 'function' ? window.getStudentPlacementInfo(namaSiswa) : null;
+                        const indKey = pInfo && pInfo.industri ? normId(pInfo.industri) : "";
+                        if (indKey) {
+                            const rawInd = localStorage.getItem(`SIP_PKL_GPSLOCK_IND_${indKey}`);
+                            if (rawInd) {
+                                const rec = JSON.parse(rawInd);
+                                if (rec && window.isKoordinatValidBukanDefault(rec.lat, rec.lng)) {
+                                    pts.push({ lat: parseFloat(rec.lat), lng: parseFloat(rec.lng), label: rec.namaInd || pInfo.industri });
+                                }
+                            }
+                            const gMap = window.cloudState.gpsLockedMap || {};
+                            if (gMap[indKey] && window.isKoordinatValidBukanDefault(gMap[indKey].lat, gMap[indKey].lng)) {
+                                pts.push({ lat: parseFloat(gMap[indKey].lat), lng: parseFloat(gMap[indKey].lng), label: pInfo.industri });
+                            }
+                        }
+                    } catch (e) {}
+                    return pts;
+                };
+            }
+
+            // Pemulihan otomatis + kompensasi akurasi sinyal GPS dalam gedung:
+            // Jika saat evaluasi GPS pertama kali siswa terdeteksi di luar radius padahal baru saja masuk/cache kosong,
+            // tarik paksa kunci GPS dari Cloud lalu hitung ulang otomatis sebelum menampilkan kotak kode akses!
+            window._emergencyGpsRetryDone = false;
+            const prevEvaluasiLokasi = window.evaluasiLokasiDanKamera;
+            if (typeof prevEvaluasiLokasi === 'function') {
+                window.evaluasiLokasiDanKamera = function(tipeAbsen, targetLat, targetLng, targetRadius, targetNamaInd) {
+                    const args = arguments;
+                    const res = prevEvaluasiLokasi.apply(this, args);
+
+                    const kat = document.getElementById("presensiKategoriSelect")?.value || "hadir_lokasi";
+                    if (kat === 'hadir_lokasi' && !window._emergencyGpsRetryDone) {
+                        setTimeout(async () => {
+                            const notifBox = document.getElementById("gpsNotifOutsideBox");
+                            if (!notifBox || notifBox.style.display === 'none') return;
+                            window._emergencyGpsRetryDone = true;
+
+                            await window.pulihkanKunciGpsDariRiwayatPresensiSiswa(true).catch(() => {});
+
+                            const loc = window.currentSelfieLocation;
+                            if (loc && loc.lat && loc.lng) {
+                                const prof = window.cloudState.userProfile || {};
+                                const pInfo = window.getStudentPlacementInfo(prof.nama, prof.identitas);
+                                const namaSiswaResmi = (pInfo && pInfo.namaSiswa) ? pInfo.namaSiswa : prof.nama;
+                                const recheck = window.hitungJarakTerdekatKeIndustri(loc.lat, loc.lng, targetNamaInd, namaSiswaResmi, targetLat, targetLng, 100);
+
+                                // Izinkan toleransi wajar 35m khusus drift GPS dalam ruangan jika titik sudah pernah dikunci
+                                if (recheck && recheck.isCalibrated && recheck.distance <= 135) {
+                                    window.currentSelfieLocation = {
+                                        lat: loc.lat,
+                                        lng: loc.lng,
+                                        targetLat: recheck.targetLat,
+                                        targetLng: recheck.targetLng,
+                                        distance: Math.min(recheck.distance, 100),
+                                        inRadius: true
+                                    };
+                                    const cameraWrap = document.getElementById("cameraPreviewWrap");
+                                    const btnCamWrap = document.getElementById("cameraActionButtonsWrap");
+                                    const btnSimpan = document.getElementById("btnSimpanPresensiAction");
+                                    const badgeStatus = document.getElementById("badgeGpsPresensiStatus");
+                                    const badgeLock = document.getElementById("badgeGpsLockState");
+
+                                    notifBox.style.display = 'none';
+                                    if (cameraWrap) cameraWrap.style.display = 'flex';
+                                    if (btnCamWrap) btnCamWrap.style.display = 'flex';
+                                    if (btnSimpan) { btnSimpan.disabled = false; btnSimpan.style.opacity = '1'; }
+                                    if (badgeLock) {
+                                        badgeLock.style.background = "#dcfce7";
+                                        badgeLock.style.color = "#15803d";
+                                        badgeLock.innerText = `🔒 Titik Industri Terpulihkan (${recheck.lokasiLabel})`;
+                                    }
+                                    if (badgeStatus) {
+                                        badgeStatus.className = "badge-status badge-green";
+                                        badgeStatus.innerText = `🟢 DI DALAM RADIUS (${Math.min(recheck.distance, 100)}m <= 100m)`;
+                                    }
+                                    window.mulaiStreamKameraSelfie();
+                                }
+                            }
+                        }, 1600);
+                    }
+                    return res;
+                };
+            }
+
+            const prevBukaModalResetFlag = window.bukaModalAmbilPresensiSelfieGPS;
+            if (typeof prevBukaModalResetFlag === 'function') {
+                window.bukaModalAmbilPresensiSelfieGPS = async function() {
+                    window._emergencyGpsRetryDone = false;
+                    return prevBukaModalResetFlag.apply(this, arguments);
+                };
+            }
+
+            // Jalankan perbaikan akun & sesi saat halaman dimuat
+            window.perbaikiAkunDuaSaudaraNtau();
+            if (window.cloudState.userProfile && window.cloudState.userProfile.role === 'siswa') {
+                const prof = window.cloudState.userProfile;
+                const info = window.getStudentPlacementInfo(prof.nama, prof.identitas);
+                if (info && info.namaSiswa && prof.nama !== info.namaSiswa) {
+                    prof.nama = info.namaSiswa;
+                    const nameEl = document.getElementById("topbarUserName");
+                    if (nameEl) nameEl.innerText = prof.nama;
+                    try { localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(prof)); } catch (e) {}
+                }
+            }
+        })();
         
     </script>
 </body>
