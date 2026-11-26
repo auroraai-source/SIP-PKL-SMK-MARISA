@@ -18842,6 +18842,291 @@
                 window.tarikLengkapPresensiUntukTanggal(window.getTodayLocalWitaStr(), false).catch(() => {});
             }, 1800);
         })();
+
+        // =========================================================================
+        // MODUL ADITIF TATA LETAK DASHBOARD & PENGUNCIAN PERMANEN GPS (RADIUS 100M)
+        // (Ditambahkan tanpa menyentuh kode dan logika lama yang sudah berjalan)
+        // =========================================================================
+        (function() {
+            // ---------------------------------------------------------------------
+            // 1. TATA LETAK DASHBOARD INDUSTRI & GURU PEMBIMBING
+            // ---------------------------------------------------------------------
+            // A. Dashboard Industri: Pindahkan "Ringkasan Magang DUDI" ke atas "PROFIL MITRA INDUSTRI DUDI"
+            const prevRenderIndustriDash = window.renderIndustriOfficialDashboard;
+            if (typeof prevRenderIndustriDash === 'function') {
+                window.renderIndustriOfficialDashboard = function() {
+                    let html = prevRenderIndustriDash.apply(this, arguments);
+                    if (typeof html !== 'string') return html;
+
+                    const profilMarker = '<!-- Kartu Info Perusahaan / Mitra DUDI (Dipindahkan ke Atas) -->';
+                    const ringkasanMarker = '<!-- Ringkasan Magang DUDI -->';
+                    const monitoringMarker = '<!-- 4 KARTU MONITORING PKL INDUSTRI';
+
+                    const idxProfil = html.indexOf(profilMarker);
+                    const idxRingkasan = html.indexOf(ringkasanMarker);
+                    const idxMonitoring = html.indexOf(monitoringMarker);
+
+                    if (idxProfil !== -1 && idxRingkasan !== -1 && idxMonitoring !== -1 && idxRingkasan > idxProfil && idxMonitoring > idxRingkasan) {
+                        const ringkasanBlock = html.substring(idxRingkasan, idxMonitoring);
+                        // Hapus blok Ringkasan dari posisi bawah, lalu sisipkan tepat di atas PROFIL MITRA INDUSTRI DUDI
+                        const withoutRingkasan = html.substring(0, idxRingkasan) + html.substring(idxMonitoring);
+                        const newIdxProfil = withoutRingkasan.indexOf(profilMarker);
+                        if (newIdxProfil !== -1) {
+                            html = withoutRingkasan.substring(0, newIdxProfil) + ringkasanBlock + '\n            ' + withoutRingkasan.substring(newIdxProfil);
+                        }
+                    }
+                    return html;
+                };
+            }
+
+            // B. Dashboard Guru Pembimbing: Pindahkan "Ringkasan Bimbingan PKL" ke atas "OTORISASI KEPULANGAN LEBIH AWAL"
+            const prevRenderGuruDash = window.renderGuruOfficialDashboard;
+            if (typeof prevRenderGuruDash === 'function') {
+                window.renderGuruOfficialDashboard = function() {
+                    let html = prevRenderGuruDash.apply(this, arguments);
+                    if (typeof html !== 'string') return html;
+
+                    const otorisasiText = 'OTORISASI KEPULANGAN LEBIH AWAL';
+                    const ringkasanMarker = '<!-- Ringkasan Bimbingan PKL -->';
+                    const monitoringMarker = '<!-- 4 KARTU MONITORING PKL';
+
+                    const idxOtorisasiText = html.indexOf(otorisasiText);
+                    const idxRingkasan = html.indexOf(ringkasanMarker);
+                    const idxMonitoring = html.indexOf(monitoringMarker);
+
+                    if (idxOtorisasiText !== -1 && idxRingkasan !== -1 && idxMonitoring !== -1 && idxRingkasan > idxOtorisasiText && idxMonitoring > idxRingkasan) {
+                        // Cari pembuka <div class="card" yang membungkus kartu OTORISASI KEPULANGAN LEBIH AWAL
+                        const idxOtorisasiCardStart = html.lastIndexOf('<div class="card"', idxOtorisasiText);
+                        if (idxOtorisasiCardStart !== -1 && idxOtorisasiCardStart < idxRingkasan) {
+                            const ringkasanBlock = html.substring(idxRingkasan, idxMonitoring);
+                            const withoutRingkasan = html.substring(0, idxRingkasan) + html.substring(idxMonitoring);
+                            html = withoutRingkasan.substring(0, idxOtorisasiCardStart) + ringkasanBlock + '\n            ' + withoutRingkasan.substring(idxOtorisasiCardStart);
+                        }
+                    }
+                    return html;
+                };
+            }
+
+            // ---------------------------------------------------------------------
+            // 2. PENGUNCIAN PERMANEN TITIK LOKASI INDUSTRI (RADIUS KETAT 100 METER)
+            //    Jika siswa sudah pernah berhasil Presensi Masuk di lokasi industri,
+            //    titik koordinat tersebut dikunci permanen (lokal + Cloud + riwayat SQL)
+            //    sehingga presensi pulang & hari-hari berikutnya langsung terbuka tanpa kode akses
+            //    selama berada dalam radius <= 100m, dan tetap terkunci jika > 100m.
+            // ---------------------------------------------------------------------
+            window._siswaGpsRestoredCache = window._siswaGpsRestoredCache || {};
+
+            window.isKoordinatValidBukanDefault = function(latVal, lngVal) {
+                const nLat = parseFloat(latVal);
+                const nLng = parseFloat(lngVal);
+                if (isNaN(nLat) || isNaN(nLng) || (nLat === 0 && nLng === 0)) return false;
+                if (Math.abs(nLat - 0.45612) < 0.00025 && Math.abs(nLng - 121.94210) < 0.00025) return false;
+                return true;
+            };
+
+            window.simpanDaftarTitikSahSiswa = function(namaSiswa, namaInd, latVal, lngVal) {
+                const sNorm = window.normalizeTextCompact(namaSiswa);
+                if (!sNorm || !window.isKoordinatValidBukanDefault(latVal, lngVal)) return;
+                const fixedLat = parseFloat(latVal).toFixed(6);
+                const fixedLng = parseFloat(lngVal).toFixed(6);
+
+                // 1. Simpan sebagai kunci atomik utama siswa (lokal + Cloud)
+                if (typeof window.simpanKunciGpsAtomikSiswa === 'function') {
+                    window.simpanKunciGpsAtomikSiswa(namaSiswa, namaInd, fixedLat, fixedLng, "");
+                }
+
+                // 2. Simpan juga ke daftar riwayat titik sah siswa agar kebal pergantian hari / cache
+                const listKey = `SIP_PKL_VALID_POINTS_${sNorm}`;
+                try {
+                    const existing = JSON.parse(localStorage.getItem(listKey) || "[]");
+                    const arr = Array.isArray(existing) ? existing : [];
+                    const alreadyNear = arr.some(p =>
+                        p && window.hitungJarakMeterHaversine(parseFloat(fixedLat), parseFloat(fixedLng), parseFloat(p.lat), parseFloat(p.lng)) < 15
+                    );
+                    if (!alreadyNear) {
+                        arr.unshift({ lat: fixedLat, lng: fixedLng, namaInd: namaInd || "", savedAt: Date.now() });
+                        localStorage.setItem(listKey, JSON.stringify(arr.slice(0, 8)));
+                    }
+                } catch (e) {}
+            };
+
+            window.ambilDaftarTitikSahSiswa = function(namaSiswa) {
+                const sNorm = window.normalizeTextCompact(namaSiswa);
+                if (!sNorm) return [];
+                const points = [];
+                try {
+                    const rawAtom = localStorage.getItem(`SIP_PKL_GPSLOCK_${sNorm}`);
+                    if (rawAtom) {
+                        const r = JSON.parse(rawAtom);
+                        if (r && window.isKoordinatValidBukanDefault(r.lat, r.lng)) {
+                            points.push({ lat: parseFloat(r.lat), lng: parseFloat(r.lng), label: r.namaCabang || r.namaInd || "" });
+                        }
+                    }
+                } catch (e) {}
+                try {
+                    const rawList = localStorage.getItem(`SIP_PKL_VALID_POINTS_${sNorm}`);
+                    if (rawList) {
+                        const arr = JSON.parse(rawList);
+                        if (Array.isArray(arr)) {
+                            arr.forEach(p => {
+                                if (p && window.isKoordinatValidBukanDefault(p.lat, p.lng)) {
+                                    points.push({ lat: parseFloat(p.lat), lng: parseFloat(p.lng), label: p.namaInd || "" });
+                                }
+                            });
+                        }
+                    }
+                } catch (e) {}
+                return points;
+            };
+
+            // Pulihkan titik lokasi industri sah langsung dari Cloud (gpslock_<siswa> + tabel SQL riwayat_presensi milik siswa)
+            window.pulihkanKunciGpsDariRiwayatPresensiSiswa = async function(forceCheck = false) {
+                if (window.cloudState.activeRole !== 'siswa' || !window.cloudState.userProfile) return;
+                const prof = window.cloudState.userProfile;
+                const pInfo = typeof window.getStudentPlacementInfo === 'function' ? window.getStudentPlacementInfo(prof.nama, prof.identitas) : null;
+                const namaResmi = (pInfo && pInfo.namaSiswa) ? pInfo.namaSiswa : prof.nama;
+                const namaInd = (pInfo && pInfo.industri && pInfo.industri !== 'Belum Ditentukan') ? pInfo.industri : "";
+                const sNorm = window.normalizeTextCompact(namaResmi);
+                if (!sNorm) return;
+
+                const nowMs = Date.now();
+                if (!forceCheck && window._siswaGpsRestoredCache[sNorm] && (nowMs - window._siswaGpsRestoredCache[sNorm] < 30000)) {
+                    return;
+                }
+                window._siswaGpsRestoredCache[sNorm] = nowMs;
+
+                // 1. Cek terlebih dahulu di memori absensi lokal
+                const localValid = (window.cloudState.absensi || []).filter(a =>
+                    a && window.isNameMatch(a.nama, namaResmi) &&
+                    String(a.kategori_hadir || "Hadir di Lokasi Industri").toLowerCase().includes("hadir") &&
+                    window.isKoordinatValidBukanDefault(a.latitude, a.longitude)
+                );
+                localValid.slice(0, 5).forEach(a => {
+                    window.simpanDaftarTitikSahSiswa(namaResmi, a.industri || namaInd, a.latitude, a.longitude);
+                });
+
+                // 2. Tarik dari Cloud: gpslock_<siswa> + riwayat_presensi khusus siswa ini (tidak terpotong limit 180 global!)
+                try {
+                    const encodedName = encodeURIComponent(`*${namaResmi.trim()}*`);
+                    const queries = [
+                        window.directRestFetchRow('app_cloud_db', 'id', `gpslock_${sNorm}`).catch(() => null),
+                        window.directRestGetQuery(`riwayat_presensi?nama_siswa=ilike.${encodedName}&order=tanggal_siklus.desc&limit=10`).catch(() => null)
+                    ];
+                    if (prof.identitas && String(prof.identitas).trim() !== '' && String(prof.identitas).trim() !== '-') {
+                        const encodedId = encodeURIComponent(String(prof.identitas).trim());
+                        queries.push(
+                            window.directRestGetQuery(`riwayat_presensi?siswa_id=eq.${encodedId}&order=tanggal_siklus.desc&limit=10`).catch(() => null)
+                        );
+                    }
+
+                    const [rowAtom, rowsByName, rowsById] = await Promise.all(queries);
+
+                    if (rowAtom && rowAtom.payload && window.isKoordinatValidBukanDefault(rowAtom.payload.lat, rowAtom.payload.lng)) {
+                        window.simpanDaftarTitikSahSiswa(namaResmi, rowAtom.payload.namaInd || namaInd, rowAtom.payload.lat, rowAtom.payload.lng);
+                    }
+
+                    const sqlRows = [...(Array.isArray(rowsByName) ? rowsByName : []), ...(Array.isArray(rowsById) ? rowsById : [])];
+                    sqlRows.forEach(r => {
+                        if (!r) return;
+                        const kat = String(r.status_kehadiran || "Hadir di Lokasi Industri").toLowerCase();
+                        if (!kat.includes("hadir")) return;
+                        if (window.isKoordinatValidBukanDefault(r.lat_masuk, r.lng_masuk)) {
+                            window.simpanDaftarTitikSahSiswa(namaResmi, r.industri_id || namaInd, r.lat_masuk, r.lng_masuk);
+                        }
+                        if (window.isKoordinatValidBukanDefault(r.lat_pulang, r.lng_pulang)) {
+                            window.simpanDaftarTitikSahSiswa(namaResmi, r.industri_id || namaInd, r.lat_pulang, r.lng_pulang);
+                        }
+                    });
+                } catch (e) {}
+            };
+
+            // Bungkus hitungJarakTerdekatKeIndustri: periksa juga semua titik sah hasil presensi masuk/pulang siswa
+            // dengan batas radius KETAT 100 meter (<= 100m langsung buka kamera tanpa kode akses, > 100m tetap terkunci)
+            const prevHitungJarakTerdekat = window.hitungJarakTerdekatKeIndustri;
+            if (typeof prevHitungJarakTerdekat === 'function') {
+                window.hitungJarakTerdekatKeIndustri = function(curLat, curLng, targetNamaInd, namaSiswaResmi, fallbackLat, fallbackLng, fallbackRadius) {
+                    const baseRes = prevHitungJarakTerdekat.apply(this, arguments);
+                    const batasRadius = 100;
+
+                    if (baseRes && baseRes.isCalibrated && baseRes.distance <= batasRadius) {
+                        return Object.assign({}, baseRes, { inRadius: true, radius: batasRadius });
+                    }
+
+                    const savedPts = window.ambilDaftarTitikSahSiswa(namaSiswaResmi);
+                    if (savedPts.length > 0) {
+                        let bestDist = (baseRes && baseRes.isCalibrated) ? baseRes.distance : Infinity;
+                        let bestPt = (baseRes && baseRes.isCalibrated)
+                            ? { lat: baseRes.targetLat, lng: baseRes.targetLng, label: baseRes.lokasiLabel || targetNamaInd }
+                            : null;
+
+                        savedPts.forEach(pt => {
+                            const d = window.hitungJarakMeterHaversine(curLat, curLng, pt.lat, pt.lng);
+                            if (d < bestDist) {
+                                bestDist = d;
+                                bestPt = pt;
+                            }
+                        });
+
+                        if (bestPt && bestDist !== Infinity) {
+                            return {
+                                isCalibrated: true,
+                                inRadius: bestDist <= batasRadius,
+                                distance: bestDist,
+                                targetLat: bestPt.lat,
+                                targetLng: bestPt.lng,
+                                radius: batasRadius,
+                                lokasiLabel: bestPt.label || targetNamaInd
+                            };
+                        }
+                    }
+
+                    if (baseRes) {
+                        baseRes.radius = batasRadius;
+                        baseRes.inRadius = !!(baseRes.isCalibrated && baseRes.distance <= batasRadius);
+                    }
+                    return baseRes;
+                };
+            }
+
+            // Pastikan setiap kali siswa membuka jendela Presensi, titik lokasi sah sudah dipulihkan dari Cloud terlebih dahulu
+            const prevBukaModalPresensi = window.bukaModalAmbilPresensiSelfieGPS;
+            if (typeof prevBukaModalPresensi === 'function') {
+                window.bukaModalAmbilPresensiSelfieGPS = async function(tipeAbsen) {
+                    if (window.cloudState.activeRole === 'siswa') {
+                        await Promise.race([
+                            window.pulihkanKunciGpsDariRiwayatPresensiSiswa(false).catch(() => {}),
+                            new Promise(r => setTimeout(r, 1500))
+                        ]);
+                    }
+                    return prevBukaModalPresensi.apply(this, arguments);
+                };
+            }
+
+            // Setiap kali siswa berhasil menyimpan Presensi Masuk/Pulang (Hadir di Lokasi Industri),
+            // langsung simpan permanen titik GPS sah tersebut agar presensi berikutnya tidak meminta kode akses lagi
+            const prevSimpanPresensiFinal = window.simpanPresensiSelfieFinal;
+            if (typeof prevSimpanPresensiFinal === 'function') {
+                window.simpanPresensiSelfieFinal = async function(tipeAbsen, industriNama, indLat, indLng, indRadius) {
+                    const kat = document.getElementById("presensiKategoriSelect")?.value || "hadir_lokasi";
+                    const loc = window.currentSelfieLocation;
+                    const result = await prevSimpanPresensiFinal.apply(this, arguments);
+                    if (kat === 'hadir_lokasi' && loc && loc.inRadius && window.isKoordinatValidBukanDefault(loc.lat, loc.lng)) {
+                        const prof = window.cloudState.userProfile || {};
+                        const pInfo = typeof window.getStudentPlacementInfo === 'function' ? window.getStudentPlacementInfo(prof.nama, prof.identitas) : null;
+                        const namaResmi = (pInfo && pInfo.namaSiswa) ? pInfo.namaSiswa : prof.nama;
+                        if (namaResmi) {
+                            window.simpanDaftarTitikSahSiswa(namaResmi, industriNama, loc.lat, loc.lng);
+                        }
+                    }
+                    return result;
+                };
+            }
+
+            // Pulihkan otomatis titik lokasi sah siswa saat halaman dibuka
+            setTimeout(() => {
+                window.pulihkanKunciGpsDariRiwayatPresensiSiswa(false).catch(() => {});
+            }, 1300);
+        })();
         
     </script>
 </body>
