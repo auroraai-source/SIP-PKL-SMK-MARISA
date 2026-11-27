@@ -21318,6 +21318,43 @@
 
                 window.bukaModalAmbilPresensiSelfieGPS(tipe);
             };
+
+            // 7. Penyesuaian UI Modal Kamera Presensi:
+            //    - Hilangkan kolom "Pilih Opsi Kategori Kehadiran / Hadir di Lokasi Industri" pada Presensi Reguler
+            //    - Hilangkan tombol kuning "Unggah" (wajib jepret kamera langsung)
+            //    - Perbesar tinggi layar kamera menjadi kotak segi empat (aspect-ratio 1:1)
+            const prevBukaModalUntukUiKamera = window.bukaModalAmbilPresensiSelfieGPS;
+            if (typeof prevBukaModalUntukUiKamera === 'function') {
+                window.bukaModalAmbilPresensiSelfieGPS = async function(tipeAbsen) {
+                    const isModePenugasan = !!window._modePenugasanLangsungAktif;
+                    const res = await prevBukaModalUntukUiKamera.apply(this, arguments);
+
+                    // A. Sembunyikan kolom dropdown "Hadir di Lokasi Industri" pada mode reguler
+                    const selKat = document.getElementById("presensiKategoriSelect");
+                    if (selKat && !isModePenugasan) {
+                        const groupKat = selKat.closest('.form-group');
+                        if (groupKat) groupKat.style.display = 'none';
+                    }
+
+                    // B. Hilangkan tombol kuning "Unggah" agar tombol "Jepret Wajah (Selfie)" penuh
+                    const camBtnsWrap = document.getElementById("cameraActionButtonsWrap");
+                    if (camBtnsWrap) {
+                        const btnUnggahKuning = camBtnsWrap.querySelector('label.btn-amber');
+                        if (btnUnggahKuning) btnUnggahKuning.remove();
+                    }
+
+                    // C. Perbesar layar kamera ke atas agar berbentuk kotak segi empat (1:1)
+                    const camWrap = document.getElementById("cameraPreviewWrap");
+                    if (camWrap) {
+                        camWrap.style.height = "auto";
+                        camWrap.style.aspectRatio = "1 / 1";
+                        camWrap.style.minHeight = "270px";
+                        camWrap.style.maxHeight = "330px";
+                    }
+
+                    return res;
+                };
+            }
         })();
         
     </script>
