@@ -19707,6 +19707,446 @@
                 }
             }
         })();
+
+        // =========================================================================
+        // MODUL ADITIF OPTIMASI KECEPATAN SIMPAN PRESENSI & ANTI-GHOST PRESENSI
+        // 1. Menghilangkan macet "Mengompres & Mengunggah Foto..." (Simpan < 2-3 detik)
+        // 2. Verifikasi Cloud nyata agar siswa tidak ditolak "Sudah Presensi" jika
+        //    datanya belum benar-benar masuk ke server / Panel Panitia PKL
+        // (Ditambahkan secara aditif tanpa menyentuh kode dan logika lama)
+        // =========================================================================
+        (function() {
+            const PENDING_QUEUE_KEY = "SIP_PKL_PENDING_ABSEN_QUEUE_V1";
+
+            // Helper: Promise dengan batas waktu ketat agar HP siswa tidak pernah hang/tertahan
+            const withTimeout = (promise, ms, fallbackVal = null) => {
+                return Promise.race([
+                    Promise.resolve(promise).catch(() => fallbackVal),
+                    new Promise(resolve => setTimeout(() => resolve(fallbackVal), ms))
+                ]);
+            };
+
+            // 1. Upload Foto Selfie Super Cepat (Max 2.2 detik, tanpa createBucket / loop 6 bucket)
+            window.uploadFotoSelfieSuperCepat = async function(base64DataUrl, hintKey) {
+                if (!base64DataUrl || typeof base64DataUrl !== 'string') return "";
+                if (base64DataUrl.startsWith('http://') || base64DataUrl.startsWith('https://')) {
+                    return base64DataUrl;
+                }
+
+                // Foto dari jepretFotoSelfie sudah dikompres (360x270 JPEG 0.55).
+                // Hanya kompres ulang jika benar-benar besar (> 65 KB) agar iOS/Android tidak hang.
+                let readyDataUrl = base64DataUrl;
+                if (readyDataUrl.length > 65000 && typeof window.compressImageDataUrl === 'function') {
+                    readyDataUrl = await withTimeout(
+                        window.compressImageDataUrl(readyDataUrl, 320, 240, 0.5),
+                        1500,
+                        readyDataUrl
+                    );
+                }
+
+                // Siapkan referensi cadangan #cloud_img= di memori & kirim di latar belakang
+                const cleanHint = String(hintKey || Date.now()).replace(/[^a-zA-Z0-9_]/g, "");
+                const imgRowId = `img_fast_${cleanHint}`;
+                try {
+                    localStorage.setItem(`SIP_PKL_IMG_${imgRowId}`, readyDataUrl);
+                } catch (e) {}
+
+                const creds = typeof window.getSupabaseCredentials === 'function' ? window.getSupabaseCredentials() : null;
+                const baseUrl = (creds && creds.url) ? String(creds.url).trim().replace(/\/+$/, "") : "https://tobyuffkjowdmcvygwht.supabase.co";
+                const apiKey = (creds && creds.key) ? String(creds.key).trim() : "";
+                const fallbackCloudImgRef = `${baseUrl}/rest/v1/app_cloud_db?id=eq.${imgRowId}#cloud_img=${imgRowId}`;
+
+                // Coba unggah cepat ke bucket foto_presensi (timeout ketat 2.2 detik)
+                try {
+                    const blob = typeof window.dataUrlToBlob === 'function' ? window.dataUrlToBlob(readyDataUrl) : null;
+                    if (blob && baseUrl && apiKey) {
+                        const fileName = `selfie_${cleanHint}_${Date.now()}.jpg`;
+                        const controller = new AbortController();
+                        const timer = setTimeout(() => controller.abort(), 2200);
+                        const resp = await fetch(`${baseUrl}/storage/v1/object/foto_presensi/${fileName}`, {
+                            method: 'POST',
+                            headers: {
+                                'apikey': apiKey,
+                                'Authorization': `Bearer ${apiKey}`,
+                                'Content-Type': 'image/jpeg',
+                                'x-upsert': 'true'
+                            },
+                            body: blob,
+                            signal: controller.signal
+                        }).catch(() => null);
+                        clearTimeout(timer);
+
+                        if (resp && resp.ok) {
+                            return `${baseUrl}/storage/v1/object/public/foto_presensi/${fileName}`;
+                        }
+                    }
+                } catch (e) {}
+
+                // Jika Storage belum siap / jaringan lambat: kirim gambar terkompresi ke baris img_fast_* di latar belakang
+                // tanpa menahan tombol Simpan Presensi siswa!
+                setTimeout(() => {
+                    if (typeof window.directRestUpsertRow === 'function') {
+                        window.directRestUpsertRow('app_cloud_db', {
+                            id: imgRowId,
+                            payload: { id: imgRowId, mime: 'image/jpeg', url: readyDataUrl, createdAt: Date.now() }
+                        }, 'id').catch(() => {});
+                    }
+                }, 40);
+
+                return fallbackCloudImgRef;
+            };
+
+            // 2. Simpan Item Presensi Atomik ke Server Cloud (Super Ringan ~1 KB, 0% Konflik, Pasti Muncul di Panel Panitia)
+            window.kirimPresensiAtomikKeCloud = async function(itemAbsen) {
+                if (!itemAbsen || !itemAbsen.nama) return false;
+                const tglNorm = window.normalizeTanggalStr(itemAbsen.tanggal, itemAbsen.id) || window.getTodayLocalWitaStr();
+                const sKey = window.normalizeTextCompact(itemAbsen.nama);
+                const tipe = itemAbsen.tipe_absen || "Masuk";
+                const atomId = `absitem_${tglNorm}_${sKey}_${tipe}`;
+                const rpId = `rp_${tglNorm}_${sKey}`;
+
+                const baseSqlRow = {
+                    id: rpId,
+                    siswa_id: String(itemAbsen.user_id || itemAbsen.nis || itemAbsen.nama),
+                    nama_siswa: itemAbsen.nama,
+                    kelas: itemAbsen.kelas || "-",
+                    industri_id: itemAbsen.industri || "-",
+                    pembimbing_id: itemAbsen.guru || "-",
+                    tanggal_siklus: tglNorm,
+                    status_kehadiran: itemAbsen.kategori_hadir || "Hadir di Lokasi Industri",
+                    updated_at: new Date().toISOString()
+                };
+                if (tipe === "Pulang") {
+                    baseSqlRow.waktu_pulang = new Date().toISOString();
+                    baseSqlRow.jam_pulang = itemAbsen.jam || "16:00";
+                    baseSqlRow.lat_pulang = String(itemAbsen.latitude || "");
+                    baseSqlRow.lng_pulang = String(itemAbsen.longitude || "");
+                    baseSqlRow.foto_pulang = itemAbsen.foto_url || itemAbsen.foto_selfie || "";
+                } else {
+                    baseSqlRow.waktu_masuk = new Date().toISOString();
+                    baseSqlRow.jam_masuk = itemAbsen.jam || "08:00";
+                    baseSqlRow.lat_masuk = String(itemAbsen.latitude || "");
+                    baseSqlRow.lng_masuk = String(itemAbsen.longitude || "");
+                    baseSqlRow.foto_masuk = itemAbsen.foto_url || itemAbsen.foto_selfie || "";
+                }
+
+                const fullSqlRow = Object.assign({}, baseSqlRow, {
+                    alasan_presensi: itemAbsen.alasan_presensi || "",
+                    nama_lokasi_absen: itemAbsen.nama_lokasi_absen || itemAbsen.industri || "-",
+                    status_validasi_lokasi: itemAbsen.status_validasi_lokasi || "Valid (Di Area Industri)"
+                });
+
+                // Kirim paralel: baris atomik app_cloud_db + tabel SQL riwayat_presensi (timeout 5 detik)
+                const [okAtom, okSqlFull] = await Promise.all([
+                    withTimeout(
+                        window.directRestUpsertRow('app_cloud_db', { id: atomId, payload: itemAbsen }, 'id').then(() => true),
+                        5000,
+                        false
+                    ),
+                    withTimeout(
+                        window.directRestUpsertRow('riwayat_presensi', fullSqlRow, 'id').then(() => true),
+                        5000,
+                        false
+                    )
+                ]);
+
+                let okSql = okSqlFull;
+                if (!okSql) {
+                    // Fallback kolom dasar SQL jika ada kolom opsional belum tersedia
+                    okSql = await withTimeout(
+                        window.directRestUpsertRow('riwayat_presensi', baseSqlRow, 'id').then(() => true),
+                        3500,
+                        false
+                    );
+                }
+
+                // Perbarui kantong harian `absensi_day_YYYY-MM-DD` di latar belakang tanpa menahan tombol siswa!
+                if (okAtom || okSql) {
+                    setTimeout(async () => {
+                        try {
+                            const dayBucketId = `absensi_day_${tglNorm}`;
+                            const rowDay = await withTimeout(window.directRestFetchRow('app_cloud_db', 'id', dayBucketId), 3000, null);
+                            const remoteDayList = (rowDay && rowDay.payload && Array.isArray(rowDay.payload.absensi)) ? rowDay.payload.absensi : [];
+                            const mergedDay = window.mergeUniqueArrayById(
+                                [itemAbsen],
+                                remoteDayList,
+                                (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${a.tipe_absen || 'Masuk'}`
+                            );
+                            await window.directRestUpsertRow('app_cloud_db', {
+                                id: dayBucketId,
+                                payload: { updatedAt: Date.now(), tanggal: tglNorm, absensi: mergedDay }
+                            }, 'id').catch(() => {});
+                        } catch (e) {}
+                    }, 120);
+                }
+
+                return !!(okAtom || okSql);
+            };
+
+            // 3. Antrean Auto-Kirim Ulang jika HP siswa sempat offline
+            window.simpanKeAntreanPresensiGagal = function(itemAbsen) {
+                try {
+                    const q = JSON.parse(localStorage.getItem(PENDING_QUEUE_KEY) || "[]");
+                    const arr = Array.isArray(q) ? q : [];
+                    const key = `${window.normalizeTextCompact(itemAbsen.nama)}_${itemAbsen.tanggal}_${itemAbsen.tipe_absen}`;
+                    const filtered = arr.filter(x => x && `${window.normalizeTextCompact(x.nama)}_${x.tanggal}_${x.tipe_absen}` !== key);
+                    filtered.unshift(itemAbsen);
+                    localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(filtered.slice(0, 10)));
+                } catch (e) {}
+            };
+
+            window.flushAntreanPresensiTertunda = async function() {
+                try {
+                    const q = JSON.parse(localStorage.getItem(PENDING_QUEUE_KEY) || "[]");
+                    if (!Array.isArray(q) || q.length === 0) return;
+                    const sisa = [];
+                    for (const item of q) {
+                        const ok = await window.kirimPresensiAtomikKeCloud(item);
+                        if (ok) {
+                            item._cloudSynced = true;
+                        } else {
+                            sisa.push(item);
+                        }
+                    }
+                    localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(sisa));
+                } catch (e) {}
+            };
+
+            // 4. Verifikasi Langsung ke Server Cloud: Apakah siswa BENAR-BENAR sudah tercatat di Panel Panitia PKL hari ini?
+            window.cekKeberadaanPresensiDiCloud = async function(namaResmiSiswa, nisAtauId, tglStr, tipeAbsen) {
+                const sKey = window.normalizeTextCompact(namaResmiSiswa);
+                const atomId = `absitem_${tglStr}_${sKey}_${tipeAbsen}`;
+                const rpId = `rp_${tglStr}_${sKey}`;
+
+                const [atomRow, sqlRows] = await Promise.all([
+                    withTimeout(window.directRestFetchRow('app_cloud_db', 'id', atomId), 2500, null),
+                    withTimeout(window.directRestGetQuery(`riwayat_presensi?id=eq.${encodeURIComponent(rpId)}&select=id,waktu_masuk,jam_masuk,waktu_pulang,jam_pulang&limit=1`), 2500, null)
+                ]);
+
+                if (atomRow && atomRow.payload && atomRow.payload.nama) {
+                    return { exists: true, record: atomRow.payload };
+                }
+                if (Array.isArray(sqlRows) && sqlRows.length > 0) {
+                    const r = sqlRows[0];
+                    const hasTipe = (tipeAbsen === 'Pulang') ? !!(r.waktu_pulang || r.jam_pulang) : !!(r.waktu_masuk || r.jam_masuk);
+                    if (hasTipe) {
+                        return { exists: true, record: r };
+                    }
+                }
+                return { exists: false, record: null };
+            };
+
+            // 5. Override simpanPresensiSelfieFinal: Super Cepat, Proteksi try/catch/finally, Anti-Hang & Terverifikasi Cloud!
+            window.simpanPresensiSelfieFinal = async function(tipeAbsen, industriNama, indLat, indLng, indRadius) {
+                const btnSimpan = document.getElementById("btnSimpanPresensiAction");
+                const origText = btnSimpan ? btnSimpan.innerHTML : `✓ Simpan Presensi ${tipeAbsen}`;
+
+                try {
+                    const kat = document.getElementById("presensiKategoriSelect")?.value || "hadir_lokasi";
+                    const alasanInput = (document.getElementById("inputAlasanPresensiKhusus")?.value || "").trim();
+
+                    if (window.cloudState.activeRole === 'siswa') {
+                        const cekJam = window.cekIzinWaktuPresensiWita(tipeAbsen);
+                        if (!cekJam.diizinkan) {
+                            return window.showModalInfo(cekJam.judul, cekJam.pesan);
+                        }
+                    }
+
+                    if ((kat === 'tugas_luar' || kat === 'izin_sakit') && !alasanInput) {
+                        const namaOpsi = (kat === 'tugas_luar') ? 'Dinas Luar / Tugas Lapangan' : 'Izin / Sakit Resmi';
+                        const elAlasan = document.getElementById("inputAlasanPresensiKhusus");
+                        if (elAlasan) elAlasan.focus();
+                        return window.showModalInfo(
+                            "Keterangan Alasan Wajib Diisi 📝",
+                            `Karena Anda memilih opsi <b>${namaOpsi}</b>, silakan tuliskan terlebih dahulu <b>keterangan / alasan</b> pada kolom yang tersedia sebelum menyimpan presensi.`
+                        );
+                    }
+
+                    if (kat === 'hadir_lokasi') {
+                        if (!window.currentSelfieLocation || !window.currentSelfieLocation.inRadius) {
+                            const jarak = window.currentSelfieLocation ? window.currentSelfieLocation.distance : "-";
+                            return window.showModalInfo(
+                                "Di Luar Area Industri ❌",
+                                `Anda terdeteksi berjarak <b>${jarak} meter</b> dari titik lokasi industri <b>${industriNama}</b> (Batas radius: <b>${indRadius || 100} Meter</b>).<br><br>` +
+                                `Jika Anda saat ini benar-benar berada di lokasi industri namun titik koordinat sebelumnya terkunci di rumah/kos, silakan masukkan <b>Kode Akses dari Admin Utama</b> pada kotak yang tersedia.`
+                            );
+                        }
+                    }
+
+                    if (!window.tempSelfieBase64) {
+                        return window.showModalInfo("Foto Belum Diambil", "Silakan jepret wajah selfie Anda terlebih dahulu!");
+                    }
+
+                    if (btnSimpan) {
+                        btnSimpan.disabled = true;
+                        btnSimpan.innerHTML = "⏳ Menyimpan Presensi...";
+                    }
+
+                    const profile = window.cloudState.userProfile || { nama: "Siswa" };
+                    const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+                    const namaResmiSiswa = placementInfo.namaSiswa || profile.nama;
+                    const witaNow = window.getWaktuWitaSekarang();
+                    const jamStr = witaNow.jamStr;
+                    const tglStr = window.getTodayLocalWitaStr();
+
+                    let katText = "Hadir di Lokasi Industri";
+                    if (kat === 'tugas_luar') katText = "Dinas Luar / Tugas Lapangan";
+                    else if (kat === 'izin_sakit') katText = "Izin / Sakit Resmi";
+
+                    const loc = window.currentSelfieLocation || {};
+                    const curLatVal = loc.lat || indLat;
+                    const curLngVal = loc.lng || indLng;
+                    const curDistVal = typeof loc.distance === 'number' ? Math.round(loc.distance) : 0;
+                    const isDalamRadius = (curDistVal <= (parseInt(indRadius, 10) || 100));
+
+                    // Pakai alamat yang sudah terdeteksi saat membuka kamera (instan 0 ms tanpa tunggu Nominatim lagi!)
+                    const alamatCepat = loc.detectedAddress || industriNama || `Lat ${parseFloat(curLatVal || 0).toFixed(5)}, Lng ${parseFloat(curLngVal || 0).toFixed(5)}`;
+                    const namaLokasiAbsen = isDalamRadius
+                        ? `${industriNama} (${curDistVal}m)`
+                        : `${alamatCepat} (Jarak ${curDistVal}m dari ${industriNama})`;
+
+                    let statusValidasiLokasi = isDalamRadius ? "Valid (Di Area Industri)" : "Peringatan: Di Luar Area Industri!";
+                    if (kat === 'tugas_luar') {
+                        statusValidasiLokasi = isDalamRadius
+                            ? "Dinas Luar / Tugas Lapangan (Di Area Industri)"
+                            : "Dinas Luar / Tugas Lapangan (Di Luar Area Industri)";
+                    } else if (kat === 'izin_sakit') {
+                        statusValidasiLokasi = isDalamRadius
+                            ? "Izin / Sakit Resmi (Di Area Industri)"
+                            : "Izin / Sakit Resmi (Di Luar Area Industri)";
+                    }
+
+                    // 1. Upload foto super cepat (maks 2.2 detik, fallback otomatis tanpa hang)
+                    const hintKey = `${window.normalizeTextCompact(namaResmiSiswa)}_${tglStr}_${tipeAbsen}`;
+                    const cleanStorageLink = await window.uploadFotoSelfieSuperCepat(window.tempSelfieBase64, hintKey);
+
+                    const itemAbsen = {
+                        id: "abs_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                        user_id: profile.identitas || namaResmiSiswa,
+                        nis: placementInfo.nis || profile.identitas || "-",
+                        nama: namaResmiSiswa,
+                        kelas: placementInfo.kelas || "-",
+                        guru: placementInfo.guru || "-",
+                        tipe_absen: tipeAbsen,
+                        kategori_hadir: katText,
+                        alasan_presensi: (kat === 'tugas_luar' || kat === 'izin_sakit') ? alasanInput : "",
+                        industri: industriNama,
+                        tanggal: tglStr,
+                        jam: jamStr,
+                        status: "Tepat Waktu",
+                        jarak_meter: curDistVal,
+                        latitude: curLatVal,
+                        longitude: curLngVal,
+                        nama_lokasi_absen: namaLokasiAbsen,
+                        status_validasi_lokasi: statusValidasiLokasi,
+                        foto_url: cleanStorageLink,
+                        foto_selfie: cleanStorageLink,
+                        _cloudSynced: false
+                    };
+
+                    // 2. Kirim langsung ke Cloud Atomik (absitem_* & riwayat_presensi) agar PASTI muncul di Panel Panitia PKL
+                    if (btnSimpan) {
+                        btnSimpan.innerHTML = "☁️ Mengirim ke Server...";
+                    }
+                    const cloudOk = await window.kirimPresensiAtomikKeCloud(itemAbsen);
+
+                    if (!cloudOk) {
+                        // JANGAN kunci status "Sudah Presensi" di lokal jika gagal terkirim ke server!
+                        // Simpan ke antrean cadangan agar otomatis dikirim ulang, namun beri tahu siswa dengan jujur agar bisa langsung tekan Simpan lagi.
+                        window.simpanKeAntreanPresensiGagal(itemAbsen);
+                        return window.showModalInfo(
+                            "Jaringan Sedang Lambat / Terputus ⚠️",
+                            "Data presensi belum berhasil diterima oleh server Panitia PKL karena gangguan sinyal internet.<br><br>" +
+                            "<b>Silakan tekan kembali tombol Simpan Presensi</b> (tidak perlu foto ulang) saat sinyal stabil agar nama Anda pasti tercatat di Panel Panitia PKL."
+                        );
+                    }
+
+                    // 3. Sukses terverifikasi di Cloud -> simpan di memori lokal & kunci titik GPS permanen
+                    itemAbsen._cloudSynced = true;
+                    if (!Array.isArray(window.cloudState.absensi)) window.cloudState.absensi = [];
+                    const existingTodayIdx = window.cloudState.absensi.findIndex(a =>
+                        a && window.normalizeTanggalStr(a.tanggal, a.id) === tglStr && a.tipe_absen === tipeAbsen &&
+                        (window.isNameMatch(a.nama, namaResmiSiswa) || (profile.identitas && String(a.user_id || '').trim() === String(profile.identitas).trim()))
+                    );
+                    if (existingTodayIdx !== -1) {
+                        window.cloudState.absensi[existingTodayIdx] = itemAbsen;
+                    } else {
+                        window.cloudState.absensi.unshift(itemAbsen);
+                    }
+
+                    if (kat === 'hadir_lokasi' && loc && loc.inRadius && typeof window.simpanDaftarTitikSahSiswa === 'function' && window.isKoordinatValidBukanDefault(curLatVal, curLngVal)) {
+                        window.simpanDaftarTitikSahSiswa(namaResmiSiswa, industriNama, curLatVal, curLngVal);
+                    }
+
+                    if (typeof window.scheduleAsyncLocalSave === 'function') {
+                        window.scheduleAsyncLocalSave();
+                    }
+
+                    window.tutupModalPresensiSelfie();
+                    window.showModalInfo(
+                        "Presensi Berhasil Tercatat di Server! ✅",
+                        `Presensi <b>${tipeAbsen}</b> [${katText}] atas nama <b>${namaResmiSiswa}</b> telah <b>terverifikasi masuk ke server Cloud</b> pada pukul <b>${jamStr} WITA</b>.<br><br>` +
+                        `<span style="font-size:11px; color:#15803d; font-weight:800;">✓ Nama Anda kini langsung tampil di Panel Panitia PKL, Guru Pembimbing, Mitra Industri, Orang Tua, dan Kepala Sekolah.</span>`
+                    );
+                    window.openFeature("dashboard", "Beranda");
+                } catch (err) {
+                    window.showModalInfo(
+                        "Kendala Saat Menyimpan Presensi ⚠️",
+                        `Terjadi gangguan teknis: ${err?.message || 'Koneksi terputus'}. Silakan tekan tombol <b>Simpan Presensi</b> sekali lagi.`
+                    );
+                } finally {
+                    if (btnSimpan) {
+                        btnSimpan.disabled = false;
+                        btnSimpan.innerHTML = origText;
+                    }
+                }
+            };
+
+            // 6. Bungkus bukaModalAmbilPresensiSelfieGPS:
+            // Jika di lokal siswa tercatat "sudah presensi", cek cepat ke server Cloud!
+            // Jika ternyata di server Cloud (Panel Panitia PKL) TIDAK ADA namanya, otomatis hapus catatan lokal palsu
+            // dan buka kamera presensi agar siswa bisa langsung presensi ulang!
+            const prevBukaModalPresensiFast = window.bukaModalAmbilPresensiSelfieGPS;
+            if (typeof prevBukaModalPresensiFast === 'function') {
+                window.bukaModalAmbilPresensiSelfieGPS = async function(tipeAbsen) {
+                    if (window.cloudState.activeRole === 'siswa' && window.cloudState.userProfile) {
+                        const profile = window.cloudState.userProfile;
+                        const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+                        const namaResmi = placementInfo.namaSiswa || profile.nama;
+                        const todayStr = window.getTodayLocalWitaStr();
+
+                        const localMatchIdx = (window.cloudState.absensi || []).findIndex(a =>
+                            a && window.normalizeTanggalStr(a.tanggal, a.id) === todayStr && a.tipe_absen === tipeAbsen &&
+                            (window.isNameMatch(a.nama, profile.nama) ||
+                             window.isNameMatch(a.nama, namaResmi) ||
+                             (profile.identitas && String(a.user_id || '').trim() === String(profile.identitas).trim()))
+                        );
+
+                        if (localMatchIdx !== -1) {
+                            const localRec = window.cloudState.absensi[localMatchIdx];
+                            // Verifikasi nyata ke server Cloud apakah namanya benar-benar ada di Panel Panitia PKL
+                            const cloudCheck = await window.cekKeberadaanPresensiDiCloud(namaResmi, profile.identitas, todayStr, tipeAbsen);
+                            if (!cloudCheck.exists) {
+                                // Di server Cloud ternyata belum ada! Hapus catatan lokal yang gagal sinkron agar siswa bisa presensi ulang
+                                window.cloudState.absensi.splice(localMatchIdx, 1);
+                                if (typeof window.scheduleAsyncLocalSave === 'function') {
+                                    window.scheduleAsyncLocalSave();
+                                }
+                            } else {
+                                localRec._cloudSynced = true;
+                            }
+                        }
+                    }
+                    return prevBukaModalPresensiFast.apply(this, arguments);
+                };
+            }
+
+            // Otomatis kirim ulang antrean tertunda saat halaman aktif / kembali online
+            setTimeout(() => { window.flushAntreanPresensiTertunda().catch(() => {}); }, 2500);
+            window.addEventListener('online', () => {
+                window.flushAntreanPresensiTertunda().catch(() => {});
+            });
+        })();
         
     </script>
 </body>
