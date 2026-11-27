@@ -20650,11 +20650,11 @@
 
                     if (startGrid !== -1 && endGrid !== -1 && endGrid > startGrid) {
                         const newShortcutGrid = `<div class="absensi-btn-grid">
-                    <div class="btn-absensi-box ${(absenMasuk && absenPulang) ? 'done-card' : ''}" onclick="window.openFeature('presensi-digital', 'Presensi Digital')" style="cursor:pointer; background:linear-gradient(135deg, #ede9fe 0%, #dbeafe 100%); border-color:#818cf8;">
-                        <div class="btn-absensi-icon-wrap" style="background:#ffffff; border-color:#6366f1;">📱</div>
+                    <div class="btn-absensi-box ${(absenMasuk && absenPulang) ? 'done-card' : ''}" onclick="window.openFeature('presensi-digital', 'Presensi Digital')" style="cursor:pointer; background:linear-gradient(135deg, #dbeafe 0%, #bae6fd 100%); border-color:#38bdf8;">
+                        <div class="btn-absensi-icon-wrap" style="background:#ffffff; border-color:#0284c7;">📱</div>
                         <div style="flex:1;">
-                            <div class="btn-absensi-text" style="color:#312e81;">PRESENSI DIGITAL</div>
-                            <div style="font-size: 9.5px; color: #4338ca; font-weight: 800; margin-top: 2px;">Datang, Pulang &amp; Penugasan</div>
+                            <div class="btn-absensi-text" style="color:#0c4a6e;">PRESENSI DIGITAL</div>
+                            <div style="font-size: 9.5px; color: #0369a1; font-weight: 800; margin-top: 2px;">Datang, Pulang &amp; Penugasan</div>
                             <div style="font-size: 9.5px; font-weight: 850; margin-top: 4px; line-height: 1.25; color: ${absenMasuk ? '#15803d' : '#dc2626'};">
                                 ${statusPresensiSub}
                             </div>
@@ -20679,13 +20679,37 @@
                 };
             }
 
-            // 2. Render Halaman Hub "Presensi Digital" (Persis Contoh Gambar Lampiran 1)
+            // Helper format teks Kelas & Nama Lengkap Jurusan (Contoh: Kelas XII TP (Teknik Pemesinan))
+            window.formatLabelKelasJurusanLengkap = function(kelasRaw) {
+                const kode = typeof window.normalisasiKodeKelas === 'function'
+                    ? window.normalisasiKodeKelas(kelasRaw)
+                    : String(kelasRaw || "").trim();
+                const mapJurusan = {
+                    "XII AK": "Akuntansi & Keuangan Lembaga",
+                    "XII BD": "Bisnis Digital",
+                    "XII NKPI": "Nautika Kapal Penangkap Ikan",
+                    "XII DPIB": "Desain Pemodelan & Informasi Bangunan",
+                    "XII TSM": "Teknik Sepeda Motor",
+                    "XII TKR": "Teknik Kendaraan Ringan",
+                    "XII TJKT": "Teknik Jaringan Komputer & Telekomunikasi",
+                    "XII TP": "Teknik Pemesinan",
+                    "XII TKP": "Teknik Konstruksi & Perumahan"
+                };
+                if (!kode || kode === '-') return "Siswa PKL SMK Negeri 1 Marisa";
+                if (mapJurusan[kode]) {
+                    return `Kelas ${kode} (${mapJurusan[kode]})`;
+                }
+                return kode.toLowerCase().startsWith("kelas") ? kode : `Kelas ${kode}`;
+            };
+
+            // 2. Render Halaman Hub "Presensi Digital" (Serasi Warna Biru Bawaan Aplikasi)
             window.renderHubPresensiDigitalSiswa = function() {
                 const profile = window.cloudState.userProfile || { nama: "Siswa PKL" };
                 const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
                 const namaResmi = placementInfo.namaSiswa || profile.nama;
                 const nisResmi = (placementInfo.nis && placementInfo.nis !== '-') ? placementInfo.nis : (profile.identitas || "-");
                 const kelasResmi = (placementInfo.kelas && placementInfo.kelas !== '-') ? placementInfo.kelas : "";
+                const labelKelasLengkap = window.formatLabelKelasJurusanLengkap(kelasResmi);
                 const industriResmi = (placementInfo.industri && placementInfo.industri !== 'Belum Ditentukan') ? placementInfo.industri : "Belum Ditentukan";
                 const jc = window.cloudState.jamConfig || {};
                 const jamDatangCfg = jc.masukMulai || "06:00";
@@ -20734,46 +20758,46 @@
 
                 return `
                 <div style="display:flex; flex-direction:column; gap:14px;">
-                    <!-- KARTU PROFIL UNGU ELEGAN (NAMA SISWA + NIS + NAMA INDUSTRI + JAM DATANG/PULANG) -->
-                    <div style="background:linear-gradient(135deg, #5b3cc4 0%, #4338ca 55%, #3730a3 100%); border-radius:24px; padding:18px; color:#ffffff; box-shadow:0 12px 28px rgba(67, 56, 202, 0.35); position:relative; overflow:hidden;">
-                        <div style="position:absolute; right:-24px; top:-20px; width:130px; height:130px; border-radius:50%; background:rgba(255,255,255,0.08); pointer-events:none;"></div>
-                        <div style="position:absolute; right:18px; bottom:-36px; width:110px; height:110px; border-radius:50%; background:rgba(255,255,255,0.06); pointer-events:none;"></div>
+                    <!-- KARTU PROFIL BIRU SERASI (NAMA SISWA + KELAS & JURUSAN + NAMA INDUSTRI + JAM DATANG/PULANG) -->
+                    <div style="background:linear-gradient(135deg, #0f52ba 0%, #0284c7 60%, #0369a1 100%); border-radius:24px; padding:18px; color:#ffffff; box-shadow:0 12px 28px rgba(15, 82, 186, 0.34); position:relative; overflow:hidden; border:1.5px solid #38bdf8;">
+                        <div style="position:absolute; right:-24px; top:-20px; width:130px; height:130px; border-radius:50%; background:rgba(255,255,255,0.09); pointer-events:none;"></div>
+                        <div style="position:absolute; right:18px; bottom:-36px; width:110px; height:110px; border-radius:50%; background:rgba(255,255,255,0.07); pointer-events:none;"></div>
 
                         <div style="display:flex; align-items:center; gap:12px; position:relative; z-index:2;">
-                            <div style="width:52px; height:52px; border-radius:50%; background:#e0e7ff; border:2.5px solid #fde047; display:flex; align-items:center; justify-content:center; font-size:28px; flex-shrink:0; box-shadow:0 4px 10px rgba(0,0,0,0.2);">
+                            <div style="width:52px; height:52px; border-radius:50%; background:#e0f2fe; border:2.5px solid #fde047; display:flex; align-items:center; justify-content:center; font-size:28px; flex-shrink:0; box-shadow:0 4px 10px rgba(0,0,0,0.2);">
                                 👨‍🎓
                             </div>
                             <div style="flex:1; min-width:0;">
                                 <div style="font-size:16px; font-weight:950; color:#ffffff; line-height:1.2; word-break:break-word;">${namaResmi}</div>
-                                <div style="font-size:11.5px; color:#e0e7ff; font-weight:700; margin-top:2px;">
-                                    ${nisResmi !== '-' ? `NIS: ${nisResmi}` : 'Siswa PKL'}${kelasResmi ? ` &bull; ${kelasResmi}` : ''}
+                                <div style="font-size:11.5px; color:#e0f2fe; font-weight:750; margin-top:3px; line-height:1.3;">
+                                    ${labelKelasLengkap}
                                 </div>
                             </div>
                         </div>
 
-                        <div style="margin-top:14px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.22); display:flex; align-items:center; gap:8px; position:relative; z-index:2;">
+                        <div style="margin-top:14px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.25); display:flex; align-items:center; gap:8px; position:relative; z-index:2;">
                             <span style="font-size:16px;">🏢</span>
                             <div style="font-size:12.5px; font-weight:850; color:#ffffff; line-height:1.3;">${industriResmi}</div>
                         </div>
 
                         <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:12px; text-align:center; position:relative; z-index:2;">
                             <div>
-                                <div style="font-size:10px; color:#c7d2fe; font-weight:700;">Presensi</div>
+                                <div style="font-size:10px; color:#bae6fd; font-weight:700;">Presensi</div>
                                 <div style="font-size:13.5px; font-weight:950; color:#fde047; margin-top:2px;">Regular</div>
                             </div>
                             <div>
-                                <div style="font-size:10px; color:#c7d2fe; font-weight:700;">Jam Datang</div>
+                                <div style="font-size:10px; color:#bae6fd; font-weight:700;">Jam Datang</div>
                                 <div style="font-size:13.5px; font-weight:950; color:#fde047; margin-top:2px;">${absenMasuk ? absenMasuk.jam : jamDatangCfg}</div>
                             </div>
                             <div>
-                                <div style="font-size:10px; color:#c7d2fe; font-weight:700;">Jam Pulang</div>
+                                <div style="font-size:10px; color:#bae6fd; font-weight:700;">Jam Pulang</div>
                                 <div style="font-size:13.5px; font-weight:950; color:#fde047; margin-top:2px;">${absenPulang ? absenPulang.jam : jamPulangCfg}</div>
                             </div>
                         </div>
                     </div>
 
                     <!-- GRID 6 FITUR UTAMA PRESENSI DIGITAL -->
-                    <div style="background:#ffffff; border-radius:24px; padding:18px 14px; border:1.5px solid #e2e8f0; box-shadow:0 6px 20px rgba(15, 23, 42, 0.06);">
+                    <div style="background:#ffffff; border-radius:24px; padding:18px 14px; border:1.5px solid #bfdbfe; box-shadow:0 6px 20px rgba(2, 132, 199, 0.08);">
                         <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:14px 10px; text-align:center;">
                             <!-- 1. Datang -->
                             <div onclick="window.bukaLayarPetaPresensiReguler('Masuk')" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:6px;">
@@ -20827,14 +20851,14 @@
                         </div>
                     </div>
 
-                    <!-- KARTU LOG PRESENSI HARI INI (BAGIAN BAWAH PERSIS GAMBAR LAMPIRAN 1) -->
-                    <div style="background:#f8fafc; border-radius:22px; padding:16px; border:1.5px solid #e2e8f0; box-shadow:0 4px 14px rgba(15, 23, 42, 0.04);">
+                    <!-- KARTU LOG PRESENSI HARI INI -->
+                    <div style="background:#f8fafc; border-radius:22px; padding:16px; border:1.5px solid #bfdbfe; box-shadow:0 4px 14px rgba(2, 132, 199, 0.06);">
                         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
                             <div style="display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:900; color:#0f172a;">
                                 <span>📅</span>
                                 <span>${tglRingkas}</span>
                             </div>
-                            <span style="font-size:10px; font-weight:850; color:${(absenMasuk && absenPulang) ? '#15803d' : '#4338ca'}; background:${(absenMasuk && absenPulang) ? '#dcfce7' : '#e0e7ff'}; padding:3px 8px; border-radius:8px;">
+                            <span style="font-size:10px; font-weight:850; color:${(absenMasuk && absenPulang) ? '#15803d' : '#0369a1'}; background:${(absenMasuk && absenPulang) ? '#dcfce7' : '#e0f2fe'}; padding:3px 8px; border-radius:8px;">
                                 ${(absenMasuk && absenPulang) ? '✅ Lengkap' : (absenMasuk ? '🟢 Sudah Datang' : '⏳ Belum Presensi')}
                             </span>
                         </div>
@@ -20847,13 +20871,13 @@
                             </div>
                             <div style="flex:1; min-width:0;">
                                 <div style="font-size:13.5px; font-weight:900; color:#0f172a;">Datang</div>
-                                <div style="font-size:11px; font-weight:750; color:${absenMasuk ? '#4338ca' : '#dc2626'}; margin-top:2px;">
+                                <div style="font-size:11px; font-weight:750; color:${absenMasuk ? '#0284c7' : '#dc2626'}; margin-top:2px;">
                                     ${absenMasuk ? (absenMasuk.kategori_hadir && !absenMasuk.kategori_hadir.includes('Hadir') ? absenMasuk.kategori_hadir : 'Anda sudah presensi masuk') : 'Belum melakukan presensi masuk'}
                                 </div>
                             </div>
                             <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
                                 <span style="font-size:13px; font-weight:900; color:#0f172a;">${absenMasuk ? absenMasuk.jam : '-'}</span>
-                                <span style="font-size:16px; color:#4338ca;">⏱️</span>
+                                <span style="font-size:16px; color:#0284c7;">⏱️</span>
                             </div>
                         </div>
 
@@ -20871,7 +20895,7 @@
                             </div>
                             <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
                                 <span style="font-size:13px; font-weight:900; color:#0f172a;">${absenPulang ? absenPulang.jam : '-'}</span>
-                                <span style="font-size:16px; color:#4338ca;">⏱️</span>
+                                <span style="font-size:16px; color:#0284c7;">⏱️</span>
                             </div>
                         </div>
                     </div>
@@ -20998,68 +21022,128 @@
 
                 const labelJudul = tipeAbsen === 'Masuk' ? 'Datang' : 'Pulang';
                 overlay.innerHTML = `
-                    <!-- Header Ungu Persis Lampiran 2 -->
-                    <div style="background:linear-gradient(135deg, #5b3cc4 0%, #4338ca 100%); color:#ffffff; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 4px 14px rgba(67,56,202,0.3); flex-shrink:0;">
+                    <!-- Header Biru Serasi -->
+                    <div style="background:linear-gradient(135deg, #0f52ba 0%, #0284c7 100%); color:#ffffff; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 4px 14px rgba(15,82,186,0.3); flex-shrink:0;">
                         <button type="button" onclick="window.tutupOverlayPetaPresensi()" style="background:none; border:none; color:#ffffff; font-size:22px; font-weight:900; cursor:pointer; padding:4px 8px;">←</button>
                         <div style="font-size:17px; font-weight:900; letter-spacing:0.3px;">${labelJudul}</div>
                         <button type="button" onclick="window.cekGpsPadaLayarPeta('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${namaInd.replace(/'/g, "\\'")}', '${namaResmi.replace(/'/g, "\\'")}')" style="background:none; border:none; color:#ffffff; font-size:20px; font-weight:900; cursor:pointer; padding:4px 8px;" title="Segarkan Lokasi GPS">↻</button>
                     </div>
 
-                    <!-- Area Peta & Kartu Melayang -->
-                    <div style="flex:1; position:relative; overflow:hidden; display:flex; flex-direction:column;">
-                        <!-- Peta Latar Interaktif OpenStreetMap -->
-                        <iframe id="iframePetaLokasiGps" src="https://www.openstreetmap.org/export/embed.html?bbox=${(indLng - 0.003).toFixed(5)},${(indLat - 0.003).toFixed(5)},${(indLng + 0.003).toFixed(5)},${(indLat + 0.003).toFixed(5)}&layer=mapnik&marker=${indLat.toFixed(6)},${indLng.toFixed(6)}" style="position:absolute; inset:0; width:100%; height:100%; border:none;"></iframe>
+                    <!-- Area Peta + Kartu Nama Lokasi Industri di Atas -->
+                    <div style="position:relative; flex:1; overflow:hidden; display:flex; flex-direction:column;">
+                        <iframe id="iframePetaLokasiGps" src="https://www.openstreetmap.org/export/embed.html?bbox=${(indLng - 0.0025).toFixed(5)},${(indLat - 0.0025).toFixed(5)},${(indLng + 0.0025).toFixed(5)},${(indLat + 0.0025).toFixed(5)}&layer=mapnik&marker=${indLat.toFixed(6)},${indLng.toFixed(6)}" style="width:100%; height:100%; border:none;"></iframe>
 
-                        <!-- Overlay Radar Lingkaran Radius 100m di Tengah Peta -->
-                        <div style="position:absolute; inset:0; pointer-events:none; display:flex; align-items:center; justify-content:center;">
-                            <div style="width:155px; height:155px; border-radius:50%; background:rgba(56, 189, 248, 0.22); border:2.5px solid #0284c7; display:flex; align-items:center; justify-content:center; box-shadow:0 0 24px rgba(2,132,199,0.28);">
-                                <div style="font-size:28px; filter:drop-shadow(0 3px 4px rgba(0,0,0,0.35));">🏢</div>
-                            </div>
-                        </div>
-
-                        <!-- Kartu Putih Melayang di Atas Peta (Persis Gambar Lampiran 2) -->
-                        <div style="position:relative; z-index:5; margin:14px 14px 0; background:#ffffff; border-radius:18px; padding:14px 16px; box-shadow:0 10px 28px rgba(15,23,42,0.18); border:1px solid #e2e8f0;">
+                        <!-- Kartu Putih Lokasi Industri -->
+                        <div style="position:absolute; top:14px; left:14px; right:14px; max-width:440px; margin:0 auto; background:#ffffff; border-radius:18px; padding:14px 16px; box-shadow:0 10px 28px rgba(15,23,42,0.18); z-index:5;">
                             <div style="display:flex; align-items:center; gap:10px; padding-bottom:10px; border-bottom:1px solid #e2e8f0;">
                                 <span style="font-size:20px; color:#16a34a;">📍</span>
-                                <div style="font-size:14px; font-weight:900; color:#0f172a; line-height:1.25;">${namaInd}</div>
+                                <div style="font-size:14px; font-weight:850; color:#0f172a; line-height:1.3;">${namaInd}</div>
                             </div>
                             <div style="text-align:center; padding-top:10px;">
-                                <div id="petaStatusLokasiText" style="font-size:13px; font-weight:850; color:#d97706;">
-                                    🛰️ Mendeteksi posisi GPS Anda...
+                                <div id="petaStatusLokasiText" style="font-size:12.5px; font-weight:850; color:#d97706;">🛰️ Mendeteksi posisi GPS Anda...</div>
+                                <div id="petaKoordinatText" style="font-size:12px; font-weight:750; color:#334155; margin-top:4px;">Menunggu koordinat...</div>
+                            </div>
+
+                            <!-- Kotak Kode Akses (HANYA muncul jika di luar radius 100m atau belum dikunci) -->
+                            <div id="petaKodeAksesBox" style="display:none; margin-top:12px; padding-top:10px; border-top:1.5px dashed #fca5a5;">
+                                <div style="font-size:10.5px; font-weight:850; color:#b45309; margin-bottom:6px; text-align:left;">
+                                    🔑 Berpindah lokasi / titik belum terkunci? Masukkan Kode Akses Admin:
                                 </div>
-                                <div id="petaKoordinatText" style="font-size:12.5px; font-weight:750; color:#334155; margin-top:4px; font-family:monospace;">
-                                    Memuat koordinat...
+                                <div style="display:flex; gap:6px;">
+                                    <input type="text" id="petaInputKodeGps" placeholder="GPS-XXXXXX" style="flex:1; padding:8px 10px; border:1.5px solid #f59e0b; border-radius:10px; font-size:12px; font-weight:900; text-transform:uppercase; text-align:center;">
+                                    <button type="button" onclick="window.kunciLokasiBaruDariPeta('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${namaInd.replace(/'/g, "\\'")}')" style="background:#f59e0b; color:#ffffff; border:none; border-radius:10px; padding:8px 12px; font-size:11px; font-weight:900; cursor:pointer;">🔓 Kunci</button>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Panel Bawah: Tombol Lanjut Kamera ATAU Input Kode Akses (Khusus jika di luar radius 100m / pindah lokasi) -->
-                        <div style="position:relative; z-index:6; margin-top:auto; padding:14px 16px 22px; display:flex; flex-direction:column; align-items:center; gap:10px;">
-                            <div id="petaKodeAksesBox" style="display:none; width:100%; max-width:440px; background:#ffffff; border:2px solid #f59e0b; border-radius:18px; padding:12px 14px; box-shadow:0 10px 25px rgba(0,0,0,0.2);">
-                                <div style="font-size:11px; font-weight:900; color:#b45309; margin-bottom:4px;">
-                                    🔑 Berada di Lokasi Industri Baru / Perpindahan Lokasi?
-                                </div>
-                                <div style="font-size:10.5px; color:#475569; margin-bottom:8px; line-height:1.4;">
-                                    Jika Anda benar-benar sedang berdiri di <b>${namaInd}</b> namun terdeteksi di luar radius 100m, masukkan <b>Kode Akses Admin</b> untuk mengunci titik lokasi baru:
-                                </div>
-                                <div style="display:flex; gap:6px;">
-                                    <input type="text" id="petaInputKodeGps" class="form-control" placeholder="GPS-XXXXXX" style="padding:8px 10px; font-size:12px; font-weight:900; text-transform:uppercase; text-align:center;">
-                                    <button type="button" onclick="window.kunciLokasiBaruDariPeta('${tipeAbsen}', ${indLat}, ${indLng}, ${indRadius}, '${namaInd.replace(/'/g, "\\'")}')" class="btn-action btn-amber" style="padding:8px 12px; font-size:11px; font-weight:900; white-space:nowrap;">
-                                        🔓 Kunci Titik
-                                    </button>
-                                </div>
-                            </div>
-
-                            <button type="button" id="btnPetaLanjutKamera" disabled onclick="window.lanjutDariPetaKeKamera('${tipeAbsen}')" style="width:120px; height:48px; border-radius:26px; border:none; background:#94a3b8; color:#ffffff; font-size:22px; font-weight:900; cursor:not-allowed; box-shadow:0 6px 18px rgba(15,23,42,0.25); display:flex; align-items:center; justify-content:center;">
+                        <!-- Tombol Lanjut Kamera Bulat di Bawah -->
+                        <div style="position:absolute; bottom:24px; left:0; right:0; display:flex; justify-content:center; z-index:5;">
+                            <button type="button" id="btnPetaLanjutKamera" disabled onclick="window.lanjutDariPetaKeKamera('${tipeAbsen}')" style="width:110px; height:48px; border-radius:24px; border:none; background:#94a3b8; color:#ffffff; font-size:22px; font-weight:900; box-shadow:0 8px 20px rgba(0,0,0,0.22); cursor:not-allowed;">
                                 ➔
                             </button>
                         </div>
                     </div>
                 `;
-                document.body.appendChild(overlay);
 
-                // Langsung jalankan deteksi GPS pada layar peta
+                document.body.appendChild(overlay);
                 window.cekGpsPadaLayarPeta(tipeAbsen, indLat, indLng, indRadius, namaInd, namaResmi);
+            };
+
+            // 5. Fitur Penugasan Datang & Penugasan Pulang:
+            //    - Kamera LANGSUNG terbuka di lokasi mana saja TANPA meminta Kode Akses
+            //    - Tetap mendeteksi & menuliskan catatan nama alamat tempat presensi (Reverse Geocoding)
+            //    - Tetap mewajibkan pengisian keterangan alasan (Dinas Luar / Tugas Lapangan / Izin / Sakit)
+            window._modePenugasanLangsungAktif = false;
+
+            const prevEvalLokasiPenugasan = window.evaluasiLokasiDanKamera;
+            if (typeof prevEvalLokasiPenugasan === 'function') {
+                window.evaluasiLokasiDanKamera = function(tipeAbsen, targetLat, targetLng, targetRadius, targetNamaInd) {
+                    if (window._modePenugasanLangsungAktif) {
+                        const sel = document.getElementById("presensiKategoriSelect");
+                        if (sel && sel.value === "hadir_lokasi") {
+                            sel.value = "tugas_luar";
+                        }
+                        const notifBox = document.getElementById("gpsNotifOutsideBox");
+                        if (notifBox) notifBox.style.display = "none";
+                    }
+                    const res = prevEvalLokasiPenugasan.apply(this, arguments);
+                    const curKat = document.getElementById("presensiKategoriSelect")?.value || "";
+                    if (curKat === "tugas_luar" || curKat === "izin_sakit") {
+                        const notifBox = document.getElementById("gpsNotifOutsideBox");
+                        if (notifBox) notifBox.style.display = "none";
+                    }
+                    return res;
+                };
+            }
+
+            // Pastikan saat menyimpan Presensi Penugasan (Dinas Luar / Izin / Sakit),
+            // alamat tempat presensi benar-benar sudah terisi dari Reverse Geocoding (jika belum selesai saat jepret)
+            const prevSimpanPresensiAlamat = window.simpanPresensiSelfieFinal;
+            if (typeof prevSimpanPresensiAlamat === 'function') {
+                window.simpanPresensiSelfieFinal = async function(tipeAbsen, industriNama, indLat, indLng, indRadius) {
+                    const kat = document.getElementById("presensiKategoriSelect")?.value || "hadir_lokasi";
+                    if ((kat === "tugas_luar" || kat === "izin_sakit") && window.currentSelfieLocation && window.currentSelfieLocation.lat && window.currentSelfieLocation.lng && !window.currentSelfieLocation.detectedAddress) {
+                        try {
+                            const resolvedAddr = await Promise.race([
+                                window.reverseGeocodeKoordinat(window.currentSelfieLocation.lat, window.currentSelfieLocation.lng),
+                                new Promise(r => setTimeout(() => r(""), 1800))
+                            ]);
+                            if (resolvedAddr) {
+                                window.currentSelfieLocation.detectedAddress = resolvedAddr;
+                            }
+                        } catch (e) {}
+                    }
+                    window._modePenugasanLangsungAktif = false;
+                    return prevSimpanPresensiAlamat.apply(this, arguments);
+                };
+            }
+
+            window.bukaModalPresensiPenugasan = async function(tipeAbsen) {
+                window._modePenugasanLangsungAktif = true;
+                try {
+                    await window.bukaModalAmbilPresensiSelfieGPS(tipeAbsen);
+                    const sel = document.getElementById("presensiKategoriSelect");
+                    if (sel) {
+                        // Khusus Penugasan Datang/Pulang: tampilkan hanya opsi Penugasan/Dinas Luar & Izin/Sakit agar tidak perlu kode akses
+                        Array.from(sel.options).forEach(opt => {
+                            if (opt.value === "hadir_lokasi") {
+                                opt.disabled = true;
+                                opt.hidden = true;
+                            }
+                        });
+                        sel.value = "tugas_luar";
+                        sel.dispatchEvent(new Event("change"));
+                    }
+                    const notifBox = document.getElementById("gpsNotifOutsideBox");
+                    if (notifBox) notifBox.style.display = "none";
+                    const inpAlasan = document.getElementById("inputAlasanPresensiKhusus");
+                    if (inpAlasan) {
+                        inpAlasan.placeholder = "Wajib diisi: Tuliskan alasan penugasan / dinas luar / izin / sakit secara jelas...";
+                        inpAlasan.focus();
+                    }
+                } finally {
+                    setTimeout(() => { window._modePenugasanLangsungAktif = false; }, 1200);
+                }
             };
 
             window.cekGpsPadaLayarPeta = function(tipeAbsen, indLat, indLng, indRadius, namaInd, namaResmi) {
@@ -21157,23 +21241,6 @@
                         window.verifikasiKodeResetGpsSiswa(tipeAbsen, indLat, indLng, indRadius, namaInd, false);
                     }
                 }, 400);
-            };
-
-            // 5. Fitur Penugasan Datang & Penugasan Pulang (Wajib Keterangan Alasan: Dinas Luar / Izin / Sakit)
-            window.bukaModalPresensiPenugasan = async function(tipeAbsen) {
-                await window.bukaModalAmbilPresensiSelfieGPS(tipeAbsen);
-                setTimeout(() => {
-                    const sel = document.getElementById("presensiKategoriSelect");
-                    if (sel) {
-                        sel.value = "tugas_luar";
-                        sel.dispatchEvent(new Event("change"));
-                    }
-                    const inpAlasan = document.getElementById("inputAlasanPresensiKhusus");
-                    if (inpAlasan) {
-                        inpAlasan.placeholder = "Wajib diisi: Tuliskan alasan penugasan / dinas luar / izin / sakit secara jelas...";
-                        inpAlasan.focus();
-                    }
-                }, 220);
             };
 
             // 6. Fitur "Presensikan Teman" (Membantu presensi teman magang di industri yang sama)
