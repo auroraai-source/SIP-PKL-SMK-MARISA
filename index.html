@@ -21336,11 +21336,11 @@
                         if (groupKat) groupKat.style.display = 'none';
                     }
 
-                    // B. Hilangkan tombol kuning "Unggah" agar tombol "Jepret Wajah (Selfie)" penuh
+                    // B. Pertahankan tombol kuning "Unggah" agar siswa yang membutuhkan tetap dapat menggunakannya
                     const camBtnsWrap = document.getElementById("cameraActionButtonsWrap");
                     if (camBtnsWrap) {
                         const btnUnggahKuning = camBtnsWrap.querySelector('label.btn-amber');
-                        if (btnUnggahKuning) btnUnggahKuning.remove();
+                        if (btnUnggahKuning) btnUnggahKuning.style.display = 'flex';
                     }
 
                     // C. Perbesar layar kamera ke atas agar berbentuk kotak segi empat (1:1)
@@ -21355,6 +21355,466 @@
                     return res;
                 };
             }
+        })();
+
+        // =========================================================================
+        // MODUL ADITIF: PENGUATAN PENGIRIMAN PRESENSI ANTI-GAGAL (3x AUTO-RETRY + OFFLINE AUTO-SYNC)
+        // Menuntaskan kendala "Jaringan Sedang Lambat / Terputus" di semua dashboard siswa
+        // =========================================================================
+        (function() {
+            const PENDING_QUEUE_KEY = "SIP_PKL_PENDING_ABSEN_QUEUE_V1";
+
+            const withTimeout = (promise, ms, fallbackVal = null) => {
+                return Promise.race([
+                    Promise.resolve(promise).catch(() => fallbackVal),
+                    new Promise(resolve => setTimeout(() => resolve(fallbackVal), ms))
+                ]);
+            };
+
+            const sleepMs = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+            // 1. Jalur Upsert Super Andal (Memperbaiki header sb_publishable_ & auto-failover server)
+            window.upsertPresensiSuperAndal = async function(tableName, rowObject, conflictColumn = 'id', timeoutMs = 6500) {
+                const creds = typeof window.getSupabaseCredentials === 'function' ? window.getSupabaseCredentials() : null;
+                const primaryUrl = String(creds?.url || DEFAULT_SUPABASE_URL).trim().replace(/\/+$/, "");
+                const primaryKey = String(creds?.key || DEFAULT_SUPABASE_KEY).trim();
+                const bodyStr = JSON.stringify(rowObject);
+
+                const postRest = async (baseUrl, apiKey, includeBearer) => {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), timeoutMs);
+                    try {
+                        const headers = {
+                            "apikey": apiKey,
+                            "Content-Type": "application/json",
+                            "Prefer": "resolution=merge-duplicates,return=minimal"
+                        };
+                        if (includeBearer) {
+                            headers["Authorization"] = `Bearer ${apiKey}`;
+                        }
+                        const resp = await fetch(`${baseUrl}/rest/v1/${tableName}?on_conflict=${encodeURIComponent(conflictColumn)}`, {
+                            method: "POST",
+                            headers: headers,
+                            body: bodyStr,
+                            mode: "cors",
+                            signal: controller.signal
+                        });
+                        return resp.ok;
+                    } catch (e) {
+                        return false;
+                    } finally {
+                        clearTimeout(timer);
+                    }
+                };
+
+                // Jalur A: Supabase SDK + Direct REST secara paralel (mana yang berhasil duluan langsung menang!)
+                const isJwt = primaryKey.startsWith("eyJ");
+                const sdkAttempt = (async () => {
+                    try {
+                        if (!window.supabaseClient && typeof window.inisialisasiSupabaseClient === 'function') {
+                            window.inisialisasiSupabaseClient();
+                        }
+                        if (!window.supabaseClient) return false;
+                        const { error } = await window.supabaseClient
+                            .from(tableName)
+                            .upsert(rowObject, { onConflict: conflictColumn });
+                        return !error;
+                    } catch (e) {
+                        return false;
+                    }
+                })();
+
+                const restPrimaryAttempt = postRest(primaryUrl, primaryKey, isJwt);
+
+                const [okSdk, okRest] = await withTimeout(
+                    Promise.all([sdkAttempt, restPrimaryAttempt]),
+                    timeoutMs + 500,
+                    [false, false]
+                );
+                if (okSdk || okRest) return true;
+
+                // Jalur B: Coba balik mode Authorization header pada server utama
+                const okRestAltHeader = await postRest(primaryUrl, primaryKey, !isJwt);
+                if (okRestAltHeader) return true;
+
+                // Jalur C: Auto-failover ke server cadangan apabila server utama tidak merespons
+                const altUrl = primaryUrl.includes("pmxwnud") ? DEFAULT_SUPABASE_URL : ALT_SUPABASE_URL;
+                const altKey = primaryUrl.includes("pmxwnud") ? DEFAULT_SUPABASE_KEY : ALT_SUPABASE_KEY;
+                const okAlt = await postRest(altUrl, altKey, altKey.startsWith("eyJ"));
+                if (okAlt) {
+                    try {
+                        localStorage.setItem(STORAGE_KEY_CLOUD_CFG, JSON.stringify({ url: altUrl, key: altKey }));
+                    } catch (e) {}
+                    if (typeof window.inisialisasiSupabaseClient === 'function') window.inisialisasiSupabaseClient();
+                    return true;
+                }
+
+                return false;
+            };
+
+            // 2. Pengiriman Presensi Atomik dengan 3x Auto-Retry Cerdas (Anti-Gagal Saat Jam Sibuk)
+            window.kirimPresensiAtomikKeCloud = async function(itemAbsen, onProgress = null) {
+                if (!itemAbsen || !itemAbsen.nama) return false;
+                const tglNorm = window.normalizeTanggalStr(itemAbsen.tanggal, itemAbsen.id) || window.getTodayLocalWitaStr();
+                const sKey = window.normalizeTextCompact(itemAbsen.nama);
+                const tipe = window.normalisasiTipeAbsen ? window.normalisasiTipeAbsen(itemAbsen.tipe_absen) : (itemAbsen.tipe_absen || "Masuk");
+                const atomId = `absitem_${tglNorm}_${sKey}_${tipe}`;
+                const rpId = `rp_${tglNorm}_${sKey}`;
+
+                const baseSqlRow = {
+                    id: rpId,
+                    siswa_id: String(itemAbsen.user_id || itemAbsen.nis || itemAbsen.nama),
+                    nama_siswa: itemAbsen.nama,
+                    kelas: itemAbsen.kelas || "-",
+                    industri_id: itemAbsen.industri || "-",
+                    pembimbing_id: itemAbsen.guru || "-",
+                    tanggal_siklus: tglNorm,
+                    status_kehadiran: itemAbsen.kategori_hadir || "Hadir di Lokasi Industri",
+                    updated_at: new Date().toISOString()
+                };
+                if (tipe === "Pulang") {
+                    baseSqlRow.waktu_pulang = new Date().toISOString();
+                    baseSqlRow.jam_pulang = itemAbsen.jam || "16:00";
+                    baseSqlRow.lat_pulang = String(itemAbsen.latitude || "");
+                    baseSqlRow.lng_pulang = String(itemAbsen.longitude || "");
+                    baseSqlRow.foto_pulang = itemAbsen.foto_url || itemAbsen.foto_selfie || "";
+                } else {
+                    baseSqlRow.waktu_masuk = new Date().toISOString();
+                    baseSqlRow.jam_masuk = itemAbsen.jam || "08:00";
+                    baseSqlRow.lat_masuk = String(itemAbsen.latitude || "");
+                    baseSqlRow.lng_masuk = String(itemAbsen.longitude || "");
+                    baseSqlRow.foto_masuk = itemAbsen.foto_url || itemAbsen.foto_selfie || "";
+                }
+
+                const fullSqlRow = Object.assign({}, baseSqlRow, {
+                    alasan_presensi: itemAbsen.alasan_presensi || "",
+                    nama_lokasi_absen: itemAbsen.nama_lokasi_absen || itemAbsen.industri || "-",
+                    status_validasi_lokasi: itemAbsen.status_validasi_lokasi || "Valid (Di Area Industri)"
+                });
+
+                let okAtom = false;
+                let okSql = false;
+
+                // Coba hingga 3 kali dengan jeda singkat (0ms, 700ms, 1500ms)
+                for (let attempt = 1; attempt <= 3; attempt++) {
+                    if (typeof onProgress === 'function' && attempt > 1) {
+                        onProgress(attempt, 3);
+                    }
+
+                    const tasks = [];
+                    if (!okAtom) {
+                        tasks.push(
+                            window.upsertPresensiSuperAndal('app_cloud_db', { id: atomId, payload: itemAbsen }, 'id', 6500)
+                                .then(r => { if (r) okAtom = true; return r; })
+                        );
+                    }
+                    if (!okSql) {
+                        tasks.push(
+                            window.upsertPresensiSuperAndal('riwayat_presensi', attempt === 1 ? fullSqlRow : baseSqlRow, 'id', 6500)
+                                .then(r => { if (r) okSql = true; return r; })
+                        );
+                    }
+
+                    await Promise.all(tasks);
+                    if (okAtom || okSql) break;
+                    if (attempt < 3) await sleepMs(attempt === 1 ? 700 : 1500);
+                }
+
+                if (okAtom || okSql) {
+                    if (typeof window.simpanCacheTerverifikasiHariIni === 'function') {
+                        window.simpanCacheTerverifikasiHariIni(itemAbsen);
+                    }
+                    // Sinkronkan juga sisi yang belum sempat masuk (misal okAtom=true tapi okSql=false) & kantong harian di latar belakang
+                    setTimeout(async () => {
+                        try {
+                            if (!okSql) {
+                                await window.upsertPresensiSuperAndal('riwayat_presensi', baseSqlRow, 'id', 6000);
+                            }
+                            if (!okAtom) {
+                                await window.upsertPresensiSuperAndal('app_cloud_db', { id: atomId, payload: itemAbsen }, 'id', 6000);
+                            }
+                            const dayBucketId = `absensi_day_${tglNorm}`;
+                            const rowDay = await withTimeout(window.directRestFetchRow('app_cloud_db', 'id', dayBucketId), 4000, null);
+                            const remoteDayList = (rowDay && rowDay.payload && Array.isArray(rowDay.payload.absensi)) ? rowDay.payload.absensi : [];
+                            const mergedDay = window.mergeUniqueArrayById(
+                                [itemAbsen],
+                                remoteDayList,
+                                (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${window.normalisasiTipeAbsen ? window.normalisasiTipeAbsen(a.tipe_absen) : (a.tipe_absen || 'Masuk')}`
+                            );
+                            await window.upsertPresensiSuperAndal('app_cloud_db', {
+                                id: dayBucketId,
+                                payload: { updatedAt: Date.now(), tanggal: tglNorm, absensi: mergedDay }
+                            }, 'id', 6000);
+                        } catch (e) {}
+                    }, 100);
+                    return true;
+                }
+
+                return false;
+            };
+
+            // 3. Helper Antrean Kirim Otomatis Saat Sinyal Kembali
+            window.getAntreanPresensiTertunda = function() {
+                try {
+                    const q = JSON.parse(localStorage.getItem(PENDING_QUEUE_KEY) || "[]");
+                    return Array.isArray(q) ? q : [];
+                } catch (e) {
+                    return [];
+                }
+            };
+
+            window.flushAntreanPresensiTertunda = async function(showNotifIfSuccess = false) {
+                if (window._isFlushingPresensiQueue) return;
+                const q = window.getAntreanPresensiTertunda();
+                if (q.length === 0) return;
+
+                window._isFlushingPresensiQueue = true;
+                try {
+                    const sisa = [];
+                    let sentCount = 0;
+                    for (const item of q) {
+                        const ok = await window.kirimPresensiAtomikKeCloud(item);
+                        if (ok) {
+                            item._cloudSynced = true;
+                            item._pendingCloudSync = false;
+                            sentCount++;
+                        } else {
+                            sisa.push(item);
+                        }
+                    }
+                    localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(sisa));
+                    if (sentCount > 0) {
+                        const cf = window.cloudState.currentFeature;
+                        if (cf === 'dashboard' || cf === 'presensi-digital' || cf === 'presensi') {
+                            window.openFeature(cf, undefined, true);
+                        }
+                        if (showNotifIfSuccess) {
+                            window.showModalInfo("Sinkronisasi Berhasil ✅", `${sentCount} data presensi tertunda telah berhasil terkirim ke server Panitia PKL!`);
+                        }
+                    }
+                } catch (e) {
+                } finally {
+                    window._isFlushingPresensiQueue = false;
+                }
+            };
+
+            // 4. Override simpanPresensiSelfieFinal: Profesional, Anti-Gagal, 3x Retry + Auto-Sync Queue
+            window.simpanPresensiSelfieFinal = async function(tipeAbsen, industriNama, indLat, indLng, indRadius) {
+                const btnSimpan = document.getElementById("btnSimpanPresensiAction");
+                const origText = btnSimpan ? btnSimpan.innerHTML : `✓ Simpan Presensi ${tipeAbsen}`;
+
+                try {
+                    const kat = document.getElementById("presensiKategoriSelect")?.value || "hadir_lokasi";
+                    const alasanInput = (document.getElementById("inputAlasanPresensiKhusus")?.value || "").trim();
+
+                    if (window.cloudState.activeRole === 'siswa') {
+                        const cekJam = window.cekIzinWaktuPresensiWita(tipeAbsen);
+                        if (!cekJam.diizinkan) {
+                            return window.showModalInfo(cekJam.judul, cekJam.pesan);
+                        }
+                    }
+
+                    if ((kat === 'tugas_luar' || kat === 'izin_sakit') && !alasanInput) {
+                        const namaOpsi = (kat === 'tugas_luar') ? 'Dinas Luar / Tugas Lapangan' : 'Izin / Sakit Resmi';
+                        const elAlasan = document.getElementById("inputAlasanPresensiKhusus");
+                        if (elAlasan) elAlasan.focus();
+                        return window.showModalInfo(
+                            "Keterangan Alasan Wajib Diisi 📝",
+                            `Karena Anda memilih opsi <b>${namaOpsi}</b>, silakan tuliskan terlebih dahulu <b>keterangan / alasan</b> pada kolom yang tersedia sebelum menyimpan presensi.`
+                        );
+                    }
+
+                    if (kat === 'hadir_lokasi') {
+                        if (!window.currentSelfieLocation || !window.currentSelfieLocation.inRadius) {
+                            const jarak = window.currentSelfieLocation ? window.currentSelfieLocation.distance : "-";
+                            return window.showModalInfo(
+                                "Di Luar Area Industri ❌",
+                                `Anda terdeteksi berjarak <b>${jarak} meter</b> dari titik lokasi industri <b>${industriNama}</b> (Batas radius: <b>${indRadius || 100} Meter</b>).<br><br>` +
+                                `Jika Anda saat ini benar-benar berada di lokasi industri namun titik koordinat sebelumnya terkunci di rumah/kos, silakan masukkan <b>Kode Akses dari Admin Utama</b> pada kotak yang tersedia.`
+                            );
+                        }
+                    }
+
+                    if (!window.tempSelfieBase64) {
+                        return window.showModalInfo("Foto Belum Diambil", "Silakan jepret wajah selfie atau pilih foto melalui tombol Unggah terlebih dahulu!");
+                    }
+
+                    if (btnSimpan) {
+                        btnSimpan.disabled = true;
+                        btnSimpan.innerHTML = "⏳ Memproses Foto...";
+                    }
+
+                    const profile = window.cloudState.userProfile || { nama: "Siswa" };
+                    const placementInfo = window.getStudentPlacementInfo(profile.nama, profile.identitas);
+                    const namaResmiSiswa = placementInfo.namaSiswa || profile.nama;
+                    const witaNow = window.getWaktuWitaSekarang();
+                    const jamStr = witaNow.jamStr;
+                    const tglStr = window.getTodayLocalWitaStr();
+
+                    let katText = "Hadir di Lokasi Industri";
+                    if (kat === 'tugas_luar') katText = "Dinas Luar / Tugas Lapangan";
+                    else if (kat === 'izin_sakit') katText = "Izin / Sakit Resmi";
+
+                    const loc = window.currentSelfieLocation || {};
+                    const curLatVal = loc.lat || indLat;
+                    const curLngVal = loc.lng || indLng;
+                    const curDistVal = typeof loc.distance === 'number' ? Math.round(loc.distance) : 0;
+                    const isDalamRadius = (curDistVal <= (parseInt(indRadius, 10) || 100));
+
+                    // Untuk Penugasan/Izin, pastikan alamat Reverse Geocoding terisi jika belum selesai
+                    if ((kat === 'tugas_luar' || kat === 'izin_sakit') && curLatVal && curLngVal && !loc.detectedAddress) {
+                        const resolvedAddr = await withTimeout(window.reverseGeocodeKoordinat(curLatVal, curLngVal), 1500, "");
+                        if (resolvedAddr) loc.detectedAddress = resolvedAddr;
+                    }
+
+                    const alamatCepat = loc.detectedAddress || industriNama || `Lat ${parseFloat(curLatVal || 0).toFixed(5)}, Lng ${parseFloat(curLngVal || 0).toFixed(5)}`;
+                    const namaLokasiAbsen = isDalamRadius
+                        ? `${industriNama} (${curDistVal}m)`
+                        : `${alamatCepat} (Jarak ${curDistVal}m dari ${industriNama})`;
+
+                    let statusValidasiLokasi = isDalamRadius ? "Valid (Di Area Industri)" : "Peringatan: Di Luar Area Industri!";
+                    if (kat === 'tugas_luar') {
+                        statusValidasiLokasi = isDalamRadius
+                            ? "Dinas Luar / Tugas Lapangan (Di Area Industri)"
+                            : "Dinas Luar / Tugas Lapangan (Di Luar Area Industri)";
+                    } else if (kat === 'izin_sakit') {
+                        statusValidasiLokasi = isDalamRadius
+                            ? "Izin / Sakit Resmi (Di Area Industri)"
+                            : "Izin / Sakit Resmi (Di Luar Area Industri)";
+                    }
+
+                    // 1. Unggah foto cepat (maks 2.2 detik, fallback otomatis ke #cloud_img= tanpa hang)
+                    const hintKey = `${window.normalizeTextCompact(namaResmiSiswa)}_${tglStr}_${tipeAbsen}`;
+                    const cleanStorageLink = await window.uploadFotoSelfieSuperCepat(window.tempSelfieBase64, hintKey);
+
+                    const itemAbsen = {
+                        id: "abs_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                        user_id: profile.identitas || namaResmiSiswa,
+                        nis: placementInfo.nis || profile.identitas || "-",
+                        nama: namaResmiSiswa,
+                        kelas: placementInfo.kelas || "-",
+                        guru: placementInfo.guru || "-",
+                        tipe_absen: tipeAbsen,
+                        kategori_hadir: katText,
+                        alasan_presensi: (kat === 'tugas_luar' || kat === 'izin_sakit') ? alasanInput : "",
+                        industri: industriNama,
+                        tanggal: tglStr,
+                        jam: jamStr,
+                        status: "Tepat Waktu",
+                        jarak_meter: curDistVal,
+                        latitude: curLatVal,
+                        longitude: curLngVal,
+                        nama_lokasi_absen: namaLokasiAbsen,
+                        status_validasi_lokasi: statusValidasiLokasi,
+                        foto_url: cleanStorageLink,
+                        foto_selfie: cleanStorageLink,
+                        _cloudSynced: false,
+                        _pendingCloudSync: false
+                    };
+
+                    // 2. Kirim ke Server dengan 3x Auto-Retry Cerdas
+                    if (btnSimpan) btnSimpan.innerHTML = "☁️ Mengirim ke Server...";
+                    const cloudOk = await window.kirimPresensiAtomikKeCloud(itemAbsen, (att, maxAtt) => {
+                        if (btnSimpan) btnSimpan.innerHTML = `🔄 Mengirim Ulang (${att}/${maxAtt})...`;
+                    });
+
+                    // Simpan ke state lokal & kunci GPS permanen
+                    if (!Array.isArray(window.cloudState.absensi)) window.cloudState.absensi = [];
+                    const existingTodayIdx = window.cloudState.absensi.findIndex(a =>
+                        a && window.normalizeTanggalStr(a.tanggal, a.id) === tglStr &&
+                        (window.normalisasiTipeAbsen ? window.normalisasiTipeAbsen(a.tipe_absen) : a.tipe_absen) === tipeAbsen &&
+                        (window.isNameMatch(a.nama, namaResmiSiswa) || (profile.identitas && String(a.user_id || '').trim() === String(profile.identitas).trim()))
+                    );
+
+                    if (cloudOk) {
+                        itemAbsen._cloudSynced = true;
+                        itemAbsen._pendingCloudSync = false;
+                    } else {
+                        // Jika HP benar-benar sedang 0 sinyal: masukkan ke Antrean Kirim Otomatis agar tidak ada drama gagal presensi
+                        itemAbsen._cloudSynced = false;
+                        itemAbsen._pendingCloudSync = true;
+                        if (typeof window.simpanKeAntreanPresensiGagal === 'function') {
+                            window.simpanKeAntreanPresensiGagal(itemAbsen);
+                        }
+                    }
+
+                    if (existingTodayIdx !== -1) {
+                        window.cloudState.absensi[existingTodayIdx] = itemAbsen;
+                    } else {
+                        window.cloudState.absensi.unshift(itemAbsen);
+                    }
+
+                    if (kat === 'hadir_lokasi' && loc && loc.inRadius && typeof window.simpanDaftarTitikSahSiswa === 'function' && window.isKoordinatValidBukanDefault(curLatVal, curLngVal)) {
+                        window.simpanDaftarTitikSahSiswa(namaResmiSiswa, industriNama, curLatVal, curLngVal);
+                    }
+
+                    if (typeof window.scheduleAsyncLocalSave === 'function') {
+                        window.scheduleAsyncLocalSave();
+                    }
+
+                    window._modePenugasanLangsungAktif = false;
+                    window.tutupModalPresensiSelfie();
+
+                    if (cloudOk) {
+                        window.showModalInfo(
+                            "Presensi Berhasil Tercatat! ✅",
+                            `Presensi <b>${tipeAbsen}</b> [${katText}] atas nama <b>${namaResmiSiswa}</b> berhasil tercatat di server pada pukul <b>${jamStr} WITA</b>.<br><br>` +
+                            `<span style="font-size:11px; color:#15803d; font-weight:800;">✓ Nama Anda langsung tampil di Panel Panitia PKL, Guru Pembimbing, Mitra Industri, Orang Tua, dan Kepala Sekolah.</span>`
+                        );
+                    } else {
+                        window.showModalInfo(
+                            "Presensi Disimpan di Antrean Kirim Otomatis 📡",
+                            `Presensi <b>${tipeAbsen}</b> pukul <b>${jamStr} WITA</b> telah diamankan di perangkat Anda karena sinyal internet sedang terputus.<br><br>` +
+                            `<span style="font-size:11px; color:#0284c7; font-weight:800;">✓ Sistem akan otomatis mengirimkannya ke server Panitia PKL begitu sinyal internet kembali aktif (tidak perlu foto ulang).</span>`
+                        );
+                    }
+
+                    const targetFeat = (window.cloudState.currentFeature === 'presensi-digital') ? 'presensi-digital' : 'dashboard';
+                    window.openFeature(targetFeat, undefined, true);
+                } catch (err) {
+                    window.showModalInfo(
+                        "Kendala Teknis ⚠️",
+                        `Terjadi gangguan: ${err?.message || 'Silakan coba tekan Simpan Presensi sekali lagi.'}`
+                    );
+                } finally {
+                    if (btnSimpan) {
+                        btnSimpan.disabled = false;
+                        btnSimpan.innerHTML = origText;
+                    }
+                }
+            };
+
+            // 5. Tampilkan Bilah Status Antrean Kirim Otomatis di Dashboard Siswa jika masih ada data tertunda
+            const prevRenderSiswaForPendingBar = window.renderSiswaOfficialDashboard;
+            if (typeof prevRenderSiswaForPendingBar === 'function') {
+                window.renderSiswaOfficialDashboard = function() {
+                    let html = prevRenderSiswaForPendingBar.apply(this, arguments);
+                    const pendingList = window.getAntreanPresensiTertunda();
+                    if (pendingList.length > 0 && typeof html === 'string') {
+                        const barHtml = `
+                        <div style="background:#fffbeb; border:1.5px solid #f59e0b; border-radius:16px; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+                            <div style="font-size:11px; font-weight:850; color:#92400e;">
+                                📡 <b>${pendingList.length} Presensi Tertunda</b> menunggu sinyal internet untuk terkirim otomatis ke server Panitia PKL.
+                            </div>
+                            <button type="button" onclick="window.flushAntreanPresensiTertunda(true)" class="btn-action btn-amber" style="padding:6px 12px; font-size:10.5px; font-weight:900;">
+                                🔄 Kirim Sekarang
+                            </button>
+                        </div>`;
+                        html = barHtml + html;
+                    }
+                    return html;
+                };
+            }
+
+            // Otomatis kirim ulang antrean tertunda setiap 8 detik + saat online / kembali ke tab
+            setInterval(() => {
+                if (!document.hidden && navigator.onLine !== false) {
+                    window.flushAntreanPresensiTertunda(false).catch(() => {});
+                }
+            }, 8000);
+            window.addEventListener('visibilitychange', () => {
+                if (!document.hidden) window.flushAntreanPresensiTertunda(false).catch(() => {});
+            });
         })();
         
     </script>
