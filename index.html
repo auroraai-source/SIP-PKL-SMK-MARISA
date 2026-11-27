@@ -20147,6 +20147,457 @@
                 window.flushAntreanPresensiTertunda().catch(() => {});
             });
         })();
+
+        // =========================================================================
+        // MODUL ADITIF: MESIN INTEGRASI & SINKRONISASI TERPADU LINTAS EKOSISTEM
+        // Menjamin 100% keselarasan data antara Server Cloud, Panel Panitia PKL,
+        // Dashboard Siswa, Guru Pembimbing, Mitra Industri, Orang Tua & Kepsek
+        // =========================================================================
+        (function() {
+            const withTimeout = (promise, ms, fallbackVal = null) => {
+                return Promise.race([
+                    Promise.resolve(promise).catch(() => fallbackVal),
+                    new Promise(resolve => setTimeout(() => resolve(fallbackVal), ms))
+                ]);
+            };
+
+            const isSafeToAutoRefreshUI = () => {
+                const isModalOpen =
+                    (document.getElementById('modalDynamicBackdrop')?.style.display === 'flex') ||
+                    (document.getElementById('modalInfoBackdrop')?.style.display === 'flex') ||
+                    (document.getElementById('modalConfirmBackdrop')?.style.display === 'flex') ||
+                    !!document.getElementById('modalExportHtmlPreviewOverlay');
+                const isDrawerOpen = document.getElementById('appSidebar')?.classList.contains('open');
+                const activeEl = document.activeElement;
+                const isTyping = activeEl && (
+                    activeEl.tagName === 'INPUT' ||
+                    activeEl.tagName === 'TEXTAREA' ||
+                    activeEl.tagName === 'SELECT' ||
+                    activeEl.isContentEditable
+                );
+                return !isModalOpen && !isDrawerOpen && !isTyping;
+            };
+
+            // 1. Perkuat directRestGetQuery dengan auto-failover server (setara directRestFetchRow)
+            window.directRestGetQuery = async function(queryPath) {
+                const creds = window.getSupabaseCredentials();
+                const tryServer = async (baseUrl, cleanKey) => {
+                    const endpoint = `${String(baseUrl || "").trim().replace(/\/+$/, "")}/rest/v1/${queryPath}`;
+                    const headers = {
+                        "apikey": cleanKey,
+                        "Authorization": `Bearer ${cleanKey}`,
+                        "Accept": "application/json"
+                    };
+                    const resp = await fetch(endpoint, { method: "GET", headers, mode: "cors", cache: "no-store" });
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    return await resp.json();
+                };
+
+                try {
+                    return await tryServer(creds.url, String(creds.key || "").trim());
+                } catch (e1) {
+                    const fallbackUrl = String(creds.url || "").includes("pmxwnud") ? DEFAULT_SUPABASE_URL : ALT_SUPABASE_URL;
+                    const fallbackKey = String(creds.url || "").includes("pmxwnud") ? DEFAULT_SUPABASE_KEY : ALT_SUPABASE_KEY;
+                    try {
+                        const dataFallback = await tryServer(fallbackUrl, fallbackKey);
+                        try {
+                            localStorage.setItem(STORAGE_KEY_CLOUD_CFG, JSON.stringify({ url: fallbackUrl, key: fallbackKey }));
+                        } catch (e) {}
+                        if (typeof window.inisialisasiSupabaseClient === 'function') {
+                            window.inisialisasiSupabaseClient();
+                        }
+                        return dataFallback;
+                    } catch (e2) {
+                        return null;
+                    }
+                }
+            };
+
+            // 2. Normalisasi & Pencocokan Seragam (Dipakai bersama oleh Dashboard Siswa & Panel Panitia)
+            window.normalisasiTipeAbsen = function(rawTipe) {
+                return String(rawTipe || "Masuk").toLowerCase().includes("pulang") ? "Pulang" : "Masuk";
+            };
+
+            window.isAbsensiMilikSiswa = function(ab, namaSiswa, nisAtauId = "") {
+                if (!ab) return false;
+                if (namaSiswa && ab.nama && window.isNameMatch(ab.nama, namaSiswa)) return true;
+                const targetId = window.normalizeTextCompact(nisAtauId);
+                if (targetId && targetId.length >= 3) {
+                    const abNis = window.normalizeTextCompact(ab.nis);
+                    const abUid = window.normalizeTextCompact(ab.user_id);
+                    if ((abNis && abNis === targetId) || (abUid && abUid === targetId)) return true;
+                }
+                return false;
+            };
+
+            // Cache mikro terverifikasi Cloud khusus hari ini agar refresh instan di HP siswa tidak pernah kehilangan centang
+            window.simpanCacheTerverifikasiHariIni = function(itemAbsen) {
+                if (!itemAbsen || !itemAbsen.nama) return;
+                try {
+                    const todayStr = window.getTodayLocalWitaStr();
+                    const tglItem = window.normalizeTanggalStr(itemAbsen.tanggal, itemAbsen.id) || todayStr;
+                    if (tglItem !== todayStr) return;
+
+                    const sKey = window.normalizeTextCompact(itemAbsen.nama);
+                    const tipe = window.normalisasiTipeAbsen(itemAbsen.tipe_absen);
+                    const storeKey = `SIP_PKL_TODAY_VERIFIED_${sKey}`;
+                    const cur = JSON.parse(localStorage.getItem(storeKey) || "{}");
+                    const cleanBox = (cur && cur.tanggal === todayStr) ? cur : { tanggal: todayStr };
+                    cleanBox[tipe] = Object.assign({}, itemAbsen, { tanggal: todayStr, tipe_absen: tipe, _cloudSynced: true });
+                    localStorage.setItem(storeKey, JSON.stringify(cleanBox));
+                } catch (e) {}
+            };
+
+            window.muatCacheTerverifikasiHariIniKeState = function(namaSiswa) {
+                if (!namaSiswa) return;
+                try {
+                    const todayStr = window.getTodayLocalWitaStr();
+                    const sKey = window.normalizeTextCompact(namaSiswa);
+                    const storeKey = `SIP_PKL_TODAY_VERIFIED_${sKey}`;
+                    const raw = localStorage.getItem(storeKey);
+                    if (!raw) return;
+                    const parsed = JSON.parse(raw);
+                    if (!parsed || parsed.tanggal !== todayStr) {
+                        localStorage.removeItem(storeKey);
+                        return;
+                    }
+                    if (!Array.isArray(window.cloudState.absensi)) window.cloudState.absensi = [];
+                    ["Masuk", "Pulang"].forEach(tipe => {
+                        const rec = parsed[tipe];
+                        if (!rec || !rec.nama) return;
+                        const exists = window.cloudState.absensi.some(a =>
+                            a && window.normalizeTanggalStr(a.tanggal, a.id) === todayStr &&
+                            window.normalisasiTipeAbsen(a.tipe_absen) === tipe &&
+                            window.isAbsensiMilikSiswa(a, rec.nama, rec.nis || rec.user_id)
+                        );
+                        if (!exists) {
+                            window.cloudState.absensi.unshift(rec);
+                        }
+                    });
+                } catch (e) {}
+            };
+
+            // 3. Penarikan Langsung & Cepat Khusus Status Hari Ini Siswa yang Sedang Login (< 300ms)
+            window._lastDirectStudentSyncAt = 0;
+            window.sinkronkanStatusHariIniSiswaAktif = async function(forceFetch = false) {
+                if (window.cloudState.activeRole !== 'siswa' || !window.cloudState.userProfile) return false;
+                const nowMs = Date.now();
+                if (!forceFetch && (nowMs - (window._lastDirectStudentSyncAt || 0) < 8000)) return false;
+                window._lastDirectStudentSyncAt = nowMs;
+
+                const profile = window.cloudState.userProfile;
+                const pInfo = typeof window.getStudentPlacementInfo === 'function'
+                    ? window.getStudentPlacementInfo(profile.nama, profile.identitas)
+                    : { namaSiswa: profile.nama, nis: profile.identitas };
+                const namaResmi = (pInfo && pInfo.namaSiswa) ? pInfo.namaSiswa : profile.nama;
+                const nisResmi = (pInfo && pInfo.nis && pInfo.nis !== '-') ? String(pInfo.nis).trim() : (profile.identitas && profile.identitas !== '-' ? String(profile.identitas).trim() : "");
+                const todayStr = window.getTodayLocalWitaStr();
+
+                const keyCandidates = Array.from(new Set([
+                    window.normalizeTextCompact(namaResmi),
+                    window.normalizeTextCompact(profile.nama)
+                ].filter(Boolean)));
+
+                const beforeMasuk = (window.cloudState.absensi || []).some(a =>
+                    a && window.normalizeTanggalStr(a.tanggal, a.id) === todayStr &&
+                    window.normalisasiTipeAbsen(a.tipe_absen) === 'Masuk' &&
+                    window.isAbsensiMilikSiswa(a, namaResmi, nisResmi)
+                );
+                const beforePulang = (window.cloudState.absensi || []).some(a =>
+                    a && window.normalizeTanggalStr(a.tanggal, a.id) === todayStr &&
+                    window.normalisasiTipeAbsen(a.tipe_absen) === 'Pulang' &&
+                    window.isAbsensiMilikSiswa(a, namaResmi, nisResmi)
+                );
+                const beforeJurnal = (window.cloudState.jurnal || []).some(j =>
+                    j && window.normalizeTanggalStr(j.tanggal, j.id) === todayStr &&
+                    (window.isNameMatch(j.siswa, namaResmi) || window.isNameMatch(j.siswa, profile.nama))
+                );
+
+                const absRequests = [];
+                const jurRequests = [];
+
+                keyCandidates.forEach(sKey => {
+                    absRequests.push(withTimeout(window.directRestFetchRow('app_cloud_db', 'id', `absitem_${todayStr}_${sKey}_Masuk`), 3000, null));
+                    absRequests.push(withTimeout(window.directRestFetchRow('app_cloud_db', 'id', `absitem_${todayStr}_${sKey}_Pulang`), 3000, null));
+                    absRequests.push(withTimeout(window.directRestGetQuery(`riwayat_presensi?id=eq.${encodeURIComponent(`rp_${todayStr}_${sKey}`)}&limit=2`), 3000, null));
+                    jurRequests.push(withTimeout(window.directRestFetchRow('app_cloud_db', 'id', `juritem_${todayStr}_${sKey}`), 3000, null));
+                });
+
+                if (nisResmi) {
+                    absRequests.push(withTimeout(
+                        window.directRestGetQuery(`riwayat_presensi?tanggal_siklus=eq.${encodeURIComponent(todayStr)}&siswa_id=eq.${encodeURIComponent(nisResmi)}&limit=3`),
+                        3000,
+                        null
+                    ));
+                }
+                if (namaResmi && namaResmi.length >= 3) {
+                    absRequests.push(withTimeout(
+                        window.directRestGetQuery(`riwayat_presensi?tanggal_siklus=eq.${encodeURIComponent(todayStr)}&nama_siswa=ilike.${encodeURIComponent(`*${namaResmi.trim()}*`)}&limit=5`),
+                        3000,
+                        null
+                    ));
+                    jurRequests.push(withTimeout(
+                        window.directRestGetQuery(`jurnal_harian?tanggal_kegiatan=eq.${encodeURIComponent(todayStr)}&nama_siswa=ilike.${encodeURIComponent(`*${namaResmi.trim()}*`)}&limit=5`),
+                        3000,
+                        null
+                    ));
+                }
+
+                const [absResults, jurResults] = await Promise.all([
+                    Promise.all(absRequests),
+                    Promise.all(jurRequests)
+                ]);
+
+                const foundAbsensi = [];
+                absResults.forEach(res => {
+                    if (!res) return;
+                    if (Array.isArray(res)) {
+                        const conv = window.konversiBarisRiwayatPresensiKeAbsensi(res);
+                        conv.forEach(item => {
+                            if (window.isAbsensiMilikSiswa(item, namaResmi, nisResmi) || window.isAbsensiMilikSiswa(item, profile.nama, nisResmi)) {
+                                foundAbsensi.push(item);
+                            }
+                        });
+                    } else if (res.payload && res.payload.nama) {
+                        foundAbsensi.push(res.payload);
+                    }
+                });
+
+                const foundJurnal = [];
+                jurResults.forEach(res => {
+                    if (!res) return;
+                    if (Array.isArray(res)) {
+                        const conv = window.konversiBarisJurnalHarianKeJurnal(res);
+                        conv.forEach(j => {
+                            if (window.isNameMatch(j.siswa, namaResmi) || window.isNameMatch(j.siswa, profile.nama)) {
+                                foundJurnal.push(j);
+                            }
+                        });
+                    } else if (res.payload && (res.payload.siswa || res.payload.kegiatan)) {
+                        foundJurnal.push(res.payload);
+                    }
+                });
+
+                if (foundAbsensi.length > 0) {
+                    const aligned = typeof window.selaraskanNamaRecordPresensiDenganMaster === 'function'
+                        ? window.selaraskanNamaRecordPresensiDenganMaster(foundAbsensi)
+                        : foundAbsensi;
+                    aligned.forEach(item => {
+                        item.tipe_absen = window.normalisasiTipeAbsen(item.tipe_absen);
+                        item.tanggal = window.normalizeTanggalStr(item.tanggal, item.id) || todayStr;
+                        item._cloudSynced = true;
+                        window.simpanCacheTerverifikasiHariIni(item);
+                    });
+                    window.cloudState.absensi = window.mergeUniqueArrayById(
+                        aligned,
+                        window.cloudState.absensi || [],
+                        (a) => `${window.normalizeTextCompact(a.nama)}_${window.normalizeTanggalStr(a.tanggal, a.id)}_${window.normalisasiTipeAbsen(a.tipe_absen)}`
+                    );
+                }
+
+                if (foundJurnal.length > 0) {
+                    window.cloudState.jurnal = window.mergeUniqueArrayById(
+                        foundJurnal,
+                        window.cloudState.jurnal || [],
+                        (j) => `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
+                    );
+                }
+
+                const afterMasuk = (window.cloudState.absensi || []).some(a =>
+                    a && window.normalizeTanggalStr(a.tanggal, a.id) === todayStr &&
+                    window.normalisasiTipeAbsen(a.tipe_absen) === 'Masuk' &&
+                    window.isAbsensiMilikSiswa(a, namaResmi, nisResmi)
+                );
+                const afterPulang = (window.cloudState.absensi || []).some(a =>
+                    a && window.normalizeTanggalStr(a.tanggal, a.id) === todayStr &&
+                    window.normalisasiTipeAbsen(a.tipe_absen) === 'Pulang' &&
+                    window.isAbsensiMilikSiswa(a, namaResmi, nisResmi)
+                );
+                const afterJurnal = (window.cloudState.jurnal || []).some(j =>
+                    j && window.normalizeTanggalStr(j.tanggal, j.id) === todayStr &&
+                    (window.isNameMatch(j.siswa, namaResmi) || window.isNameMatch(j.siswa, profile.nama))
+                );
+
+                const statusBerubah = (beforeMasuk !== afterMasuk) || (beforePulang !== afterPulang) || (beforeJurnal !== afterJurnal);
+                if (statusBerubah || foundAbsensi.length > 0 || foundJurnal.length > 0) {
+                    if (typeof window.scheduleAsyncLocalSave === 'function') {
+                        window.scheduleAsyncLocalSave();
+                    }
+                    const cf = window.cloudState.currentFeature;
+                    if (statusBerubah && isSafeToAutoRefreshUI() && (cf === 'dashboard' || cf === 'presensi' || cf === 'jurnal')) {
+                        window.openFeature(cf, undefined, true);
+                    }
+                }
+                return statusBerubah;
+            };
+
+            // 4. Penarikan Lengkap Jurnal Harian Per Tanggal (Atomik juritem_* + jurnal_day_* + SQL jurnal_harian)
+            window._fetchedJurnalDatesTs = window._fetchedJurnalDatesTs || {};
+            window.tarikLengkapJurnalUntukTanggal = async function(targetDateStr, forceFetch = false) {
+                const tgl = window.normalizeTanggalStr(targetDateStr) || window.getTodayLocalWitaStr();
+                if (!tgl) return 0;
+
+                const nowMs = Date.now();
+                if (!forceFetch && window._fetchedJurnalDatesTs[tgl] && (nowMs - window._fetchedJurnalDatesTs[tgl] < 15000)) {
+                    return 0;
+                }
+                window._fetchedJurnalDatesTs[tgl] = nowMs;
+
+                const prevCount = (window.cloudState.jurnal || []).length;
+                try {
+                    const likePattern = encodeURIComponent(`juritem_${tgl}_*`);
+                    const eqDate = encodeURIComponent(tgl);
+
+                    const [atomicRows, dayBucketRow, sqlRows] = await Promise.all([
+                        withTimeout(window.directRestGetQuery(`app_cloud_db?id=like.${likePattern}&select=id,payload&limit=600`), 3500, null),
+                        withTimeout(window.directRestFetchRow('app_cloud_db', 'id', `jurnal_day_${tgl}`), 3500, null),
+                        withTimeout(window.directRestGetQuery(`jurnal_harian?tanggal_kegiatan=eq.${eqDate}&select=*&limit=500`), 3500, null)
+                    ]);
+
+                    const collected = [];
+                    if (Array.isArray(atomicRows)) {
+                        atomicRows.forEach(r => { if (r && r.payload && (r.payload.siswa || r.payload.kegiatan)) collected.push(r.payload); });
+                    }
+                    if (dayBucketRow && dayBucketRow.payload && Array.isArray(dayBucketRow.payload.jurnal)) {
+                        collected.push(...dayBucketRow.payload.jurnal);
+                    }
+                    if (Array.isArray(sqlRows) && sqlRows.length > 0) {
+                        const conv = window.konversiBarisJurnalHarianKeJurnal(sqlRows);
+                        if (Array.isArray(conv)) collected.push(...conv);
+                    }
+
+                    if (collected.length > 0) {
+                        window.cloudState.jurnal = window.mergeUniqueArrayById(
+                            window.cloudState.jurnal || [],
+                            collected,
+                            (j) => `${window.normalizeTextCompact(j.siswa)}_${window.normalizeTanggalStr(j.tanggal, j.id)}_${window.normalizeTextCompact(j.kegiatan)}`
+                        );
+                    }
+                } catch (e) {}
+
+                return (window.cloudState.jurnal || []).length - prevCount;
+            };
+
+            // 5. Bungkus tarikDataDariCloud: setelah menarik baris atomik presensi & jurnal hari ini,
+            //    WAJIB simpan ke localStorage & perbarui layar aktif (Siswa, Guru, Industri, Ortu, Kepsek, Panitia)
+            const prevTarikCloudSync = window.tarikDataDariCloud;
+            if (typeof prevTarikCloudSync === 'function') {
+                window.tarikDataDariCloud = async function(silent = true, forceApply = false) {
+                    const beforeAbsLen = (window.cloudState.absensi || []).length;
+                    const beforeJurLen = (window.cloudState.jurnal || []).length;
+
+                    const res = await prevTarikCloudSync.apply(this, arguments);
+
+                    const todayStr = window.getTodayLocalWitaStr();
+                    await Promise.all([
+                        window.tarikLengkapJurnalUntukTanggal(todayStr, forceApply).catch(() => 0),
+                        window.sinkronkanStatusHariIniSiswaAktif(forceApply).catch(() => false)
+                    ]);
+
+                    const afterAbsLen = (window.cloudState.absensi || []).length;
+                    const afterJurLen = (window.cloudState.jurnal || []).length;
+
+                    if (afterAbsLen !== beforeAbsLen || afterJurLen !== beforeJurLen) {
+                        if (typeof window.scheduleAsyncLocalSave === 'function') {
+                            window.scheduleAsyncLocalSave();
+                        }
+                        if (window.cloudState.userProfile && window.cloudState.currentFeature && isSafeToAutoRefreshUI()) {
+                            const cf = window.cloudState.currentFeature;
+                            if (['dashboard', 'presensi', 'jurnal', 'rekap-masuk-pulang', 'rekap-absensi', 'rekap-jurnal', 'presensi-ananda', 'jurnal-ananda', 'kepsek-disiplin'].includes(cf)) {
+                                window.openFeature(cf, undefined, true);
+                            }
+                        }
+                    }
+                    return res;
+                };
+            }
+
+            // 6. Bungkus renderSiswaOfficialDashboard:
+            //    - Muat cache terverifikasi hari ini sebelum render
+            //    - Pastikan pencocokan absenMasuk & absenPulang seragam (tipe_absen + nama + nis + user_id)
+            const prevRenderSiswaSync = window.renderSiswaOfficialDashboard;
+            if (typeof prevRenderSiswaSync === 'function') {
+                window.renderSiswaOfficialDashboard = function() {
+                    const prof = window.cloudState.userProfile;
+                    if (prof && prof.role === 'siswa') {
+                        const pInfo = window.getStudentPlacementInfo(prof.nama, prof.identitas);
+                        const namaResmi = (pInfo && pInfo.namaSiswa) ? pInfo.namaSiswa : prof.nama;
+                        window.muatCacheTerverifikasiHariIniKeState(namaResmi);
+                        if (prof.nama !== namaResmi) window.muatCacheTerverifikasiHariIniKeState(prof.nama);
+
+                        // Seragamkan tipe_absen dan nama pada catatan absensi milik siswa ini agar cocok 100%
+                        const todayStr = window.getTodayLocalWitaStr();
+                        const nisResmi = (pInfo && pInfo.nis && pInfo.nis !== '-') ? pInfo.nis : (prof.identitas || "");
+                        (window.cloudState.absensi || []).forEach(a => {
+                            if (!a) return;
+                            if (window.normalizeTanggalStr(a.tanggal, a.id) === todayStr &&
+                                (window.isAbsensiMilikSiswa(a, namaResmi, nisResmi) || window.isAbsensiMilikSiswa(a, prof.nama, nisResmi))) {
+                                a.tipe_absen = window.normalisasiTipeAbsen(a.tipe_absen);
+                                a.nama = namaResmi;
+                                a.tanggal = todayStr;
+                            }
+                        });
+                    }
+                    return prevRenderSiswaSync.apply(this, arguments);
+                };
+            }
+
+            // 7. Simpan langsung ke cache terverifikasi hari ini setiap kali kirimPresensiAtomikKeCloud sukses
+            const prevKirimAtomik = window.kirimPresensiAtomikKeCloud;
+            if (typeof prevKirimAtomik === 'function') {
+                window.kirimPresensiAtomikKeCloud = async function(itemAbsen) {
+                    const ok = await prevKirimAtomik.apply(this, arguments);
+                    if (ok && itemAbsen) {
+                        window.simpanCacheTerverifikasiHariIni(itemAbsen);
+                    }
+                    return ok;
+                };
+            }
+
+            // 8. Pemicu Otomatis: Saat Siswa login, membuka Dashboard/Presensi, atau kembali ke tab browser
+            const prevSuksesLoginSync = window.suksesLogin;
+            if (typeof prevSuksesLoginSync === 'function') {
+                window.suksesLogin = function(profile) {
+                    if (profile && profile.role === 'siswa') {
+                        window.muatCacheTerverifikasiHariIniKeState(profile.nama);
+                    }
+                    const res = prevSuksesLoginSync.apply(this, arguments);
+                    if (profile && profile.role === 'siswa') {
+                        setTimeout(() => { window.sinkronkanStatusHariIniSiswaAktif(true).catch(() => {}); }, 250);
+                    }
+                    return res;
+                };
+            }
+
+            const prevOpenFeatSync = window.openFeature;
+            if (typeof prevOpenFeatSync === 'function') {
+                window.openFeature = function(featureId, title, isBackgroundSync = false) {
+                    const res = prevOpenFeatSync.apply(this, arguments);
+                    if (!isBackgroundSync && window.cloudState.activeRole === 'siswa' && (featureId === 'dashboard' || featureId === 'presensi' || featureId === 'jurnal')) {
+                        window.sinkronkanStatusHariIniSiswaAktif(false).catch(() => {});
+                    }
+                    return res;
+                };
+            }
+
+            // Jalankan sinkronisasi cepat saat halaman dibuka & saat kembali fokus/online
+            setTimeout(() => {
+                if (window.cloudState.activeRole === 'siswa' && window.cloudState.userProfile) {
+                    window.sinkronkanStatusHariIniSiswaAktif(true).catch(() => {});
+                }
+            }, 600);
+
+            window.addEventListener('visibilitychange', () => {
+                if (!document.hidden && window.cloudState.activeRole === 'siswa' && window.cloudState.userProfile) {
+                    window.sinkronkanStatusHariIniSiswaAktif(false).catch(() => {});
+                }
+            });
+            window.addEventListener('online', () => {
+                if (window.cloudState.activeRole === 'siswa' && window.cloudState.userProfile) {
+                    window.sinkronkanStatusHariIniSiswaAktif(true).catch(() => {});
+                }
+            });
+        })();
         
     </script>
 </body>
